@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 )
 
 var defaultPerm os.FileMode = 0755
@@ -27,6 +28,21 @@ func IsDir(path string) bool {
 		return false
 	}
 	return s.IsDir()
+}
+
+// DirName 获取文件所在目录
+func DirName(path string) string {
+	if len(path) < 1 {
+		return path
+	}
+	pathRune := []rune(path)
+	if os.IsPathSeparator(uint8(pathRune[len(pathRune)-1])) {
+		pathRune = pathRune[len(pathRune)-1:]
+	}
+	path = string(pathRune)
+	tmp := strings.Split(path, string(os.PathSeparator))
+	newPath := strings.Join(tmp[:len(tmp)-1], string(os.PathSeparator))
+	return newPath
 }
 
 // IsFile 判断是否是文件
@@ -121,22 +137,29 @@ func IsHidden(path string) bool {
 	return len(path) > 1 && path[0] == '.'
 }
 
-// DirExists 判断文件/目录是否存在
+// DirExists 判断目录是否存在
 func DirExists(path string, create bool, perm os.FileMode) (bool, error) {
-	if FileExists(path) {
-		return true, nil
+	// 判断path是否为一个目录，如果不是目录则取出目录部分
+	if !IsDir(path) {
+		path = DirName(path)
 	}
-	if create {
-		if perm == 0 {
-			perm = defaultPerm
+	_, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if create {
+				if perm == 0 {
+					perm = defaultPerm
+				}
+				err = os.MkdirAll(path, perm)
+				if err != nil {
+					return false, err
+				}
+			}
+			return false, nil
 		}
-		err := os.MkdirAll(path, perm)
-		if err != nil {
-			return false, err
-		}
-		return true, nil
+		return false, err
 	}
-	return false, nil
+	return true, nil
 }
 
 // CreateFileIfNotExist 判断文件是否存在，不存在则根据传入的文件内容创建，可设置文件权限，可设置是否覆盖
