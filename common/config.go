@@ -65,7 +65,7 @@ func init() {
 
 		err := json.Unmarshal([]byte(fileDataString), &Config)
 		if err != nil {
-			fmt.Printf("err was %v", err)
+			fmt.Printf("err was %v\n", err)
 			os.Exit(1)
 		}
 	} else {
@@ -73,7 +73,7 @@ func init() {
 		file, _ := json.MarshalIndent(Config, "", " ")
 		_ = os.WriteFile(filename, file, 0644)
 		// 橙色
-		fmt.Printf("\033[33m%s\033[0m", "配置文件不存在，已创建默认配置文件，请修改配置文件后再次运行！")
+		fmt.Printf("\033[33m%s\033[0m\n", "配置文件不存在，已创建默认配置文件，请修改配置文件后再次运行！")
 		fmt.Println("配置文件路径：", filename)
 		os.Exit(1)
 	}
