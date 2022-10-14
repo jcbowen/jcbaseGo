@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/jcbowen/jcbaseGo/common/components"
 	"os"
 )
 
@@ -69,10 +70,12 @@ func init() {
 			os.Exit(1)
 		}
 	} else {
-		// 如果配置文件不存在，则创建一个
+		// 如果配置文件不存在，则创建配置文件
 		file, _ := json.MarshalIndent(Config, "", " ")
-		_ = os.WriteFile(filename, file, 0644)
-		// 橙色
+		err := components.CreateFileIfNotExist(filename, file, 0755, true)
+		if err != nil {
+			panic(err)
+		}
 		fmt.Printf("\033[33m%s\033[0m\n", "配置文件不存在，已创建默认配置文件，请修改配置文件后再次运行！")
 		fmt.Println("配置文件路径：", filename)
 		os.Exit(1)
