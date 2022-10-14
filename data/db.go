@@ -1,8 +1,8 @@
-package components
+package data
 
 import (
 	"errors"
-	"github.com/jcbowen/jcbaseGo/common"
+	"github.com/jcbowen/jcbaseGo"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
@@ -16,13 +16,13 @@ import (
 var db *gorm.DB
 
 func init() {
-	dsn := common.Config.GetDSN()
+	dsn := jcbaseGo.Config.GetDSN()
 
 	var err error
 	db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
-			TablePrefix:   common.Config.Db.TablePrefix, // 表名前缀，`User`表为`t_users`
-			SingularTable: true,                         // 使用单数表名，启用该选项后，`User` 表将是`user`
+			TablePrefix:   jcbaseGo.Config.Db.TablePrefix, // 表名前缀，`User`表为`t_users`
+			SingularTable: true,                           // 使用单数表名，启用该选项后，`User` 表将是`user`
 		},
 	})
 
@@ -42,7 +42,7 @@ type AllTableName struct {
 
 // GetAllTableName 获取数据库中所有的表名
 func GetAllTableName() (result []AllTableName) {
-	db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema='" + common.Config.Db.Dbname + "' AND table_type='base table'").Scan(&result)
+	db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema='" + jcbaseGo.Config.Db.Dbname + "' AND table_type='base table'").Scan(&result)
 	return
 }
 

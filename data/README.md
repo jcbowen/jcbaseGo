@@ -5,7 +5,7 @@
 ### 函数说明
 
 ```go
-package components
+package data
 
 type Column struct {
 	Name      string `json:"name"`   // 字段名

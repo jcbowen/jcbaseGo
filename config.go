@@ -1,9 +1,9 @@
-package common
+package jcbaseGo
 
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/jcbowen/jcbaseGo/common/components"
+	"github.com/jcbowen/jcbaseGo/helper"
 	"os"
 )
 
@@ -56,7 +56,7 @@ var Config = configStruct{
 func init() {
 	filename := "./data/config.json"
 	// 先判断json配置文件是否存在
-	if fileExit(filename) {
+	if helper.FileExists(filename) {
 		// 读取json配置文件
 		file, fErr := os.ReadFile(filename)
 		if fErr != nil {
@@ -72,7 +72,7 @@ func init() {
 	} else {
 		// 如果配置文件不存在，则创建配置文件
 		file, _ := json.MarshalIndent(Config, "", " ")
-		err := components.CreateFileIfNotExist(filename, file, 0755, true)
+		err := helper.CreateFileIfNotExist(filename, file, 0755, true)
 		if err != nil {
 			panic(err)
 		}
