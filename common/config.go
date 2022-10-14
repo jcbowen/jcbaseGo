@@ -18,8 +18,16 @@ type dbStruct struct {
 	TablePrefix string `json:"tablePrefix"` // 表前缀
 }
 
+type repositoryStruct struct {
+	Dir        string `json:"dir"`        // 本地仓库目录
+	Branch     string `json:"branch"`     // 远程仓库分支
+	RemoteName string `json:"remoteName"` // 远程仓库名称
+	RemoteURL  string `json:"remoteURL"`  // 远程仓库地址
+}
+
 type configStruct struct {
-	Db dbStruct `json:"db"` // 数据库配置信息
+	Db         dbStruct         `json:"db"`         // 数据库配置信息
+	Repository repositoryStruct `json:"repository"` // 仓库配置信息
 }
 
 // Config 为Config添加默认数据
@@ -34,6 +42,12 @@ var Config = configStruct{
 		Password:    "123456789",
 		Charset:     "utf8",
 		TablePrefix: "",
+	},
+	repositoryStruct{
+		Dir:        "./project/app",
+		Branch:     "master",
+		RemoteName: "origin",
+		RemoteURL:  "git@github.com:jcbowen/jcbaseGo.git",
 	},
 }
 
@@ -54,6 +68,14 @@ func init() {
 			fmt.Printf("err was %v", err)
 			os.Exit(1)
 		}
+	} else {
+		// 如果配置文件不存在，则创建一个
+		file, _ := json.MarshalIndent(Config, "", " ")
+		_ = os.WriteFile(filename, file, 0644)
+		// 橙色
+		fmt.Printf("\033[33m%s\033[0m", "配置文件不存在，已创建默认配置文件，请修改配置文件后再次运行！")
+		fmt.Println("配置文件路径：", filename)
+		os.Exit(1)
 	}
 }
 
