@@ -132,6 +132,9 @@ func DirExists(path string, create bool, perm os.FileMode) (bool, error) {
 	// 判断path是否为一个目录，如果不是目录则取出目录部分
 	if !IsDir(path) {
 		path = DirName(path)
+		if path == "." || path == "/" {
+			return false, errors.New("请输入正确的目录路径(不能为当前目录或根目录;目录必须以/结尾，否则目录名会被当做文件处理)")
+		}
 	}
 	_, err := os.Stat(path)
 	if err != nil {
