@@ -4,7 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strings"
+	"path/filepath"
 )
 
 var defaultPerm os.FileMode = 0755
@@ -30,19 +30,9 @@ func IsDir(path string) bool {
 	return s.IsDir()
 }
 
-// DirName 获取文件所在目录
+// DirName 获取目录部分
 func DirName(path string) string {
-	if len(path) < 1 {
-		return path
-	}
-	pathRune := []rune(path)
-	if os.IsPathSeparator(uint8(pathRune[len(pathRune)-1])) {
-		pathRune = pathRune[len(pathRune)-1:]
-	}
-	path = string(pathRune)
-	tmp := strings.Split(path, string(os.PathSeparator))
-	newPath := strings.Join(tmp[:len(tmp)-1], string(os.PathSeparator))
-	return newPath
+	return filepath.Dir(path)
 }
 
 // IsFile 判断是否是文件
@@ -154,10 +144,11 @@ func DirExists(path string, create bool, perm os.FileMode) (bool, error) {
 				if err != nil {
 					return false, err
 				}
+				return true, nil
 			}
 			return false, nil
 		}
-		return false, err
+		return true, err
 	}
 	return true, nil
 }
