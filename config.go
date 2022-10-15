@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jcbowen/jcbaseGo/helper"
 	"os"
+	"path/filepath"
 )
 
 type dbStruct struct {
@@ -55,10 +56,14 @@ var Config = configStruct{
 // 将json配置信息初始化到Config中
 func init() {
 	filename := "./data/config.json"
+	fileNameFull, err := filepath.Abs(filename)
+	if err != nil {
+		panic(err)
+	}
 	// 先判断json配置文件是否存在
-	if helper.FileExists(filename) {
+	if helper.FileExists(fileNameFull) {
 		// 读取json配置文件
-		file, fErr := os.ReadFile(filename)
+		file, fErr := os.ReadFile(fileNameFull)
 		if fErr != nil {
 			panic(fErr)
 		}
@@ -72,12 +77,12 @@ func init() {
 	} else {
 		// 如果配置文件不存在，则创建配置文件
 		file, _ := json.MarshalIndent(Config, "", " ")
-		err := helper.CreateFileIfNotExist(filename, file, 0755, true)
+		err := helper.CreateFileIfNotExist(fileNameFull, file, 0755, true)
 		if err != nil {
 			panic(err)
 		}
 		fmt.Printf("\033[33m%s\033[0m\n", "配置文件不存在，已创建默认配置文件，请修改配置文件后再次运行！")
-		fmt.Println("配置文件路径：", filename)
+		fmt.Println("配置文件路径：", fileNameFull)
 		os.Exit(1)
 	}
 }
