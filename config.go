@@ -82,15 +82,13 @@ func init() {
 	}
 }
 
+func (c *configStruct) Get() *configStruct {
+	return c
+}
+
 // GetDSN 根据配置信息输出dataSourceName
 // @return string username:password@protocol(localhost:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
 func (c *configStruct) GetDSN() string {
 	dsn := "%s:%s@%s(%s:%s)/%s?charset=%s&parseTime=True&loc=Local"
 	return fmt.Sprintf(dsn, Config.Db.Username, Config.Db.Password, Config.Db.Protocol, Config.Db.Host, Config.Db.Port, Config.Db.Dbname, Config.Db.Charset)
-}
-
-// fileExit 判断文件是否存在
-func fileExit(filename string) bool {
-	_, err := os.Lstat(filename)
-	return !os.IsNotExist(err)
 }
