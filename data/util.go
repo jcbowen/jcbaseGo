@@ -11,22 +11,27 @@ import (
 	"strings"
 )
 
+// ----- 结构体转json，Begin -----/
+// 用法:
+// 1. SetStruct(_struct).ToJson()
+// 2. SetStruct(_struct).DoSort(true).ToJson()
+// 3. SetStruct(_struct).File("path").ToJson()
+
 type Struct2JsonOpt struct {
-	Struct interface{}
-	//Sort     bool
-	NeedFile bool
-	FilePath string
+	Struct   interface{} // 结构体
+	Sort     bool        // 是否需要排序
+	NeedFile bool        // 是否需要输出json文件
+	FilePath string      // 输出json文件路径
 }
 
 func SetStruct(_struct interface{}) *Struct2JsonOpt {
 	return &Struct2JsonOpt{Struct: _struct}
 }
 
-// 由于map是无序的，所以json不支持排序，只能有序的一个个好输出
-/*func (opt *Struct2JsonOpt) DoSort(sort bool) *Struct2JsonOpt {
-	opt.Sort = sort
+func (opt *Struct2JsonOpt) DoSort() *Struct2JsonOpt {
+	opt.Sort = true
 	return opt
-}*/
+}
 
 func (opt *Struct2JsonOpt) File(filepath string) *Struct2JsonOpt {
 	opt.NeedFile = true
@@ -40,12 +45,9 @@ func (opt *Struct2JsonOpt) ToJson() (string, error) {
 	jsonByte, err := json.Marshal(_struct)
 	jsonStr := string(jsonByte)
 
-	/*if opt.Sort {
-		jsonMap := JsonStr2Map(jsonStr)
-		nData := SetMapStrInterface(jsonMap).DoSort(true).GetData()
-		jsonByte, err = json.Marshal(nData)
-		jsonStr = string(jsonByte)
-	}*/
+	if opt.Sort {
+		jsonStr = JsonStrSort(jsonStr)
+	}
 
 	// 判断是否需要输出json文件
 	if opt.NeedFile {
@@ -72,7 +74,168 @@ func (opt *Struct2JsonOpt) ToJson() (string, error) {
 	return jsonStr, err
 }
 
-// ToString 获取变量的字符串值
+// ----- 结构体转json，End -----/
+
+// ----- map[string]string 类型相关操作 -----/
+
+type MapStrInterface struct {
+	Data map[string]interface{}
+	Keys []string
+	Sort bool
+}
+
+func SetMapStrInterface(data map[string]interface{}) *MapStrInterface {
+	return &MapStrInterface{Data: data}
+}
+
+func (d *MapStrInterface) DoSort(sort bool) *MapStrInterface {
+	d.Sort = sort
+	return d
+}
+
+func (d *MapStrInterface) ArrayKeys() []string {
+	if len(d.Data) == 0 {
+		return d.Keys
+	}
+
+	for k := range d.Data {
+		d.Keys = append(d.Keys, k)
+	}
+
+	if d.Sort {
+		sort.Strings(d.Keys)
+	}
+
+	return d.Keys
+}
+
+func (d *MapStrInterface) ArrayValues() []interface{} {
+	var values []interface{}
+
+	if len(d.Data) == 0 {
+		return values
+	}
+
+	if d.Sort {
+		for _, k := range d.ArrayKeys() {
+			values = append(values, d.Data[k])
+		}
+	} else {
+		for _, v := range d.Data {
+			values = append(values, v)
+		}
+	}
+
+	return values
+}
+
+func (d *MapStrInterface) GetData() map[string]interface{} {
+	if d.Sort {
+		data := make(map[string]interface{})
+		for _, k := range d.ArrayKeys() {
+			data[k] = d.Data[k]
+		}
+		return data
+	}
+
+	return d.Data
+}
+
+// ----- []string 类型相关操作 -----/
+
+type ArrStr struct {
+	Arr  []string // 数组
+	Sort bool     // 执行ArrayValue方法时是否排序
+}
+
+func SetArrStr(str []string) *ArrStr {
+	return &ArrStr{Arr: str, Sort: true}
+}
+
+// DoSort 设置ArrayValue方法¬是否排序
+func (a *ArrStr) DoSort(sort bool) *ArrStr {
+	a.Sort = sort
+	return a
+}
+
+func (a *ArrStr) ArrayValue() (value []string) {
+	if len(a.Arr) == 0 {
+		return
+	}
+	for _, v := range a.Arr {
+		value = append(value, v)
+	}
+	if a.Sort {
+		sort.Strings(value)
+	}
+	return
+}
+
+func (a *ArrStr) ArrayDiff(oArr ...[]string) (diff []string) {
+	if len(a.Arr) == 0 {
+		return
+	}
+	if len(a.Arr) > 0 && len(oArr) == 0 {
+		diff = a.Arr
+		return
+	}
+	for _, o := range oArr {
+		for _, item := range a.Arr {
+			if !InArray(item, o) {
+				diff = append(diff, item)
+			}
+		}
+	}
+	return
+}
+
+func (a *ArrStr) ArrayIntersect(oArr ...[]string) (intersects []string) {
+	if len(a.Arr) == 0 {
+		return
+	}
+	if len(a.Arr) > 0 && len(oArr) == 0 {
+		intersects = a.Arr
+		return
+	}
+	var tmp = make(map[string]int, len(a.Arr))
+	for _, v := range a.Arr {
+		tmp[v] = 1
+	}
+	for _, param := range oArr {
+		for _, arg := range param {
+			if tmp[arg] != 0 {
+				tmp[arg]++
+			}
+		}
+	}
+	for k, v := range tmp {
+		if v > 1 {
+			intersects = append(intersects, k)
+		}
+	}
+	return
+}
+
+// ----- Json -----/
+
+func JsonStr2Map(str string) map[string]interface{} {
+	var tempMap map[string]interface{}
+	err := json.Unmarshal([]byte(str), &tempMap)
+	if err != nil {
+		panic(err)
+	}
+	return tempMap
+}
+
+// JsonStrSort 对json字符串进行排序
+func JsonStrSort(jsonStr string) string {
+	jsonMap := JsonStr2Map(jsonStr)
+	nData := SetMapStrInterface(jsonMap).DoSort(true).GetData()
+	jsonByte, _ := json.Marshal(nData)
+	return string(jsonByte)
+}
+
+// ToString 将变量转为字符串
 // 浮点型 3.0将会转换成字符串3, "3"
 // 非数值或字符类型的变量将会被转换成JSON格式字符串
 func ToString(value interface{}) (key string) {
@@ -224,123 +387,4 @@ func InArray(val interface{}, array interface{}) (exists bool) {
 		}
 	}
 	return
-}
-
-// ----- map[string]string 类型相关操作 -----/
-
-type MapStrInterface struct {
-	Data map[string]interface{}
-	Keys []string
-	Sort bool
-}
-
-func SetMapStrInterface(data map[string]interface{}) *MapStrInterface {
-	return &MapStrInterface{Data: data}
-}
-
-func (d *MapStrInterface) DoSort(sort bool) *MapStrInterface {
-	d.Sort = sort
-	return d
-}
-
-func (d *MapStrInterface) ArrayKeys() []string {
-	if len(d.Data) == 0 {
-		return d.Keys
-	}
-
-	for k := range d.Data {
-		d.Keys = append(d.Keys, k)
-	}
-
-	if d.Sort {
-		sort.Strings(d.Keys)
-	}
-
-	return d.Keys
-}
-
-// ----- []string 类型相关操作 -----/
-
-type ArrStr struct {
-	Arr  []string
-	Sort bool // 执行ArrayValue方法时是否排序
-}
-
-func SetArrStr(str []string) *ArrStr {
-	return &ArrStr{Arr: str, Sort: true}
-}
-
-// DoSort 设置ArrayValue方法¬是否排序
-func (a *ArrStr) DoSort(sort bool) *ArrStr {
-	a.Sort = sort
-	return a
-}
-
-func (a *ArrStr) ArrayValue() (value []string) {
-	if len(a.Arr) == 0 {
-		return
-	}
-	for _, v := range a.Arr {
-		value = append(value, v)
-	}
-	if a.Sort {
-		sort.Strings(value)
-	}
-	return
-}
-
-func (a *ArrStr) ArrayDiff(oArr ...[]string) (diff []string) {
-	if len(a.Arr) == 0 {
-		return
-	}
-	if len(a.Arr) > 0 && len(oArr) == 0 {
-		diff = a.Arr
-		return
-	}
-	for _, o := range oArr {
-		for _, item := range a.Arr {
-			if !InArray(item, o) {
-				diff = append(diff, item)
-			}
-		}
-	}
-	return
-}
-
-func (a *ArrStr) ArrayIntersect(oArr ...[]string) (intersects []string) {
-	if len(a.Arr) == 0 {
-		return
-	}
-	if len(a.Arr) > 0 && len(oArr) == 0 {
-		intersects = a.Arr
-		return
-	}
-	var tmp = make(map[string]int, len(a.Arr))
-	for _, v := range a.Arr {
-		tmp[v] = 1
-	}
-	for _, param := range oArr {
-		for _, arg := range param {
-			if tmp[arg] != 0 {
-				tmp[arg]++
-			}
-		}
-	}
-	for k, v := range tmp {
-		if v > 1 {
-			intersects = append(intersects, k)
-		}
-	}
-	return
-}
-
-// ----- Json -----/
-
-func JsonStr2Map(str string) map[string]interface{} {
-	var tempMap map[string]interface{}
-	err := json.Unmarshal([]byte(str), &tempMap)
-	if err != nil {
-		panic(err)
-	}
-	return tempMap
 }
