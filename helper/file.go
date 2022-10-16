@@ -30,6 +30,11 @@ func IsDir(path string) bool {
 	return s.IsDir()
 }
 
+// GetAbsPath 获取绝对路径
+func GetAbsPath(path string) (string, error) {
+	return filepath.Abs(path)
+}
+
 // DirName 获取目录部分
 func DirName(path string) string {
 	return filepath.Dir(path)
