@@ -1,8 +1,10 @@
 package helper
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 )
@@ -19,6 +21,19 @@ func FileExists(path string) bool {
 		return false
 	}
 	return true
+}
+
+// ReadJsonFile 读取json文件，并解析到结构体
+func ReadJsonFile(filePath string, data any) error {
+	// 读取json配置文件
+	file, fErr := os.ReadFile(filePath)
+	if fErr != nil {
+		return fErr
+	}
+	fileDataString := string(file)
+
+	err := json.Unmarshal([]byte(fileDataString), &data)
+	return err
 }
 
 // IsDir 判断是否是目录
@@ -237,4 +252,24 @@ func CopyFile(src, dst string, overwrite bool, perm os.FileMode, copyAttr bool) 
 		}
 	}
 	return nil
+}
+
+// ParseIP 解析IP地址，输出是ipv4或ipv6
+// 0: invalid ip
+// 4: ipv4
+// 6: ipv6
+func ParseIP(s string) (net.IP, int) {
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return nil, 0
+	}
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '.':
+			return ip, 4
+		case ':':
+			return ip, 6
+		}
+	}
+	return nil, 0
 }
