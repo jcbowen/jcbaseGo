@@ -1,4 +1,4 @@
-package data
+package helper
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 // ----- 结构体转json，Begin -----/
 // 用法:
 // 1. SetStruct(_struct).ToJson()
-// 2. SetStruct(_struct).DoSort(true).ToJson()
+// 2. SetStruct(_struct).DoSort().ToJson()
 // 3. SetStruct(_struct).File("path").ToJson()
 
 type Struct2JsonOpt struct {
@@ -88,8 +88,8 @@ func SetMapStrInterface(data map[string]interface{}) *MapStrInterface {
 	return &MapStrInterface{Data: data}
 }
 
-func (d *MapStrInterface) DoSort(sort bool) *MapStrInterface {
-	d.Sort = sort
+func (d *MapStrInterface) DoSort() *MapStrInterface {
+	d.Sort = true
 	return d
 }
 
@@ -149,12 +149,12 @@ type ArrStr struct {
 }
 
 func SetArrStr(str []string) *ArrStr {
-	return &ArrStr{Arr: str, Sort: true}
+	return &ArrStr{Arr: str, Sort: false}
 }
 
 // DoSort 设置ArrayValue方法¬是否排序
-func (a *ArrStr) DoSort(sort bool) *ArrStr {
-	a.Sort = sort
+func (a *ArrStr) DoSort() *ArrStr {
+	a.Sort = true
 	return a
 }
 
@@ -230,7 +230,7 @@ func JsonStr2Map(str string) map[string]interface{} {
 // JsonStrSort 对json字符串进行排序
 func JsonStrSort(jsonStr string) string {
 	jsonMap := JsonStr2Map(jsonStr)
-	nData := SetMapStrInterface(jsonMap).DoSort(true).GetData()
+	nData := SetMapStrInterface(jsonMap).DoSort().GetData()
 	jsonByte, _ := json.Marshal(nData)
 	return string(jsonByte)
 }
