@@ -2,51 +2,13 @@ package mysql
 
 import (
 	"errors"
-	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/helper"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
-	"gorm.io/gorm/schema"
-	"log"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
-
-var db *gorm.DB
-
-func init() {
-	dsn := jcbaseGo.Config.GetDSN()
-
-	var err error
-	db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
-		NamingStrategy: schema.NamingStrategy{
-			TablePrefix:   jcbaseGo.Config.Db.TablePrefix, // 表名前缀，`User`表为`t_users`
-			SingularTable: true,                           // 使用单数表名，启用该选项后，`User` 表将是`user`
-		},
-	})
-
-	if err != nil {
-		log.Panic(err)
-	}
-}
-
-func Check() (gormDB *gorm.DB) {
-	gormDB = db
-	return
-}
-
-type AllTableName struct {
-	TableName string `gorm:"table_name"`
-}
-
-// GetAllTableName 获取数据库中所有的表名
-func GetAllTableName() (result []AllTableName) {
-	db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema='" + jcbaseGo.Config.Db.Dbname + "' AND table_type='base table'").Scan(&result)
-	return
-}
 
 // ----- TableSchema,Begin -----/
 
@@ -109,7 +71,7 @@ func TableSchema(tableName string) (*Schema, error) {
 	}
 
 	var result tableStatus
-	db.Raw("SHOW TABLE STATUS LIKE '" + tableName + "'").Scan(&result)
+	Db.Raw("SHOW TABLE STATUS LIKE '" + tableName + "'").Scan(&result)
 	if !(len(result.Name) > 0) {
 		return nil, errors.New("没有找到数据表：" + tableName)
 	}
@@ -132,7 +94,7 @@ func TableSchema(tableName string) (*Schema, error) {
 	}
 
 	var result2 []tableField
-	db.Raw("SHOW FULL COLUMNS FROM " + tableName).Scan(&result2)
+	Db.Raw("SHOW FULL COLUMNS FROM " + tableName).Scan(&result2)
 	Columns := make(map[string]*Column)
 	for _, value := range result2 {
 		temp := &Column{}
@@ -184,7 +146,7 @@ func TableSchema(tableName string) (*Schema, error) {
 	}
 
 	var result3 []tableIndex
-	db.Raw("SHOW INDEX FROM " + tableName).Scan(&result3)
+	Db.Raw("SHOW INDEX FROM " + tableName).Scan(&result3)
 	Indexs := make(map[string]*Index)
 	for _, value := range result3 {
 		item := &Index{}
@@ -611,7 +573,7 @@ func BuildFieldSql(field *Column) string {
 func TableSchemas(tableName string) (dump string) {
 	sql := "SHOW CREATE TABLE " + tableName
 	var result map[string]interface{}
-	db.Raw(sql).Scan(&result)
+	Db.Raw(sql).Scan(&result)
 
 	dump = "DROP TABLE IF EXISTS " + tableName + "; "
 	dump = dump + helper.ToString(result["Create Table"])
@@ -626,7 +588,7 @@ func MakeInsertSql(tableName string, start int, size int) (data string, result [
 		tmpBuilder strings.Builder
 		keys       string
 	)
-	db.Table(tableName).Limit(size).Offset(start).Find(&result)
+	Db.Table(tableName).Limit(size).Offset(start).Find(&result)
 	if len(result) > 0 {
 		for i := 0; i < len(result); i++ {
 			item := result[i]
@@ -670,7 +632,7 @@ func MakeInsertSql(tableName string, start int, size int) (data string, result [
 		data = "INSERT INTO `" + tableName + "` " + keys + ") VALUES " + tmp + ";"
 	}
 	defer func() {
-		sqlDB, err := db.DB()
+		sqlDB, err := Db.DB()
 		if err == nil {
 			err := sqlDB.Close()
 			if err != nil {
