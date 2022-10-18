@@ -5,7 +5,7 @@
 ### 函数说明
 
 ```go
-package data
+package mysql
 
 type Column struct {
 	Name      string `json:"name"`   // 字段名
@@ -26,7 +26,7 @@ type Index struct {
 }
 
 type Schema struct {
-	Tablename string             `json:"tablename"`
+	TableName string             `json:"tablename"`
 	Charset   string             `json:"charset"`
 	Engine    string             `json:"engine"`
 	Increment string             `json:"increment"`
@@ -45,7 +45,7 @@ type TableFixSqlOpt struct {
 
 type CDDiffs struct {
 	Charset   bool `json:"charset"`
-	Tablename bool `json:"tablename"`
+	TableName bool `json:"tablename"`
 	Engine    bool `json:"engine"`
 }
 

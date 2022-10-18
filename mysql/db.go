@@ -1,11 +1,13 @@
-package data
+package mysql
 
 import (
 	"errors"
 	"github.com/jcbowen/jcbaseGo"
+	"github.com/jcbowen/jcbaseGo/helper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
+	"log"
 	"reflect"
 	"sort"
 	"strconv"
@@ -27,7 +29,7 @@ func init() {
 	})
 
 	if err != nil {
-		panic(err)
+		log.Panic(err)
 	}
 }
 
@@ -67,7 +69,7 @@ type Index struct {
 }
 
 type Schema struct {
-	Tablename string             `json:"tablename"`
+	TableName string             `json:"tablename"`
 	Charset   string             `json:"charset"`
 	Engine    string             `json:"engine"`
 	Increment string             `json:"increment"`
@@ -111,7 +113,7 @@ func TableSchema(tableName string) (*Schema, error) {
 	if !(len(result.Name) > 0) {
 		return nil, errors.New("没有找到数据表：" + tableName)
 	}
-	tableSchema.Tablename = result.Name
+	tableSchema.TableName = result.Name
 	tableSchema.Charset = result.Collation
 	tableSchema.Engine = result.Engine
 	tableSchema.Increment = result.AutoIncrement
@@ -211,7 +213,7 @@ func TableSchema(tableName string) (*Schema, error) {
 
 type CDDiffs struct {
 	Charset   bool `json:"charset"`
-	Tablename bool `json:"tablename"`
+	TableName bool `json:"tablename"`
 	Engine    bool `json:"engine"`
 }
 
@@ -239,8 +241,8 @@ func SchemaCompare(table1 *Schema, table2 *Schema) *CompareDiffs {
 	cdFields := &CDFields{}
 	cdIndexes := &CDIndexes{}
 	cdDiffs := &CDDiffs{}
-	if table1.Tablename != table2.Tablename {
-		cdDiffs.Tablename = true
+	if table1.TableName != table2.TableName {
+		cdDiffs.TableName = true
 	}
 	if table1.Charset != table2.Charset {
 		cdDiffs.Charset = true
@@ -254,32 +256,32 @@ func SchemaCompare(table1 *Schema, table2 *Schema) *CompareDiffs {
 	fields2 := columnKeys(table2.Fields)
 
 	// 统计fields差集的不同
-	dif := SetArrStr(fields1).ArrayDiff(fields2)
+	dif := helper.SetArrStr(fields1).ArrayDiff(fields2)
 	if len(dif) > 0 {
-		cdFields.Greater = SetArrStr(dif).ArrayValue()
+		cdFields.Greater = helper.SetArrStr(dif).ArrayValue()
 	}
-	dif = SetArrStr(fields2).ArrayDiff(fields1)
+	dif = helper.SetArrStr(fields2).ArrayDiff(fields1)
 	if len(dif) > 0 {
-		cdFields.Less = SetArrStr(dif).ArrayValue()
+		cdFields.Less = helper.SetArrStr(dif).ArrayValue()
 	}
 
 	// 统计fields交集的不同
 	dif = []string{}
-	intersects := SetArrStr(fields1).ArrayIntersect(fields2)
+	intersects := helper.SetArrStr(fields1).ArrayIntersect(fields2)
 	var fType = []string{
 		"int", "tinyint", "smallint", "bigint",
 	}
 	if len(intersects) > 0 {
 		for _, field := range intersects {
-			if InArray(table2.Fields[field].Type, fType) {
+			if helper.InArray(table2.Fields[field].Type, fType) {
 				table2.Fields[field].Length = ""
 				table1.Fields[field].Length = ""
 			}
 
-			table1Json, _ := SetStruct(table1.Fields[field]).ToJson()
-			table2Json, _ := SetStruct(table2.Fields[field]).ToJson()
-			table1Map := JsonStr2Map(table1Json)
-			table2Map := JsonStr2Map(table2Json)
+			table1Json, _ := helper.SetStruct(table1.Fields[field]).ToJson()
+			table2Json, _ := helper.SetStruct(table2.Fields[field]).ToJson()
+			table1Map := helper.JsonStr2Map(table1Json)
+			table2Map := helper.JsonStr2Map(table2Json)
 
 			var isDif bool
 			for k, v := range table1Map {
@@ -294,30 +296,30 @@ func SchemaCompare(table1 *Schema, table2 *Schema) *CompareDiffs {
 		}
 	}
 	if len(dif) > 0 {
-		cdFields.Diff = SetArrStr(dif).ArrayValue()
+		cdFields.Diff = helper.SetArrStr(dif).ArrayValue()
 	}
 	compareDiffs.Fields = cdFields
 
 	// 统计indexes差集的不同
 	indexes1 := indexesKeys(table1.Indexes)
 	indexes2 := indexesKeys(table2.Indexes)
-	dif = SetArrStr(indexes1).ArrayDiff(indexes2)
+	dif = helper.SetArrStr(indexes1).ArrayDiff(indexes2)
 	if len(dif) > 0 {
-		cdIndexes.Greater = SetArrStr(dif).ArrayValue()
+		cdIndexes.Greater = helper.SetArrStr(dif).ArrayValue()
 	}
-	dif = SetArrStr(indexes2).ArrayDiff(indexes1)
+	dif = helper.SetArrStr(indexes2).ArrayDiff(indexes1)
 	if len(dif) > 0 {
-		cdIndexes.Less = SetArrStr(dif).ArrayValue()
+		cdIndexes.Less = helper.SetArrStr(dif).ArrayValue()
 	}
 	// 统计indexes交集的不同
 	dif = []string{}
-	intersects = SetArrStr(indexes1).ArrayIntersect(indexes2)
+	intersects = helper.SetArrStr(indexes1).ArrayIntersect(indexes2)
 	if len(intersects) > 0 {
 		for _, index := range intersects {
-			table1Json, _ := SetStruct(table1.Indexes[index]).ToJson()
-			table2Json, _ := SetStruct(table2.Indexes[index]).ToJson()
-			table1Map := JsonStr2Map(table1Json)
-			table2Map := JsonStr2Map(table2Json)
+			table1Json, _ := helper.SetStruct(table1.Indexes[index]).ToJson()
+			table2Json, _ := helper.SetStruct(table2.Indexes[index]).ToJson()
+			table1Map := helper.JsonStr2Map(table1Json)
+			table2Map := helper.JsonStr2Map(table2Json)
 
 			var isDif bool
 			for k, v := range table1Map {
@@ -332,7 +334,7 @@ func SchemaCompare(table1 *Schema, table2 *Schema) *CompareDiffs {
 					v2 := reflect.ValueOf(table2Map[k])
 					v1 = v1.Index(0)
 					v2 = v2.Index(0)
-					if ToString(v1) != ToString(v2) {
+					if helper.ToString(v1) != helper.ToString(v2) {
 						isDif = true
 						break
 					}
@@ -344,7 +346,7 @@ func SchemaCompare(table1 *Schema, table2 *Schema) *CompareDiffs {
 		}
 	}
 	if len(dif) > 0 {
-		cdIndexes.Diff = SetArrStr(dif).ArrayValue()
+		cdIndexes.Diff = helper.SetArrStr(dif).ArrayValue()
 	}
 	compareDiffs.Indexes = cdIndexes
 
@@ -378,7 +380,7 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 
 	// 获取差异结构
 	diff := SchemaCompare(opt.Table1, opt.Table2)
-	if opt.CompareTableName && diff.Diffs.Tablename {
+	if opt.CompareTableName && diff.Diffs.TableName {
 		sqls = append(sqls, TableCreateSql(TableCreateSqlOpt{
 			Table:       opt.Table2,
 			TablePre:    opt.TablePre,
@@ -387,13 +389,13 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 		return
 	}
 	if diff.Diffs.Engine {
-		sql = "ALTER TABLE `" + opt.Table1.Tablename + "` ENGINE = " + opt.Table2.Engine
+		sql = "ALTER TABLE `" + opt.Table1.TableName + "` ENGINE = " + opt.Table2.Engine
 		sqls = append(sqls, sql)
 	}
 	if diff.Diffs.Charset {
 		pieces := strings.Split(opt.Table2.Charset, "_")
 		charset := pieces[0]
-		sql = "ALTER TABLE `" + opt.Table1.Tablename + "` DEFAULT CHARSET = " + charset
+		sql = "ALTER TABLE `" + opt.Table1.TableName + "` DEFAULT CHARSET = " + charset
 		sqls = append(sqls, sql)
 	}
 
@@ -405,20 +407,20 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 			field := opt.Table2.Fields[fieldname]
 			piece := BuildFieldSql(field)
 			if len(field.Rename) > 0 && opt.Table1.Fields[field.Rename] != nil {
-				sql = "ALTER TABLE `" + opt.Table1.Tablename + "` CHANGE `" + field.Rename + "` `" + field.Name + "` " + piece
+				sql = "ALTER TABLE `" + opt.Table1.TableName + "` CHANGE `" + field.Rename + "` `" + field.Name + "` " + piece
 				delete(opt.Table1.Fields, field.Rename)
 			} else {
 				pos := ""
 				if len(field.Position) > 0 {
 					pos = " " + field.Position
 				}
-				sql = "ALTER TABLE `" + opt.Table1.Tablename + "` ADD `" + field.Name + "` " + piece + pos
+				sql = "ALTER TABLE `" + opt.Table1.TableName + "` ADD `" + field.Name + "` " + piece + pos
 			}
 			var primary *Column
 			if strings.Index(sql, "AUTO_INCREMENT") != -1 {
 				isincrement = field
-				sqlN, _ := StrReplace("AUTO_INCREMENT", "", sql, -1)
-				sql = ToString(sqlN)
+				sqlN, _ := helper.StrReplace("AUTO_INCREMENT", "", sql, -1)
+				sql = helper.ToString(sqlN)
 				for _, f := range opt.Table1.Fields {
 					if f.Increment {
 						primary = f
@@ -427,10 +429,10 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 				if primary != nil {
 					piece = BuildFieldSql(primary)
 					if len(piece) > 0 {
-						p, _ := StrReplace("AUTO_INCREMENT", "", piece, -1)
-						piece = ToString(p)
+						p, _ := helper.StrReplace("AUTO_INCREMENT", "", piece, -1)
+						piece = helper.ToString(p)
 					}
-					sql2 := "ALTER TABLE `" + opt.Table1.Tablename + "` CHANGE `" + primary.Name + "` `" + primary.Name + "` " + piece
+					sql2 := "ALTER TABLE `" + opt.Table1.TableName + "` CHANGE `" + primary.Name + "` `" + primary.Name + "` " + piece
 					sqls = append(sqls, sql2)
 				}
 			}
@@ -442,7 +444,7 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 			field := opt.Table2.Fields[fieldname]
 			piece := BuildFieldSql(field)
 			if opt.Table1.Fields[fieldname] != nil {
-				sql = "ALTER TABLE `" + opt.Table1.Tablename + "` CHANGE `" + field.Name + "` `" + field.Name + "` " + piece
+				sql = "ALTER TABLE `" + opt.Table1.TableName + "` CHANGE `" + field.Name + "` `" + field.Name + "` " + piece
 				sqls = append(sqls, sql)
 			}
 		}
@@ -450,7 +452,7 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 	if opt.Strict && len(diff.Fields.Greater) > 0 {
 		for _, fieldname := range diff.Fields.Greater {
 			if opt.Table1.Fields[fieldname] != nil {
-				sql = "ALTER TABLE `" + opt.Table1.Tablename + "` DROP `" + fieldname + "`"
+				sql = "ALTER TABLE `" + opt.Table1.TableName + "` DROP `" + fieldname + "`"
 				sqls = append(sqls, sql)
 			}
 		}
@@ -461,7 +463,7 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 		for _, indexname := range diff.Indexes.Less {
 			index := opt.Table2.Indexes[indexname]
 			piece := BuildIndexSql(index)
-			sql = "ALTER TABLE `" + opt.Table1.Tablename + "` ADD " + piece
+			sql = "ALTER TABLE `" + opt.Table1.TableName + "` ADD " + piece
 			sqls = append(sqls, sql)
 		}
 	}
@@ -469,7 +471,7 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 		for _, indexname := range diff.Indexes.Diff {
 			index := opt.Table2.Indexes[indexname]
 			piece := BuildIndexSql(index)
-			sql = "ALTER TABLE `" + opt.Table1.Tablename + "` DROP "
+			sql = "ALTER TABLE `" + opt.Table1.TableName + "` DROP "
 			sql2 := ""
 			if "PRIMARY" == indexname {
 				sql2 = " PRIMARY KEY "
@@ -482,14 +484,14 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 	}
 	if opt.Strict && len(diff.Indexes.Greater) > 0 {
 		for _, indexname := range diff.Indexes.Greater {
-			sql = "ALTER TABLE `" + opt.Table1.Tablename + "` DROP `" + indexname + "`"
+			sql = "ALTER TABLE `" + opt.Table1.TableName + "` DROP `" + indexname + "`"
 			sqls = append(sqls, sql)
 		}
 	}
 
 	if isincrement != nil {
 		piece := BuildFieldSql(isincrement)
-		sql = "ALTER TABLE `" + opt.Table1.Tablename + "` CHANGE `" + isincrement.Name + "` `" + isincrement.Name + "` " + piece
+		sql = "ALTER TABLE `" + opt.Table1.TableName + "` CHANGE `" + isincrement.Name + "` `" + isincrement.Name + "` " + piece
 		sqls = append(sqls, sql)
 	}
 
@@ -511,10 +513,10 @@ func TableCreateSql(opt TableCreateSqlOpt) (sql string) {
 	pieces := strings.Split(opt.Table.Charset, "_")
 	charset := pieces[0]
 	engine := opt.Table.Engine
-	tableName := opt.Table.Tablename
+	tableName := opt.Table.TableName
 	if len(opt.TablePre) > 0 && len(opt.TablePreOld) > 0 && opt.TablePre != opt.TablePreOld {
-		newTableName, _ := StrReplace(opt.TablePreOld, opt.TablePre, tableName, -1)
-		tableName = ToString(newTableName)
+		newTableName, _ := helper.StrReplace(opt.TablePreOld, opt.TablePre, tableName, -1)
+		tableName = helper.ToString(newTableName)
 	}
 	sql = "CREATE TABLE IF NOT EXISTS `" + tableName + "` (\n"
 
@@ -587,7 +589,7 @@ func BuildFieldSql(field *Column) string {
 	}
 	fieldType := strings.ToLower(field.Type)
 	types := []string{"decimal", "float", "dobule"}
-	if strings.Index(fieldType, "int") != -1 || InArray(fieldType, types) {
+	if strings.Index(fieldType, "int") != -1 || helper.InArray(fieldType, types) {
 		if !field.Signed {
 			signed = " unsigned"
 		}
@@ -612,7 +614,7 @@ func TableSchemas(tableName string) (dump string) {
 	db.Raw(sql).Scan(&result)
 
 	dump = "DROP TABLE IF EXISTS " + tableName + "; "
-	dump = dump + ToString(result["Create Table"])
+	dump = dump + helper.ToString(result["Create Table"])
 
 	return
 }
@@ -640,12 +642,12 @@ func MakeInsertSql(tableName string, start int, size int) (data string, result [
 				arr2 := []string{
 					"\\\\", "\\\\0", "\\n", "\\r", "\\'", "\\\"", "\\Z",
 				}
-				value, err := StrReplace(arr1, arr2, v, -1)
+				value, err := helper.StrReplace(arr1, arr2, v, -1)
 				var str string
 				if err != nil {
-					str = ToString(v)
+					str = helper.ToString(v)
 				} else {
-					str = ToString(value)
+					str = helper.ToString(value)
 				}
 				if len(keys) < 1 {
 					keyBuilder.WriteString("`" + k + "`,")
@@ -662,8 +664,8 @@ func MakeInsertSql(tableName string, start int, size int) (data string, result [
 		tmp := tmpBuilder.String()
 		a1 := []string{",)"}
 		a2 := []string{")"}
-		replace, _ := StrReplace(a1, a2, tmp, -1)
-		tmp = ToString(replace)
+		replace, _ := helper.StrReplace(a1, a2, tmp, -1)
+		tmp = helper.ToString(replace)
 		tmp = strings.TrimRight(tmp, ",")
 		data = "INSERT INTO `" + tableName + "` " + keys + ") VALUES " + tmp + ";"
 	}
