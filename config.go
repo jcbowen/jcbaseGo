@@ -43,8 +43,8 @@ var Config = configStruct{
 		Port:        "3306",
 		Dbname:      "dbname",
 		Username:    "root",
-		Password:    "123456789",
-		Charset:     "utf8",
+		Password:    "",
+		Charset:     "utf8mb4",
 		TablePrefix: "",
 	},
 	repositoryStruct{
