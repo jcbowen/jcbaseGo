@@ -2,8 +2,10 @@ package jcbaseGo
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/jcbowen/jcbaseGo/helper"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -58,32 +60,30 @@ func init() {
 	filename := "./data/config.json"
 	fileNameFull, err := filepath.Abs(filename)
 	if err != nil {
-		panic(err)
+		log.Panic(err)
 	}
 	// 先判断json配置文件是否存在
 	if helper.FileExists(fileNameFull) {
 		// 读取json配置文件
 		file, fErr := os.ReadFile(fileNameFull)
 		if fErr != nil {
-			panic(fErr)
+			log.Panic(fErr)
 		}
 		fileDataString := string(file)
 
 		err := json.Unmarshal([]byte(fileDataString), &Config)
 		if err != nil {
-			fmt.Printf("err was %v\n", err)
-			os.Exit(1)
+			log.Panic(err)
 		}
 	} else {
 		// 如果配置文件不存在，则创建配置文件
 		file, _ := json.MarshalIndent(Config, "", " ")
 		err := helper.CreateFileIfNotExist(fileNameFull, file, 0755, true)
 		if err != nil {
-			panic(err)
+			log.Panic(err)
 		}
-		fmt.Printf("\033[33m%s\033[0m\n", "配置文件不存在，已创建默认配置文件，请修改配置文件后再次运行！")
-		fmt.Println("配置文件路径：", fileNameFull)
-		os.Exit(1)
+		err = errors.New("配置文件不存在，已创建配置文件，请修改配置文件后重启程序！\n配置文件路径：" + fileNameFull)
+		log.Panic(err)
 	}
 }
 
