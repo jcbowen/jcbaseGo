@@ -3,14 +3,13 @@ package jcbaseGo
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/jcbowen/jcbaseGo/helper"
 	"log"
 	"os"
 	"path/filepath"
 )
 
-type dbStruct struct {
+type DbStruct struct {
 	DriverName  string `json:"driverName"`  // 驱动类型
 	Protocol    string `json:"protocol"`    // 协议
 	Host        string `json:"host"`        // 数据库地址
@@ -22,14 +21,14 @@ type dbStruct struct {
 	TablePrefix string `json:"tablePrefix"` // 表前缀
 }
 
-type repositoryStruct struct {
+type RepositoryStruct struct {
 	Dir        string `json:"dir"`        // 本地仓库目录
 	Branch     string `json:"branch"`     // 远程仓库分支
 	RemoteName string `json:"remoteName"` // 远程仓库名称
 	RemoteURL  string `json:"remoteURL"`  // 远程仓库地址
 }
 
-type redisStruct struct {
+type RedisStruct struct {
 	Host     string `json:"host"`     // redis地址
 	Port     string `json:"port"`     // redis端口号
 	Password string `json:"password"` // redis密码
@@ -37,14 +36,14 @@ type redisStruct struct {
 }
 
 type configStruct struct {
-	Db         dbStruct         `json:"db"`         // 数据库配置信息
-	Redis      redisStruct      `json:"redis"`      // redis配置信息
-	Repository repositoryStruct `json:"repository"` // 仓库配置信息
+	Db         DbStruct         `json:"db"`         // 数据库配置信息
+	Redis      RedisStruct      `json:"redis"`      // redis配置信息
+	Repository RepositoryStruct `json:"repository"` // 仓库配置信息
 }
 
 // Config 为Config添加默认数据
 var Config = configStruct{
-	dbStruct{
+	DbStruct{
 		DriverName:  "mysql",
 		Protocol:    "tcp",
 		Host:        "localhost",
@@ -55,13 +54,13 @@ var Config = configStruct{
 		Charset:     "utf8mb4",
 		TablePrefix: "",
 	},
-	redisStruct{
+	RedisStruct{
 		Host:     "localhost",
 		Port:     "6379",
 		Password: "",
 		Db:       "0",
 	},
-	repositoryStruct{
+	RepositoryStruct{
 		Dir:        "./project/app/", // 本地仓库目录，目录必须以/结尾
 		Branch:     "master",
 		RemoteName: "origin",
@@ -103,11 +102,4 @@ func init() {
 
 func (c *configStruct) Get() *configStruct {
 	return c
-}
-
-// GetDSN 根据配置信息输出dataSourceName
-// @return string username:password@protocol(localhost:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
-func (c *configStruct) GetDSN() string {
-	dsn := "%s:%s@%s(%s:%s)/%s?charset=%s&parseTime=True&loc=Local"
-	return fmt.Sprintf(dsn, Config.Db.Username, Config.Db.Password, Config.Db.Protocol, Config.Db.Host, Config.Db.Port, Config.Db.Dbname, Config.Db.Charset)
 }
