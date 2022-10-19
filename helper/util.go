@@ -292,6 +292,15 @@ func ToString(value interface{}) (key string) {
 	return
 }
 
+// Str2Int 字符串转数字
+func Str2Int(str string) int {
+	i, err := strconv.Atoi(str)
+	if err != nil {
+		panic(err)
+	}
+	return i
+}
+
 // StrReplace 类似于php中的str_replace
 func StrReplace(search interface{}, replace interface{}, subject interface{}, count int) (interface{}, error) {
 	switch search.(type) {
