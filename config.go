@@ -29,8 +29,16 @@ type repositoryStruct struct {
 	RemoteURL  string `json:"remoteURL"`  // 远程仓库地址
 }
 
+type redisStruct struct {
+	Host     string `json:"host"`     // redis地址
+	Port     string `json:"port"`     // redis端口号
+	Password string `json:"password"` // redis密码
+	Db       string `json:"db"`       // redis数据库
+}
+
 type configStruct struct {
 	Db         dbStruct         `json:"db"`         // 数据库配置信息
+	Redis      redisStruct      `json:"redis"`      // redis配置信息
 	Repository repositoryStruct `json:"repository"` // 仓库配置信息
 }
 
@@ -46,6 +54,12 @@ var Config = configStruct{
 		Password:    "",
 		Charset:     "utf8mb4",
 		TablePrefix: "",
+	},
+	redisStruct{
+		Host:     "localhost",
+		Port:     "6379",
+		Password: "",
+		Db:       "0",
 	},
 	repositoryStruct{
 		Dir:        "./project/app/", // 本地仓库目录，目录必须以/结尾
