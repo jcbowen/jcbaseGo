@@ -48,7 +48,7 @@ var Config = configStruct{
 		TablePrefix: "",
 	},
 	repositoryStruct{
-		Dir:        "./project/app",
+		Dir:        "./project/app/", // 本地仓库目录，目录必须以/结尾
 		Branch:     "master",
 		RemoteName: "origin",
 		RemoteURL:  "git@github.com:jcbowen/jcbaseGo.git",
