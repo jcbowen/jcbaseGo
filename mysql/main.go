@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"fmt"
 	"github.com/jcbowen/jcbaseGo"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -11,28 +12,36 @@ import (
 var Db *gorm.DB
 
 func init() {
-	dsn := jcbaseGo.Config.GetDSN()
-
 	var err error
-	Db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
-		NamingStrategy: schema.NamingStrategy{
-			TablePrefix:   jcbaseGo.Config.Db.TablePrefix, // 表名前缀，`User`表为`t_users`
-			SingularTable: true,                           // 使用单数表名，启用该选项后，`User` 表将是`user`
-		},
-	})
+	Db, err = GetDb(jcbaseGo.Config.Get().Db)
 
 	if err != nil {
 		log.Panic(err)
 	}
 }
 
-func Check() (gormDB *gorm.DB) {
-	gormDB = Db
+type AllTableName struct {
+	TableName string `gorm:"table_name"`
+}
+
+// GetDSN 获取DataSourceName
+func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
+	dsn = "%s:%s@%s(%s:%s)/%s?charset=%s&parseTime=True&loc=Local"
+	dsn = fmt.Sprintf(dsn, dbConfig.Username, dbConfig.Password, dbConfig.Protocol, dbConfig.Host, dbConfig.Port, dbConfig.Dbname, dbConfig.Charset)
 	return
 }
 
-type AllTableName struct {
-	TableName string `gorm:"table_name"`
+// GetDb 获取数据库连接
+func GetDb(dbConfig jcbaseGo.DbStruct) (db *gorm.DB, err error) {
+	dsn := getDSN(dbConfig)
+	db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
+		NamingStrategy: schema.NamingStrategy{
+			TablePrefix:   dbConfig.TablePrefix, // 表名前缀，`User`表为`t_users`
+			SingularTable: true,                 // 使用单数表名，启用该选项后，`User` 表将是`user`
+		},
+	})
+
+	return
 }
 
 // GetAllTableName 获取数据库中所有的表名
