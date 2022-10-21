@@ -3,6 +3,7 @@ package mysql
 import (
 	"fmt"
 	"github.com/jcbowen/jcbaseGo"
+	"github.com/jcbowen/jcbaseGo/helper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
@@ -48,4 +49,19 @@ func GetDb(dbConfig jcbaseGo.DbStruct) (db *gorm.DB, err error) {
 func GetAllTableName() (result []AllTableName) {
 	Db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema='" + jcbaseGo.Config.Db.Dbname + "' AND table_type='base table'").Scan(&result)
 	return
+}
+
+// TableName 获取表名，
+func TableName(tableName string, quotes bool) string {
+	tablePrefix := jcbaseGo.Config.Db.TablePrefix
+	// 如果已经有前缀了，就不再添加
+	if len(jcbaseGo.Config.Db.TablePrefix) > 0 && helper.StringStartWith(tableName, jcbaseGo.Config.Db.TablePrefix) {
+		tablePrefix = ""
+	}
+
+	if quotes {
+		return "`" + tablePrefix + tableName + "`"
+	} else {
+		return tablePrefix + tableName
+	}
 }
