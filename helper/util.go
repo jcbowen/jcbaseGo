@@ -242,6 +242,16 @@ func Str2Int(str string) int {
 	return ToInt(str)
 }
 
+// StringStartWith 判断字符串是否以某个字符串开头
+func StringStartWith(str, prefix string) bool {
+	return strings.HasPrefix(str, prefix)
+}
+
+// StringEndWith 判断字符串是否以某个字符串结尾
+func StringEndWith(str, suffix string) bool {
+	return strings.HasSuffix(str, suffix)
+}
+
 // StrReplace 类似于php中的str_replace
 func StrReplace(search interface{}, replace interface{}, subject interface{}, count int) (interface{}, error) {
 	switch search.(type) {
