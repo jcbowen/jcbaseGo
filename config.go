@@ -75,27 +75,28 @@ func init() {
 	if err != nil {
 		log.Panic(err)
 	}
-	// 先判断json配置文件是否存在
-	if helper.FileExists(fileNameFull) {
-		// 读取json配置文件
-		file, fErr := os.ReadFile(fileNameFull)
-		if fErr != nil {
-			log.Panic(fErr)
-		}
-		fileDataString := string(file)
 
-		err := json.Unmarshal([]byte(fileDataString), &Config)
-		if err != nil {
-			log.Panic(err)
-		}
-	} else {
+	// json配置文件不存在，根据默认配置生成json配置文件
+	if !helper.FileExists(fileNameFull) {
 		// 如果配置文件不存在，则创建配置文件
 		file, _ := json.MarshalIndent(Config, "", " ")
-		err := helper.CreateFileIfNotExist(fileNameFull, file, 0755, true)
+		err := helper.CreateFile(fileNameFull, file, 0755, false)
 		if err != nil {
 			log.Panic(err)
 		}
-		err = errors.New("配置文件不存在，已创建配置文件，请修改配置文件后重启程序！\n配置文件路径：" + fileNameFull)
+		err = errors.New("配置文件不存在，已创建默认配置文件，请修改配置文件后重启程序！\n配置文件路径：" + fileNameFull)
+		log.Panic(err)
+	}
+
+	// 读取json配置文件
+	file, fErr := os.ReadFile(fileNameFull)
+	if fErr != nil {
+		log.Panic(fErr)
+	}
+	fileDataString := string(file)
+
+	err = json.Unmarshal([]byte(fileDataString), &Config)
+	if err != nil {
 		log.Panic(err)
 	}
 }
