@@ -176,20 +176,35 @@ func DirExists(path string, create bool, perm os.FileMode) (bool, error) {
 	return true, nil
 }
 
-// CreateFileIfNotExist 判断文件是否存在，不存在则根据传入的文件内容创建，可设置文件权限，可设置是否覆盖
+// CreateFileIfNotExist 判断文件是否存在，不存在则根据传入的文件内容创建，可设置文件权限
+//
+// Deprecated: As of jcbaseGo 0.2.1, this function simply calls CreateFile.
 func CreateFileIfNotExist(path string, content []byte, perm os.FileMode, overwrite bool) error {
+	return CreateFile(path, content, perm, false)
+}
+
+// CreateFile 创建文件，可设置文件权限，可设置是否覆盖
+func CreateFile(path string, content []byte, perm os.FileMode, overwrite bool) error {
+	// 如果已经存在且不需要覆盖则返回错误
+	if exists := FileExists(path); exists {
+		if !overwrite {
+			return errors.New("文件已存在，路径：" + path)
+		}
+	}
+
+	// 如果没有设置权限则使用默认权限
 	if perm == 0 {
 		perm = defaultPerm
 	}
-	checkDir, err := DirExists(path, true, perm)
-	if checkDir && err == nil {
-		if !overwrite {
-			return errors.New("file already exists")
-		}
-	}
-	err = os.WriteFile(path, content, perm)
 
-	return err
+	// 检查目录是否存在，不存在则创建
+	_, err := DirExists(path, true, perm)
+	if err != nil {
+		return err
+	}
+
+	// 创建文件
+	return os.WriteFile(path, content, perm)
 }
 
 // Remove 删除文件或目录
