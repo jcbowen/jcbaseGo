@@ -1,80 +1,12 @@
 package helper
 
 import (
-	"encoding/json"
 	"errors"
 	"net"
-	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 )
-
-// ----- 结构体转json，Begin -----/
-// 用法:
-// 1. SetStruct(_struct).ToJson()
-// 2. SetStruct(_struct).DoSort().ToJson()
-// 3. SetStruct(_struct).File("path").ToJson()
-
-type Struct2JsonOpt struct {
-	Struct   interface{} // 结构体
-	Sort     bool        // 是否需要排序
-	NeedFile bool        // 是否需要输出json文件
-	FilePath string      // 输出json文件路径
-}
-
-func SetStruct(_struct interface{}) *Struct2JsonOpt {
-	return &Struct2JsonOpt{Struct: _struct}
-}
-
-func (opt *Struct2JsonOpt) DoSort() *Struct2JsonOpt {
-	opt.Sort = true
-	return opt
-}
-
-func (opt *Struct2JsonOpt) File(filepath string) *Struct2JsonOpt {
-	opt.NeedFile = true
-	opt.FilePath = filepath
-	return opt
-}
-
-func (opt *Struct2JsonOpt) ToJson() (string, error) {
-	_struct := opt.Struct
-
-	jsonByte, err := json.Marshal(_struct)
-	jsonStr := string(jsonByte)
-
-	if opt.Sort {
-		jsonStr = JsonStrSort(jsonStr)
-	}
-
-	// 判断是否需要输出json文件
-	if opt.NeedFile {
-		_ = os.MkdirAll(filepath.Dir(opt.FilePath), os.ModePerm)
-		cfgFile, err2 := os.Create(opt.FilePath)
-		if err2 != nil {
-			panic(err2)
-		}
-		defer func(cfgFile *os.File) {
-			err := cfgFile.Close()
-			if err != nil {
-				panic(err)
-			}
-		}(cfgFile)
-
-		// 编码写入配置文件;
-		cfgEncoder := json.NewEncoder(cfgFile)
-		cfgEncoder.SetIndent("", "\t")
-		if err3 := cfgEncoder.Encode(_struct); err3 != nil {
-			panic(err3)
-		}
-	}
-
-	return jsonStr, err
-}
-
-// ----- 结构体转json，End -----/
 
 // ----- map[string]string 类型相关操作 -----/
 
@@ -214,25 +146,6 @@ func (a *ArrStr) ArrayIntersect(oArr ...[]string) (intersects []string) {
 		}
 	}
 	return
-}
-
-// ----- Json -----/
-
-func JsonStr2Map(str string) map[string]interface{} {
-	var tempMap map[string]interface{}
-	err := json.Unmarshal([]byte(str), &tempMap)
-	if err != nil {
-		panic(err)
-	}
-	return tempMap
-}
-
-// JsonStrSort 对json字符串进行排序
-func JsonStrSort(jsonStr string) string {
-	jsonMap := JsonStr2Map(jsonStr)
-	nData := SetMapStrInterface(jsonMap).DoSort().GetData()
-	jsonByte, _ := json.Marshal(nData)
-	return string(jsonByte)
 }
 
 // Str2Int 字符串转数字
