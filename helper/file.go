@@ -146,7 +146,7 @@ func IsHidden(path string) bool {
 	return len(path) > 1 && path[0] == '.'
 }
 
-// DirExists 判断目录是否存在
+// DirExists 判断目录是否存在，可选在不存在时是否创建目录
 func DirExists(path string, create bool, perm os.FileMode) (bool, error) {
 	// 判断path是否为一个目录，如果不是目录则取出目录部分
 	if !IsDir(path) {
