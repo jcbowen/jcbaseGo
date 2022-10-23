@@ -175,13 +175,6 @@ func DirExists(path string, create bool, perm os.FileMode) (bool, error) {
 	return true, nil
 }
 
-// CreateFileIfNotExist 判断文件是否存在，不存在则根据传入的文件内容创建，可设置文件权限
-//
-// Deprecated: As of jcbaseGo 0.2.1, this function simply calls CreateFile.
-func CreateFileIfNotExist(path string, content []byte, perm os.FileMode, overwrite bool) error {
-	return CreateFile(path, content, perm, false)
-}
-
 // CreateFile 创建文件，可设置文件权限，可设置是否覆盖
 func CreateFile(path string, content []byte, perm os.FileMode, overwrite bool) error {
 	// 如果已经存在且不需要覆盖则返回错误
@@ -266,4 +259,13 @@ func CopyFile(src, dst string, overwrite bool, perm os.FileMode, copyAttr bool) 
 		}
 	}
 	return nil
+}
+
+// ------------------------ 以下是弃用了的函数，将在后续版本中被移除 ------------------------ /
+
+// CreateFileIfNotExist 判断文件是否存在，不存在则根据传入的文件内容创建，可设置文件权限
+//
+// Deprecated: As of jcbaseGo 0.2.1, this function simply calls CreateFile.
+func CreateFileIfNotExist(path string, content []byte, perm os.FileMode, overwrite bool) error {
+	return CreateFile(path, content, perm, false)
 }

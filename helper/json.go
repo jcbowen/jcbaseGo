@@ -194,7 +194,7 @@ func JsonStrSort(jsonStr string) string {
 	return string(jsonByte)
 }
 
-// ----- 弃用 -----/
+// ------------------------ 以下是弃用了的函数，将在后续版本中被移除 ------------------------ /
 
 // SetStruct
 // Deprecated: 请使用 JsonStruct

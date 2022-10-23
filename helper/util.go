@@ -148,13 +148,6 @@ func (a *ArrStr) ArrayIntersect(oArr ...[]string) (intersects []string) {
 	return
 }
 
-// Str2Int 字符串转数字
-//
-// Deprecated: As of jcbaseGo 0.2.1, this function simply calls ToInt.
-func Str2Int(str string) int {
-	return ToInt(str)
-}
-
 // StringStartWith 判断字符串是否以某个字符串开头
 func StringStartWith(str, prefix string) bool {
 	return strings.HasPrefix(str, prefix)
@@ -280,4 +273,13 @@ func ParseIP(s string) (net.IP, int) {
 		}
 	}
 	return nil, 0
+}
+
+// ------------------------ 以下是弃用了的函数，将在后续版本中被移除 ------------------------ /
+
+// Str2Int 字符串转数字
+//
+// Deprecated: As of jcbaseGo 0.2.1, this function simply calls ToInt.
+func Str2Int(str string) int {
+	return ToInt(str)
 }
