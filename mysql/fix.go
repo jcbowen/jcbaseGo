@@ -240,8 +240,8 @@ func SchemaCompare(table1 *Schema, table2 *Schema) *CompareDiffs {
 				table1.Fields[field].Length = ""
 			}
 
-			table1Json, _ := helper.SetStruct(table1.Fields[field]).ToJson()
-			table2Json, _ := helper.SetStruct(table2.Fields[field]).ToJson()
+			table1Json, _ := helper.JsonStruct(table1.Fields[field]).ToJson()
+			table2Json, _ := helper.JsonStruct(table2.Fields[field]).ToJson()
 			table1Map := helper.JsonStr2Map(table1Json)
 			table2Map := helper.JsonStr2Map(table2Json)
 
@@ -278,8 +278,8 @@ func SchemaCompare(table1 *Schema, table2 *Schema) *CompareDiffs {
 	intersects = helper.SetArrStr(indexes1).ArrayIntersect(indexes2)
 	if len(intersects) > 0 {
 		for _, index := range intersects {
-			table1Json, _ := helper.SetStruct(table1.Indexes[index]).ToJson()
-			table2Json, _ := helper.SetStruct(table2.Indexes[index]).ToJson()
+			table1Json, _ := helper.JsonStruct(table1.Indexes[index]).ToJson()
+			table2Json, _ := helper.JsonStruct(table2.Indexes[index]).ToJson()
 			table1Map := helper.JsonStr2Map(table1Json)
 			table2Map := helper.JsonStr2Map(table2Json)
 
