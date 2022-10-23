@@ -193,3 +193,8 @@ func ToInt(value interface{}) (i int) {
 
 	return
 }
+
+// Int int转换为*int类型
+func Int(i int) *int {
+	return &i
+}
