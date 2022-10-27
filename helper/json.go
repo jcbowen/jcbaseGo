@@ -53,6 +53,11 @@ func JsonFile(path string) *JsonStructOpt {
 	return jsonStruct
 }
 
+// JsonString 初始化json字符串
+func JsonString(jsonString string) *JsonStructOpt {
+	return &JsonStructOpt{String: jsonString}
+}
+
 // DoSort
 // 对json结构根据key重新进行排序
 func (opt *JsonStructOpt) DoSort() *JsonStructOpt {
