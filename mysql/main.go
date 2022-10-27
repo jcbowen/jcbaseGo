@@ -25,6 +25,10 @@ type AllTableName struct {
 	TableName string `gorm:"table_name"`
 }
 
+func Get() *gorm.DB {
+	return Db
+}
+
 // GetDSN 获取DataSourceName
 func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
 	dsn = "%s:%s@%s(%s:%s)/%s?charset=%s&parseTime=True&loc=Local"
