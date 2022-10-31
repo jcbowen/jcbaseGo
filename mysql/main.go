@@ -10,7 +10,9 @@ import (
 	"log"
 )
 
-var Db *gorm.DB
+type DB = gorm.DB
+
+var Db *DB
 
 func init() {
 	var err error
@@ -25,7 +27,7 @@ type AllTableName struct {
 	TableName string `gorm:"table_name"`
 }
 
-func Get() *gorm.DB {
+func Get() *DB {
 	return Db
 }
 
@@ -37,7 +39,7 @@ func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
 }
 
 // GetDb 获取数据库连接
-func GetDb(dbConfig jcbaseGo.DbStruct) (db *gorm.DB, err error) {
+func GetDb(dbConfig jcbaseGo.DbStruct) (db *DB, err error) {
 	dsn := getDSN(dbConfig)
 	db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
@@ -59,7 +61,7 @@ func GetAllTableName() (result []AllTableName) {
 func TableName(tableName string, quotes bool) string {
 	tablePrefix := jcbaseGo.Config.Db.TablePrefix
 	// 如果已经有前缀了，就不再添加
-	if len(jcbaseGo.Config.Db.TablePrefix) > 0 && helper.StringStartWith(tableName, jcbaseGo.Config.Db.TablePrefix) {
+	if len(tablePrefix) > 0 && helper.StringStartWith(tableName, tablePrefix) {
 		tablePrefix = ""
 	}
 
