@@ -7,27 +7,26 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
-	"log"
 )
 
 type DB = gorm.DB
 
 var Db *DB
 
-func init() {
-	var err error
-	Db, err = GetDb(jcbaseGo.Config.Get().Db)
-
-	if err != nil {
-		log.Panic(err)
-	}
-}
-
 type AllTableName struct {
 	TableName string `gorm:"table_name"`
 }
 
 func Get() *DB {
+	if Db == nil {
+		var err error
+		Db, err = GetDb(jcbaseGo.Config.Get().Db)
+
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	return Db
 }
 

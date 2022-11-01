@@ -71,7 +71,7 @@ func TableSchema(tableName string) (*Schema, error) {
 	}
 
 	var result tableStatus
-	Db.Raw("SHOW TABLE STATUS LIKE '" + tableName + "'").Scan(&result)
+	Get().Raw("SHOW TABLE STATUS LIKE '" + tableName + "'").Scan(&result)
 	if !(len(result.Name) > 0) {
 		return nil, errors.New("没有找到数据表：" + tableName)
 	}
@@ -94,7 +94,7 @@ func TableSchema(tableName string) (*Schema, error) {
 	}
 
 	var result2 []tableField
-	Db.Raw("SHOW FULL COLUMNS FROM " + tableName).Scan(&result2)
+	Get().Raw("SHOW FULL COLUMNS FROM " + tableName).Scan(&result2)
 	Columns := make(map[string]*Column)
 	for _, value := range result2 {
 		temp := &Column{}
@@ -146,7 +146,7 @@ func TableSchema(tableName string) (*Schema, error) {
 	}
 
 	var result3 []tableIndex
-	Db.Raw("SHOW INDEX FROM " + tableName).Scan(&result3)
+	Get().Raw("SHOW INDEX FROM " + tableName).Scan(&result3)
 	Indexs := make(map[string]*Index)
 	for _, value := range result3 {
 		item := &Index{}
@@ -573,7 +573,7 @@ func BuildFieldSql(field *Column) string {
 func TableSchemas(tableName string) (dump string) {
 	sql := "SHOW CREATE TABLE " + tableName
 	var result map[string]interface{}
-	Db.Raw(sql).Scan(&result)
+	Get().Raw(sql).Scan(&result)
 
 	dump = "DROP TABLE IF EXISTS " + tableName + "; "
 	dump = dump + helper.ToString(result["Create Table"])
@@ -588,7 +588,7 @@ func MakeInsertSql(tableName string, start int, size int) (data string, result [
 		tmpBuilder strings.Builder
 		keys       string
 	)
-	Db.Table(tableName).Limit(size).Offset(start).Find(&result)
+	Get().Table(tableName).Limit(size).Offset(start).Find(&result)
 	if len(result) > 0 {
 		for i := 0; i < len(result); i++ {
 			item := result[i]
@@ -632,7 +632,7 @@ func MakeInsertSql(tableName string, start int, size int) (data string, result [
 		data = "INSERT INTO `" + tableName + "` " + keys + ") VALUES " + tmp + ";"
 	}
 	defer func() {
-		sqlDB, err := Db.DB()
+		sqlDB, err := Get().DB()
 		if err == nil {
 			err := sqlDB.Close()
 			if err != nil {
