@@ -35,14 +35,14 @@ type RedisStruct struct {
 	Db       string `json:"db"`       // redis数据库
 }
 
-type configStruct struct {
+type ConfigStruct struct {
 	Db         DbStruct         `json:"db"`         // 数据库配置信息
 	Redis      RedisStruct      `json:"redis"`      // redis配置信息
 	Repository RepositoryStruct `json:"repository"` // 仓库配置信息
 }
 
 // Config 为Config添加默认数据
-var Config = configStruct{
+var Config = ConfigStruct{
 	DbStruct{
 		DriverName:  "mysql",
 		Protocol:    "tcp",
@@ -68,9 +68,23 @@ var Config = configStruct{
 	},
 }
 
-// 将json配置信息初始化到Config中
-func init() {
+type ConfigOption struct {
+	ConfigFile string
+}
+
+func New(c ConfigOption) *ConfigOption {
+	c.checkConfig()
+	return &c
+}
+
+// checkConfig 将json配置信息初始化到Config中
+func (co *ConfigOption) checkConfig() {
 	filename := "./data/config.json"
+	if co.ConfigFile != "" {
+		filename = co.ConfigFile
+	} else {
+		co.ConfigFile = filename
+	}
 	fileNameFull, err := filepath.Abs(filename)
 	if err != nil {
 		log.Panic(err)
@@ -101,6 +115,24 @@ func init() {
 	}
 }
 
-func (c *configStruct) Get() *configStruct {
+// GetConfig 获取配置信息
+func (co *ConfigOption) GetConfig() *ConfigStruct {
+	return &Config
+}
+
+// ----- 终结方法 ----- /
+
+func (co *ConfigOption) GetConfigOption() ConfigOption {
+	return *co
+}
+
+// ------ 弃用函数 ------ /
+
+// Get 获取配置信息(兼容旧的写法)
+// Deprecated: 请使用
+func (c *ConfigStruct) Get() *ConfigStruct {
+	New(ConfigOption{
+		ConfigFile: "",
+	}).checkConfig()
 	return c
 }

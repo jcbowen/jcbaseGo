@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	"errors"
 	"fmt"
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/command"
@@ -11,9 +12,14 @@ import (
 
 // Do 执行升级
 // 根据配置信息中的仓库配置，执行升级
-func Do() {
-	configData := jcbaseGo.Config.Get().Repository
-	command.CmdPath = configData.Dir
+func Do(conf jcbaseGo.RepositoryStruct) {
+	// 判断是否有配置仓库
+	if conf.RemoteURL == "" {
+		err := errors.New("repository is empty")
+		panic(err)
+	}
+
+	command.CmdPath = conf.Dir
 
 	checkExists, err := helper.DirExists(command.CmdPath, true, 0755)
 	if err != nil {
@@ -46,14 +52,14 @@ func Do() {
 	_, _ = command.Run("git", "add", "README-TEST.md")
 	result, _ = command.Run("git", "commit", "-m", "test commit")
 	fmt.Printf("提交：\n%s\n", result)
-	_, _ = command.Run("git", "remote", "add", configData.RemoteName, configData.RemoteURL)
-	result, _ = command.Run("git", "fetch", configData.RemoteName)
+	_, _ = command.Run("git", "remote", "add", conf.RemoteName, conf.RemoteURL)
+	result, _ = command.Run("git", "fetch", conf.RemoteName)
 	fmt.Printf("拉取远程仓库：\n%s\n", result)
 	if strings.Contains(result, "fatal:") {
 		fmt.Printf("\033[31m%s\033[0m\n", "拉取远程仓库失败")
 		os.Exit(1)
 	}
-	result, _ = command.Run("git", "reset", "--hard", configData.RemoteName+"/"+configData.Branch)
+	result, _ = command.Run("git", "reset", "--hard", conf.RemoteName+"/"+conf.Branch)
 	fmt.Printf("重置到远程仓库最新版本：\n%s\n", result)
 	if strings.Contains(result, "fatal:") {
 		fmt.Printf("\033[31m%s\033[0m\n", "重置到远程仓库最新版本失败")

@@ -40,7 +40,7 @@ type Schema struct {
 }
 
 // TableSchema 获得指定数据表的结构
-func TableSchema(tableName string) (*Schema, error) {
+func TableSchema(c Context, tableName string) (*Schema, error) {
 
 	if !(len(tableName) > 0) {
 		return nil, errors.New("数据表名称不能为空")
@@ -71,7 +71,7 @@ func TableSchema(tableName string) (*Schema, error) {
 	}
 
 	var result tableStatus
-	Get().Raw("SHOW TABLE STATUS LIKE '" + tableName + "'").Scan(&result)
+	c.Db.Raw("SHOW TABLE STATUS LIKE '" + tableName + "'").Scan(&result)
 	if !(len(result.Name) > 0) {
 		return nil, errors.New("没有找到数据表：" + tableName)
 	}
@@ -94,7 +94,7 @@ func TableSchema(tableName string) (*Schema, error) {
 	}
 
 	var result2 []tableField
-	Get().Raw("SHOW FULL COLUMNS FROM " + tableName).Scan(&result2)
+	c.Db.Raw("SHOW FULL COLUMNS FROM " + tableName).Scan(&result2)
 	Columns := make(map[string]*Column)
 	for _, value := range result2 {
 		temp := &Column{}
@@ -146,8 +146,8 @@ func TableSchema(tableName string) (*Schema, error) {
 	}
 
 	var result3 []tableIndex
-	Get().Raw("SHOW INDEX FROM " + tableName).Scan(&result3)
-	Indexs := make(map[string]*Index)
+	c.Db.Raw("SHOW INDEX FROM " + tableName).Scan(&result3)
+	IndexItems := make(map[string]*Index)
 	for _, value := range result3 {
 		item := &Index{}
 
@@ -162,9 +162,9 @@ func TableSchema(tableName string) (*Schema, error) {
 		var _fields []string
 		item.Fields = append(_fields, value.ColumnName)
 
-		Indexs[item.Name] = item
+		IndexItems[item.Name] = item
 	}
-	tableSchema.Indexes = Indexs
+	tableSchema.Indexes = IndexItems
 
 	return tableSchema, nil
 }
@@ -240,8 +240,12 @@ func SchemaCompare(table1 *Schema, table2 *Schema) *CompareDiffs {
 				table1.Fields[field].Length = ""
 			}
 
-			table1Json, _ := helper.JsonStruct(table1.Fields[field]).ToJson()
-			table2Json, _ := helper.JsonStruct(table2.Fields[field]).ToJson()
+			var (
+				table1Json string
+				table2Json string
+			)
+			helper.JsonStruct(table1.Fields[field]).ToString(&table1Json)
+			helper.JsonStruct(table2.Fields[field]).ToString(&table2Json)
 			table1Map := helper.JsonStr2Map(table1Json)
 			table2Map := helper.JsonStr2Map(table2Json)
 
@@ -278,8 +282,12 @@ func SchemaCompare(table1 *Schema, table2 *Schema) *CompareDiffs {
 	intersects = helper.SetArrStr(indexes1).ArrayIntersect(indexes2)
 	if len(intersects) > 0 {
 		for _, index := range intersects {
-			table1Json, _ := helper.JsonStruct(table1.Indexes[index]).ToJson()
-			table2Json, _ := helper.JsonStruct(table2.Indexes[index]).ToJson()
+			var (
+				table1Json string
+				table2Json string
+			)
+			helper.JsonStruct(table1.Indexes[index]).ToString(&table1Json)
+			helper.JsonStruct(table2.Indexes[index]).ToString(&table2Json)
 			table1Map := helper.JsonStr2Map(table1Json)
 			table2Map := helper.JsonStr2Map(table2Json)
 
@@ -329,10 +337,10 @@ type TableFixSqlOpt struct {
 }
 
 // TableFixSql 根据基准表生成修复差异的sql
-func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
+func TableFixSql(opt TableFixSqlOpt) (sqlItems []string) {
 	var sql string
 	if opt.Table1 == nil {
-		sqls = append(sqls, TableCreateSql(TableCreateSqlOpt{
+		sqlItems = append(sqlItems, TableCreateSql(TableCreateSqlOpt{
 			Table:       opt.Table2,
 			TablePre:    opt.TablePre,
 			TablePreOld: opt.TablePreOld,
@@ -343,7 +351,7 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 	// 获取差异结构
 	diff := SchemaCompare(opt.Table1, opt.Table2)
 	if opt.CompareTableName && diff.Diffs.TableName {
-		sqls = append(sqls, TableCreateSql(TableCreateSqlOpt{
+		sqlItems = append(sqlItems, TableCreateSql(TableCreateSqlOpt{
 			Table:       opt.Table2,
 			TablePre:    opt.TablePre,
 			TablePreOld: opt.TablePreOld,
@@ -352,21 +360,21 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 	}
 	if diff.Diffs.Engine {
 		sql = "ALTER TABLE `" + opt.Table1.TableName + "` ENGINE = " + opt.Table2.Engine
-		sqls = append(sqls, sql)
+		sqlItems = append(sqlItems, sql)
 	}
 	if diff.Diffs.Charset {
 		pieces := strings.Split(opt.Table2.Charset, "_")
 		charset := pieces[0]
 		sql = "ALTER TABLE `" + opt.Table1.TableName + "` DEFAULT CHARSET = " + charset
-		sqls = append(sqls, sql)
+		sqlItems = append(sqlItems, sql)
 	}
 
-	var isincrement *Column
+	var isIncrement *Column
 
 	// diff.Fields 的相关处理
 	if len(diff.Fields.Less) > 0 {
-		for _, fieldname := range diff.Fields.Less {
-			field := opt.Table2.Fields[fieldname]
+		for _, fieldName := range diff.Fields.Less {
+			field := opt.Table2.Fields[fieldName]
 			piece := BuildFieldSql(field)
 			if len(field.Rename) > 0 && opt.Table1.Fields[field.Rename] != nil {
 				sql = "ALTER TABLE `" + opt.Table1.TableName + "` CHANGE `" + field.Rename + "` `" + field.Name + "` " + piece
@@ -380,7 +388,7 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 			}
 			var primary *Column
 			if strings.Index(sql, "AUTO_INCREMENT") != -1 {
-				isincrement = field
+				isIncrement = field
 				sqlN, _ := helper.StrReplace("AUTO_INCREMENT", "", sql, -1)
 				sql = helper.ToString(sqlN)
 				for _, f := range opt.Table1.Fields {
@@ -395,66 +403,66 @@ func TableFixSql(opt TableFixSqlOpt) (sqls []string) {
 						piece = helper.ToString(p)
 					}
 					sql2 := "ALTER TABLE `" + opt.Table1.TableName + "` CHANGE `" + primary.Name + "` `" + primary.Name + "` " + piece
-					sqls = append(sqls, sql2)
+					sqlItems = append(sqlItems, sql2)
 				}
 			}
-			sqls = append(sqls, sql)
+			sqlItems = append(sqlItems, sql)
 		}
 	}
 	if len(diff.Fields.Diff) > 0 {
-		for _, fieldname := range diff.Fields.Diff {
-			field := opt.Table2.Fields[fieldname]
+		for _, fieldName := range diff.Fields.Diff {
+			field := opt.Table2.Fields[fieldName]
 			piece := BuildFieldSql(field)
-			if opt.Table1.Fields[fieldname] != nil {
+			if opt.Table1.Fields[fieldName] != nil {
 				sql = "ALTER TABLE `" + opt.Table1.TableName + "` CHANGE `" + field.Name + "` `" + field.Name + "` " + piece
-				sqls = append(sqls, sql)
+				sqlItems = append(sqlItems, sql)
 			}
 		}
 	}
 	if opt.Strict && len(diff.Fields.Greater) > 0 {
-		for _, fieldname := range diff.Fields.Greater {
-			if opt.Table1.Fields[fieldname] != nil {
-				sql = "ALTER TABLE `" + opt.Table1.TableName + "` DROP `" + fieldname + "`"
-				sqls = append(sqls, sql)
+		for _, fieldName := range diff.Fields.Greater {
+			if opt.Table1.Fields[fieldName] != nil {
+				sql = "ALTER TABLE `" + opt.Table1.TableName + "` DROP `" + fieldName + "`"
+				sqlItems = append(sqlItems, sql)
 			}
 		}
 	}
 
 	// diff.Indexes 的相关处理
 	if len(diff.Indexes.Less) > 0 {
-		for _, indexname := range diff.Indexes.Less {
-			index := opt.Table2.Indexes[indexname]
+		for _, indexName := range diff.Indexes.Less {
+			index := opt.Table2.Indexes[indexName]
 			piece := BuildIndexSql(index)
 			sql = "ALTER TABLE `" + opt.Table1.TableName + "` ADD " + piece
-			sqls = append(sqls, sql)
+			sqlItems = append(sqlItems, sql)
 		}
 	}
 	if len(diff.Indexes.Diff) > 0 {
-		for _, indexname := range diff.Indexes.Diff {
-			index := opt.Table2.Indexes[indexname]
+		for _, indexName := range diff.Indexes.Diff {
+			index := opt.Table2.Indexes[indexName]
 			piece := BuildIndexSql(index)
 			sql = "ALTER TABLE `" + opt.Table1.TableName + "` DROP "
 			sql2 := ""
-			if "PRIMARY" == indexname {
+			if "PRIMARY" == indexName {
 				sql2 = " PRIMARY KEY "
 			} else {
-				sql2 = "INDEX " + indexname
+				sql2 = "INDEX " + indexName
 			}
 			sql = sql + sql2 + ", ADD " + piece
-			sqls = append(sqls, sql)
+			sqlItems = append(sqlItems, sql)
 		}
 	}
 	if opt.Strict && len(diff.Indexes.Greater) > 0 {
-		for _, indexname := range diff.Indexes.Greater {
-			sql = "ALTER TABLE `" + opt.Table1.TableName + "` DROP `" + indexname + "`"
-			sqls = append(sqls, sql)
+		for _, indexName := range diff.Indexes.Greater {
+			sql = "ALTER TABLE `" + opt.Table1.TableName + "` DROP `" + indexName + "`"
+			sqlItems = append(sqlItems, sql)
 		}
 	}
 
-	if isincrement != nil {
-		piece := BuildFieldSql(isincrement)
-		sql = "ALTER TABLE `" + opt.Table1.TableName + "` CHANGE `" + isincrement.Name + "` `" + isincrement.Name + "` " + piece
-		sqls = append(sqls, sql)
+	if isIncrement != nil {
+		piece := BuildFieldSql(isIncrement)
+		sql = "ALTER TABLE `" + opt.Table1.TableName + "` CHANGE `" + isIncrement.Name + "` `" + isIncrement.Name + "` " + piece
+		sqlItems = append(sqlItems, sql)
 	}
 
 	return
@@ -570,10 +578,10 @@ func BuildFieldSql(field *Column) string {
 }
 
 // TableSchemas 生成清空表内数据的sql语句
-func TableSchemas(tableName string) (dump string) {
+func TableSchemas(c Context, tableName string) (dump string) {
 	sql := "SHOW CREATE TABLE " + tableName
 	var result map[string]interface{}
-	Get().Raw(sql).Scan(&result)
+	c.Db.Raw(sql).Scan(&result)
 
 	dump = "DROP TABLE IF EXISTS " + tableName + "; "
 	dump = dump + helper.ToString(result["Create Table"])
@@ -582,13 +590,13 @@ func TableSchemas(tableName string) (dump string) {
 }
 
 // MakeInsertSql 获取某个表的insert语句
-func MakeInsertSql(tableName string, start int, size int) (data string, result []map[string]interface{}) {
+func MakeInsertSql(c Context, tableName string, start int, size int) (data string, result []map[string]interface{}) {
 	var (
 		keyBuilder strings.Builder
 		tmpBuilder strings.Builder
 		keys       string
 	)
-	Get().Table(tableName).Limit(size).Offset(start).Find(&result)
+	c.Db.Table(tableName).Limit(size).Offset(start).Find(&result)
 	if len(result) > 0 {
 		for i := 0; i < len(result); i++ {
 			item := result[i]
@@ -632,12 +640,13 @@ func MakeInsertSql(tableName string, start int, size int) (data string, result [
 		data = "INSERT INTO `" + tableName + "` " + keys + ") VALUES " + tmp + ";"
 	}
 	defer func() {
-		sqlDB, err := Get().DB()
-		if err == nil {
-			err := sqlDB.Close()
-			if err != nil {
-				panic(err)
-			}
+		sqlDB, err := c.Db.DB()
+		if err != nil {
+			panic(err)
+		}
+		err = sqlDB.Close()
+		if err != nil {
+			panic(err)
 		}
 	}()
 

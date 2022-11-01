@@ -208,7 +208,7 @@ func SetStruct(jsonStruct interface{}) *JsonStructOpt {
 }
 
 // ToJson
-// Deprecated: 请使用 GetString
+// Deprecated: 请使用 ToString
 func (opt *JsonStructOpt) ToJson() (string, error) {
 	jsonStr := ""
 	result := opt.ToString(&jsonStr)

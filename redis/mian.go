@@ -8,33 +8,36 @@ import (
 	"github.com/jcbowen/jcbaseGo/helper"
 )
 
-var Ctx = context.Background()
-var Rdb *redis.Client
-var Config jcbaseGo.RedisStruct
+type ContextStruct struct {
+	Ctx    context.Context
+	Rdb    *redis.Client
+	Config jcbaseGo.RedisStruct
+}
 
-func init() {
-	Config = jcbaseGo.Config.Get().Redis
-	Rdb = redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", Config.Host, Config.Port),
-		Password: Config.Password,
-		DB:       helper.ToInt(Config.Db),
+func New(conf jcbaseGo.RedisStruct) *ContextStruct {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%s", conf.Host, conf.Port),
+		Password: conf.Password,
+		DB:       helper.ToInt(conf.Db),
 	})
-	_, err := Rdb.Ping(Ctx).Result()
+	ctx := context.Background()
+	_, err := rdb.Ping(ctx).Result()
 	if err != nil {
 		panic(err)
+	}
+
+	return &ContextStruct{
+		Ctx:    ctx,
+		Rdb:    rdb,
+		Config: conf,
 	}
 }
 
-// GetRedis 获取指定db的redis实例
-func GetRedis(db any) *redis.Client {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", Config.Host, Config.Port),
-		Password: Config.Password,
-		DB:       helper.ToInt(db),
-	})
-	_, err := rdb.Ping(Ctx).Result()
-	if err != nil {
-		panic(err)
-	}
-	return rdb
+func (cs *ContextStruct) GetCtx(ctx *ContextStruct) *ContextStruct {
+	ctx = cs
+	return cs
+}
+
+func (cs *ContextStruct) GetRdb() *redis.Client {
+	return cs.Rdb
 }

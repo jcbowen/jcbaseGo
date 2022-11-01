@@ -77,7 +77,7 @@ type TableCreateSqlOpt struct {
 func TableSchema(tableName string) (*Schema, error)
 
 // TableFixSql 根据基准表生成修复差异的sql
-func TableFixSql(opt TableFixSqlOpt) (sqls []string)
+func TableFixSql(opt TableFixSqlOpt) (sqlItems []string)
 
 // SchemaCompare 比较两张表的结构差异
 // table1 表结构
