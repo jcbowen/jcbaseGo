@@ -36,7 +36,7 @@ func New(dbConfig jcbaseGo.DbStruct) *Context {
 
 	// 判断dbConfig是否为空
 	if dbConfig.Dbname == "" {
-		context.Errors = append(context.Errors, errors.New("dbConfig is empty"))
+		context.AddError(errors.New("dbConfig is empty"))
 		return context
 	}
 
@@ -51,13 +51,27 @@ func New(dbConfig jcbaseGo.DbStruct) *Context {
 	context.Dsn = dsn
 	context.Conf = dbConfig
 	context.Db = db
-	context.Errors = append(context.Errors, err)
+	context.AddError(err)
 
 	return context
 }
 
+func (c *Context) AddError(err error) {
+	if err != nil {
+		c.Errors = append(c.Errors, err)
+	}
+}
+
 func (c *Context) Error() []error {
-	return c.Errors
+	// 过滤掉c.Errors中的nil
+	var errs []error
+	for _, err := range c.Errors {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errs
 }
 
 func (c *Context) GetDb() *DB {
@@ -74,23 +88,30 @@ func (c *Context) GetAllTableName() (tableNames []AllTableName) {
 	return
 }
 
-func (c *Context) TableName(tableName string, quotes bool) string {
+// TableName 获取表名，
+//
+// param tableName string 表名
+//
+// param quotes bool 是否加上反单引号
+func (c *Context) TableName(tableName *string, quotes ...bool) *Context {
 	// 如果有错误，就不再执行
 	if len(c.Errors) > 0 {
-		return ""
+		return c
 	}
 
 	tablePrefix := c.Conf.TablePrefix
 	// 如果已经有前缀了，就不再添加
-	if len(tablePrefix) > 0 && helper.StringStartWith(tableName, tablePrefix) {
+	if len(tablePrefix) > 0 && helper.StringStartWith(*tableName, tablePrefix) {
 		tablePrefix = ""
 	}
 
-	if quotes {
-		return fmt.Sprintf("`%s%s`", tablePrefix, tableName)
+	if len(quotes) > 0 && quotes[0] {
+		*tableName = fmt.Sprintf("`%s%s`", tablePrefix, *tableName)
 	} else {
-		return fmt.Sprintf("%s%s", tablePrefix, tableName)
+		*tableName = fmt.Sprintf("%s%s", tablePrefix, *tableName)
 	}
+
+	return c
 }
 
 // ----- 弃用 ----- /
