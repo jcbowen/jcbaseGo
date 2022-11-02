@@ -13,7 +13,7 @@ type ConfigStruct struct {
 func New(opt jcbaseGo.ConfigOption) *ConfigStruct {
 	funcFilePath := "/tmp/php/main.go"
 	if opt.RuntimePath != "" {
-		funcFilePath = opt.RuntimePath + funcFilePath
+		funcFilePath = helper.DirName(opt.RuntimePath) + funcFilePath
 	} else {
 		funcFilePath = helper.DirName(opt.ConfigFile) + funcFilePath
 	}
