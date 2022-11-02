@@ -43,7 +43,7 @@ type ConfigStruct struct {
 
 // Config 为Config添加默认数据
 var Config = ConfigStruct{
-	DbStruct{
+	Db: DbStruct{
 		DriverName:  "mysql",
 		Protocol:    "tcp",
 		Host:        "localhost",
@@ -54,13 +54,13 @@ var Config = ConfigStruct{
 		Charset:     "utf8mb4",
 		TablePrefix: "",
 	},
-	RedisStruct{
+	Redis: RedisStruct{
 		Host:     "localhost",
 		Port:     "6379",
 		Password: "",
 		Db:       "0",
 	},
-	RepositoryStruct{
+	Repository: RepositoryStruct{
 		Dir:        "./project/app/", // 本地仓库目录，目录必须以/结尾
 		Branch:     "master",
 		RemoteName: "origin",
@@ -69,7 +69,8 @@ var Config = ConfigStruct{
 }
 
 type ConfigOption struct {
-	ConfigFile string
+	ConfigFile  string // 配置文件路径
+	RuntimePath string // 运行缓存目录
 }
 
 func New(c ConfigOption) *ConfigOption {
