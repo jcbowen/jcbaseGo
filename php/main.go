@@ -15,7 +15,7 @@ func New(opt jcbaseGo.ConfigOption) *ConfigStruct {
 	if opt.RuntimePath != "" {
 		funcFilePath = opt.RuntimePath + funcFilePath
 	} else {
-		funcFilePath = helper.DirName(opt.ConfigFile) + "/tmp/php/main.php"
+		funcFilePath = helper.DirName(opt.ConfigFile) + funcFilePath
 	}
 
 	conf := &ConfigStruct{
