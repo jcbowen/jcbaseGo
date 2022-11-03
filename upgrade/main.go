@@ -12,7 +12,7 @@ import (
 
 // Do 执行升级
 // 根据配置信息中的仓库配置，执行升级
-func Do(conf jcbaseGo.RepositoryStruct) {
+func Do(conf jcbaseGo.RepositoryStruct, callBack ...any) {
 	// 判断是否有配置仓库
 	if conf.RemoteURL == "" {
 		err := errors.New("repository is empty")
@@ -68,5 +68,13 @@ func Do(conf jcbaseGo.RepositoryStruct) {
 
 	// 输出绿色
 	fmt.Printf("\033[32m%s\033[0m\n", "同步成功")
+
+	if len(callBack) > 0 {
+		// callBack的最后一个参数如果是函数，则执行
+		if f, ok := callBack[len(callBack)-1].(func()); ok {
+			f()
+		}
+	}
+
 	os.Exit(0)
 }
