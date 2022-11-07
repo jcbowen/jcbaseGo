@@ -13,6 +13,11 @@ import (
 // Do 执行升级
 // 根据配置信息中的仓库配置，执行升级
 func Do(conf jcbaseGo.RepositoryStruct, callBack ...any) {
+	hard(conf, callBack...)
+}
+
+// hard 暴力模式
+func hard(conf jcbaseGo.RepositoryStruct, callBack ...any) {
 	// 判断是否有配置仓库
 	if conf.RemoteURL == "" {
 		err := errors.New("repository is empty")
@@ -66,6 +71,23 @@ func Do(conf jcbaseGo.RepositoryStruct, callBack ...any) {
 		fmt.Printf("\033[31m%s\033[0m\n", "重置到远程仓库最新版本失败")
 		fmt.Println(result)
 		os.Exit(1)
+	}
+	if conf.Branch != "master" {
+		// 根据远程分支在本地创建一个同名分支，并切换到该分支
+		result, _ = command.Run("git", "checkout", "-t", "remotes/"+conf.RemoteName+"/"+conf.Branch)
+		if strings.Contains(result, "fatal:") {
+			fmt.Printf("\033[31m%s\033[0m\n", "切换分支失败")
+			fmt.Println(result)
+			os.Exit(1)
+		}
+		fmt.Println(result)
+		// 删除master分支
+		result, _ = command.Run("git", "branch", "-D", "master")
+		if strings.Contains(result, "fatal:") {
+			fmt.Printf("\033[31m%s\033[0m\n", "删除master分支失败")
+			fmt.Println(result)
+			os.Exit(1)
+		}
 	}
 
 	// 输出绿色
