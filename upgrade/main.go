@@ -44,8 +44,8 @@ func Do(conf jcbaseGo.RepositoryStruct, callBack ...any) {
 	result, _ := command.Run("git", "init")
 	fmt.Printf("初始化本地仓库：\n%s\n", result)
 	if strings.Compare(result[:36], "Initialized empty Git repository in") == 0 {
-		fmt.Println(result)
 		fmt.Printf("\033[31m%s\033[0m\n", "初始化本地仓库失败")
+		fmt.Println(result)
 		os.Exit(1)
 	}
 	_, _ = command.Run("touch", "README-TEST.md")
@@ -57,12 +57,14 @@ func Do(conf jcbaseGo.RepositoryStruct, callBack ...any) {
 	fmt.Printf("拉取远程仓库：\n%s\n", result)
 	if strings.Contains(result, "fatal:") {
 		fmt.Printf("\033[31m%s\033[0m\n", "拉取远程仓库失败")
+		fmt.Println(result)
 		os.Exit(1)
 	}
 	result, _ = command.Run("git", "reset", "--hard", conf.RemoteName+"/"+conf.Branch)
 	fmt.Printf("重置到远程仓库最新版本：\n%s\n", result)
 	if strings.Contains(result, "fatal:") {
 		fmt.Printf("\033[31m%s\033[0m\n", "重置到远程仓库最新版本失败")
+		fmt.Println(result)
 		os.Exit(1)
 	}
 
