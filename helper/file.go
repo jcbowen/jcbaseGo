@@ -168,7 +168,7 @@ func DirExists(path string, create bool, perm os.FileMode) (bool, error) {
 				}
 				return true, nil
 			}
-			return false, nil
+			return false, err
 		}
 		return true, err
 	}
