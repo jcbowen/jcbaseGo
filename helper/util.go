@@ -5,6 +5,7 @@ import (
 	"net"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -283,6 +284,56 @@ func IsError(errs []error) bool {
 		}
 	}
 	return false
+}
+
+// CheckAndSetDefault 检查结构体中的字段是否为空，如果为空则设置为默认值
+func CheckAndSetDefault(i interface{}) error {
+	// 获取结构体反射值
+	val := reflect.ValueOf(i).Elem()
+
+	// 遍历结构体字段
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+
+		// 如果字段是结构体，则递归检查
+		if field.Kind() == reflect.Struct {
+			if err := CheckAndSetDefault(field.Addr().Interface()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// 获取字段类型和默认值标签
+		tag := val.Type().Field(i).Tag.Get("default")
+		fieldType := field.Type().String()
+
+		// 如果字段为空字符串，则设置为默认值
+		if field.Kind() == reflect.String && field.Len() == 0 {
+			field.SetString(tag)
+		}
+
+		// 如果字段是bool类型，则设置默认值
+		if fieldType == "bool" && !field.Bool() {
+			defaultVal := tag == "true"
+			field.SetBool(defaultVal)
+		}
+
+		// 如果字段是int类型，则设置默认值
+		if strings.HasPrefix(fieldType, "int") && field.Int() == 0 {
+			defaultVal, _ := strconv.ParseInt(tag, 10, 64)
+			field.SetInt(defaultVal)
+		}
+
+		// 如果字段是float类型，则设置默认值
+		if fieldType == "float32" || fieldType == "float64" {
+			defaultVal, _ := strconv.ParseFloat(tag, 64)
+			if field.Float() == 0 {
+				field.SetFloat(defaultVal)
+			}
+		}
+	}
+
+	return nil
 }
 
 // ------------------------ 以下是弃用了的函数，将在后续版本中被移除 ------------------------ /

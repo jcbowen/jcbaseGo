@@ -35,18 +35,18 @@ type AttachmentConfig struct {
 }
 
 type OssConfig struct {
-	AccessKeyId     string `json:"AccessKeyId" default:""`
-	AccessKeySecret string `json:"AccessKeySecret" default:""`
-	Endpoint        string `json:"endpoint" default:""`
-	Bucket          string `json:"bucket" default:""`
+	AccessKeyId     string `json:"AccessKeyId" default:""`     // 阿里云AccessKeyId
+	AccessKeySecret string `json:"AccessKeySecret" default:""` // 阿里云AccessKeySecret
+	Endpoint        string `json:"endpoint" default:""`        // 阿里云Oss endpoint
+	Bucket          string `json:"bucket" default:""`          // 阿里云Oss bucket
 }
 
 type CosConfig struct {
-	SecretId  string `json:"secretId" default:""`
-	SecretKey string `json:"secretKey" default:""`
-	Bucket    string `json:"bucket" default:""`
-	Region    string `json:"region" default:""`
-	Url       string `json:"url" default:""`
+	SecretId  string `json:"secretId" default:""`  // 腾讯云Cos SecretId
+	SecretKey string `json:"secretKey" default:""` // 腾讯云Cos SecretKey
+	Bucket    string `json:"bucket" default:""`    // 腾讯云Cos Bucket
+	Region    string `json:"region" default:""`    // 腾讯云Cos Region
+	Url       string `json:"url" default:""`       // 腾讯云Cos Url
 }
 
 type RepositoryStruct struct {
@@ -69,16 +69,9 @@ type ConfigStruct struct {
 var Config ConfigStruct
 
 func init() {
-	// 为Config添加默认数据
-	configType := reflect.TypeOf(Config)
-	configValue := reflect.ValueOf(Config)
-	for i := 0; i < configType.NumField(); i++ {
-		field := configType.Field(i)
-		value := configValue.Field(i)
-		if value.IsZero() && field.Tag.Get("default") != "" {
-			defaultValue := field.Tag.Get("default")
-			value.Set(reflect.ValueOf(defaultValue))
-		}
+	err := helper.CheckAndSetDefault(&Config)
+	if err != nil {
+		panic(err)
 	}
 }
 

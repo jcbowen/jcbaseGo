@@ -8,7 +8,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
-	"reflect"
+	"log"
 )
 
 type DB = gorm.DB
@@ -26,16 +26,10 @@ type Context struct {
 
 // GetDSN 拼接DataSourceName
 func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
-	// 如果dbConfig中的字段为空，则使用默认值
-	dbConfigType := reflect.TypeOf(dbConfig)
-	dbConfigValue := reflect.ValueOf(dbConfig)
-	for i := 0; i < dbConfigType.NumField(); i++ {
-		field := dbConfigType.Field(i)
-		value := dbConfigValue.Field(i)
-		if value.IsZero() && field.Tag.Get("default") != "" {
-			defaultValue := field.Tag.Get("default")
-			value.Set(reflect.ValueOf(defaultValue))
-		}
+	err := helper.CheckAndSetDefault(&dbConfig)
+	if err != nil {
+		log.Fatalln(err)
+		return ""
 	}
 
 	// 拼接dsn
