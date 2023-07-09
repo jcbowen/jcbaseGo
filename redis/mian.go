@@ -18,13 +18,19 @@ type RedisContext struct {
 func New(conf jcbaseGo.RedisStruct) *RedisContext {
 	redisContext := &RedisContext{}
 
+	err := helper.CheckAndSetDefault(&conf)
+	if err != nil {
+		redisContext.AddError(err)
+		return redisContext
+	}
+
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", conf.Host, conf.Port),
 		Password: conf.Password,
 		DB:       helper.ToInt(conf.Db),
 	})
 	ctx := context.Background()
-	_, err := rdb.Ping(ctx).Result()
+	_, err = rdb.Ping(ctx).Result()
 
 	redisContext.Ctx = ctx
 	redisContext.Rdb = rdb
