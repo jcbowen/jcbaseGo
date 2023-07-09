@@ -8,13 +8,16 @@ import (
 	"github.com/jcbowen/jcbaseGo/helper"
 )
 
-type ContextStruct struct {
+type RedisContext struct {
 	Ctx    context.Context
 	Rdb    *redis.Client
 	Config jcbaseGo.RedisStruct
+	Errors []error
 }
 
-func New(conf jcbaseGo.RedisStruct) *ContextStruct {
+func New(conf jcbaseGo.RedisStruct) *RedisContext {
+	redisContext := &RedisContext{}
+
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", conf.Host, conf.Port),
 		Password: conf.Password,
@@ -22,22 +25,26 @@ func New(conf jcbaseGo.RedisStruct) *ContextStruct {
 	})
 	ctx := context.Background()
 	_, err := rdb.Ping(ctx).Result()
-	if err != nil {
-		panic(err)
-	}
 
-	return &ContextStruct{
-		Ctx:    ctx,
-		Rdb:    rdb,
-		Config: conf,
-	}
+	redisContext.Ctx = ctx
+	redisContext.Rdb = rdb
+	redisContext.Config = conf
+	redisContext.AddError(err)
+
+	return redisContext
 }
 
-func (cs *ContextStruct) GetCtx(ctx *ContextStruct) *ContextStruct {
+func (cs *RedisContext) GetCtx(ctx *RedisContext) *RedisContext {
 	ctx = cs
 	return cs
 }
 
-func (cs *ContextStruct) GetRdb() *redis.Client {
+func (cs *RedisContext) GetRdb() *redis.Client {
 	return cs.Rdb
+}
+
+func (c *RedisContext) AddError(err error) {
+	if err != nil {
+		c.Errors = append(c.Errors, err)
+	}
 }
