@@ -48,3 +48,15 @@ func (c *RedisContext) AddError(err error) {
 		c.Errors = append(c.Errors, err)
 	}
 }
+
+func (c *RedisContext) Error() []error {
+	// 过滤掉c.Errors中的nil
+	var errs []error
+	for _, err := range c.Errors {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errs
+}
