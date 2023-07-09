@@ -275,6 +275,16 @@ func ParseIP(s string) (net.IP, int) {
 	return nil, 0
 }
 
+// IsError 判断[]error是否存在错误
+func IsError(errs []error) bool {
+	for _, err := range errs {
+		if err != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // ------------------------ 以下是弃用了的函数，将在后续版本中被移除 ------------------------ /
 
 // Str2Int 字符串转数字
