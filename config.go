@@ -7,70 +7,84 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 )
 
 type DbStruct struct {
-	DriverName  string `json:"driverName"`  // 驱动类型
-	Protocol    string `json:"protocol"`    // 协议
-	Host        string `json:"host"`        // 数据库地址
-	Port        string `json:"port"`        // 数据库端口号
-	Dbname      string `json:"dbname"`      // 表名称
-	Username    string `json:"username"`    // 用户名
-	Password    string `json:"password"`    // 密码
-	Charset     string `json:"charset"`     // 编码
-	TablePrefix string `json:"tablePrefix"` // 表前缀
-}
-
-type RepositoryStruct struct {
-	Dir        string `json:"dir"`        // 本地仓库目录
-	Branch     string `json:"branch"`     // 远程仓库分支
-	RemoteName string `json:"remoteName"` // 远程仓库名称
-	RemoteURL  string `json:"remoteURL"`  // 远程仓库地址
+	DriverName  string `json:"driverName" default:"mysql"` // 驱动类型
+	Protocol    string `json:"protocol" default:"tcp"`     // 协议
+	Host        string `json:"host" default:"localhost"`   // 数据库地址
+	Port        string `json:"port" default:"3306"`        // 数据库端口号
+	Dbname      string `json:"dbname" default:"dbname"`    // 表名称
+	Username    string `json:"username" default:"root"`    // 用户名
+	Password    string `json:"password" default:""`        // 密码
+	Charset     string `json:"charset" default:"utf8mb4"`  // 编码
+	TablePrefix string `json:"tablePrefix" default:"jc_"`  // 表前缀
 }
 
 type RedisStruct struct {
-	Host     string `json:"host"`     // redis地址
-	Port     string `json:"port"`     // redis端口号
-	Password string `json:"password"` // redis密码
-	Db       string `json:"db"`       // redis数据库
+	Host     string `json:"host" default:"localhost"` // redis地址
+	Port     string `json:"port" default:"6379"`      // redis端口号
+	Password string `json:"password" default:""`      // redis密码
+	Db       string `json:"db" default:"0"`           // redis数据库
+}
+
+type AttachmentConfig struct {
+	Dir        string `json:"dir" default:"attachment"`   // 附件存储目录
+	RemoteType string `json:"remoteType" default:"local"` // 附件存储类型 local 本地存储 oss 阿里云存储 cos 腾讯云存储
+}
+
+type OssConfig struct {
+	AccessKeyId     string `json:"AccessKeyId" default:""`
+	AccessKeySecret string `json:"AccessKeySecret" default:""`
+	Endpoint        string `json:"endpoint" default:""`
+	Bucket          string `json:"bucket" default:""`
+}
+
+type CosConfig struct {
+	SecretId  string `json:"secretId" default:""`
+	SecretKey string `json:"secretKey" default:""`
+	Bucket    string `json:"bucket" default:""`
+	Region    string `json:"region" default:""`
+	Url       string `json:"url" default:""`
+}
+
+type RepositoryStruct struct {
+	Dir        string `json:"dir" default:"./project/app/"`                            // 本地仓库目录
+	Branch     string `json:"branch" default:"master"`                                 // 远程仓库分支
+	RemoteName string `json:"remoteName" default:"origin"`                             // 远程仓库名称
+	RemoteURL  string `json:"remoteURL" default:"git@github.com:jcbowen/jcbaseGo.git"` // 远程仓库地址
 }
 
 type ConfigStruct struct {
 	Db         DbStruct         `json:"db"`         // 数据库配置信息
 	Redis      RedisStruct      `json:"redis"`      // redis配置信息
+	Attachment AttachmentConfig `json:"attachment"` // 附件配置信息
+	Oss        OssConfig        `json:"oss"`        // oss配置信息
+	Cos        CosConfig        `json:"cos"`        // cos配置信息
 	Repository RepositoryStruct `json:"repository"` // 仓库配置信息
 }
 
 // Config 为Config添加默认数据
-var Config = ConfigStruct{
-	Db: DbStruct{
-		DriverName:  "mysql",
-		Protocol:    "tcp",
-		Host:        "localhost",
-		Port:        "3306",
-		Dbname:      "dbname",
-		Username:    "root",
-		Password:    "",
-		Charset:     "utf8mb4",
-		TablePrefix: "",
-	},
-	Redis: RedisStruct{
-		Host:     "localhost",
-		Port:     "6379",
-		Password: "",
-		Db:       "0",
-	},
-	Repository: RepositoryStruct{
-		Dir:        "./project/app/", // 本地仓库目录，目录必须以/结尾
-		Branch:     "master",
-		RemoteName: "origin",
-		RemoteURL:  "git@github.com:jcbowen/jcbaseGo.git",
-	},
+var Config ConfigStruct
+
+func init() {
+	// 为Config添加默认数据
+	configType := reflect.TypeOf(Config)
+	configValue := reflect.ValueOf(Config)
+	for i := 0; i < configType.NumField(); i++ {
+		field := configType.Field(i)
+		value := configValue.Field(i)
+		if value.IsZero() && field.Tag.Get("default") != "" {
+			defaultValue := field.Tag.Get("default")
+			value.Set(reflect.ValueOf(defaultValue))
+		}
+	}
 }
 
 type ConfigOption struct {
-	ConfigFile  string // 配置文件路径
-	RuntimePath string // 运行缓存目录
+	ConfigFile  string `json:"config_file" default:"./data/config.json"` // 配置文件路径
+	RuntimePath string `json:"runtime_path" default:"/runtime/"`         // 运行缓存目录
 }
 
 func New(c ConfigOption) *ConfigOption {
@@ -80,13 +94,19 @@ func New(c ConfigOption) *ConfigOption {
 
 // checkConfig 将json配置信息初始化到Config中
 func (co *ConfigOption) checkConfig() {
-	filename := "./data/config.json"
-	if co.ConfigFile != "" {
-		filename = co.ConfigFile
-	} else {
-		co.ConfigFile = filename
+	// 为参数添加默认值
+	coType := reflect.TypeOf(co)
+	coValue := reflect.ValueOf(co)
+	for i := 0; i < coType.NumField(); i++ {
+		field := coType.Field(i)
+		value := coValue.Field(i)
+		if value.IsZero() && field.Tag.Get("default") != "" {
+			defaultValue := field.Tag.Get("default")
+			value.Set(reflect.ValueOf(defaultValue))
+		}
 	}
-	fileNameFull, err := filepath.Abs(filename)
+
+	fileNameFull, err := filepath.Abs(co.ConfigFile)
 	if err != nil {
 		log.Panic(err)
 	}
