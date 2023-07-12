@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 )
 
 type DbStruct struct {
@@ -29,24 +28,28 @@ type RedisStruct struct {
 	Db       string `json:"db" default:"0"`           // redis数据库
 }
 
-type AttachmentConfig struct {
+type AttachmentStruct struct {
 	Dir        string `json:"dir" default:"attachment"`   // 附件存储目录
 	RemoteType string `json:"remoteType" default:"local"` // 附件存储类型 local 本地存储 oss 阿里云存储 cos 腾讯云存储
 }
 
-type OssConfig struct {
+type OssStruct struct {
 	AccessKeyId     string `json:"AccessKeyId" default:""`     // 阿里云AccessKeyId
 	AccessKeySecret string `json:"AccessKeySecret" default:""` // 阿里云AccessKeySecret
 	Endpoint        string `json:"endpoint" default:""`        // 阿里云Oss endpoint
 	Bucket          string `json:"bucket" default:""`          // 阿里云Oss bucket
 }
 
-type CosConfig struct {
+type CosStruct struct {
 	SecretId  string `json:"secretId" default:""`  // 腾讯云Cos SecretId
 	SecretKey string `json:"secretKey" default:""` // 腾讯云Cos SecretKey
 	Bucket    string `json:"bucket" default:""`    // 腾讯云Cos Bucket
 	Region    string `json:"region" default:""`    // 腾讯云Cos Region
 	Url       string `json:"url" default:""`       // 腾讯云Cos Url
+}
+
+type ProjectStruct struct {
+	Name string `json:"name" default:"jcbaseGo"` // 项目名称
 }
 
 type RepositoryStruct struct {
@@ -59,25 +62,20 @@ type RepositoryStruct struct {
 type ConfigStruct struct {
 	Db         DbStruct         `json:"db"`         // 数据库配置信息
 	Redis      RedisStruct      `json:"redis"`      // redis配置信息
-	Attachment AttachmentConfig `json:"attachment"` // 附件配置信息
-	Oss        OssConfig        `json:"oss"`        // oss配置信息
-	Cos        CosConfig        `json:"cos"`        // cos配置信息
+	Attachment AttachmentStruct `json:"attachment"` // 附件配置信息
+	Oss        OssStruct        `json:"oss"`        // oss配置信息
+	Cos        CosStruct        `json:"cos"`        // cos配置信息
+	Project    ProjectStruct    `json:"project"`    // 项目配置信息
 	Repository RepositoryStruct `json:"repository"` // 仓库配置信息
 }
 
 // Config 为Config添加默认数据
 var Config ConfigStruct
 
-func init() {
-	err := helper.CheckAndSetDefault(&Config)
-	if err != nil {
-		panic(err)
-	}
-}
-
 type ConfigOption struct {
-	ConfigFile  string `json:"config_file" default:"./data/config.json"` // 配置文件路径
-	RuntimePath string `json:"runtime_path" default:"/runtime/"`         // 运行缓存目录
+	ConfigFile  string       `json:"config_file" default:"./data/config.json"` // 配置文件路径
+	ConfigData  ConfigStruct `json:"config_data"`                              // 配置信息
+	RuntimePath string       `json:"runtime_path" default:"/runtime/"`         // 运行缓存目录
 }
 
 func New(c ConfigOption) *ConfigOption {
@@ -87,18 +85,20 @@ func New(c ConfigOption) *ConfigOption {
 
 // checkConfig 将json配置信息初始化到Config中
 func (co *ConfigOption) checkConfig() {
-	// 为参数添加默认值
-	coType := reflect.TypeOf(co)
-	coValue := reflect.ValueOf(co)
-	for i := 0; i < coType.NumField(); i++ {
-		field := coType.Field(i)
-		value := coValue.Field(i)
-		if value.IsZero() && field.Tag.Get("default") != "" {
-			defaultValue := field.Tag.Get("default")
-			value.Set(reflect.ValueOf(defaultValue))
-		}
+	// 判断是否传入了ConfigData，如果传入了ConfigData，则直接使用ConfigData
+	if co.ConfigData != (ConfigStruct{}) {
+		Config = co.ConfigData
+	}
+	if err := helper.CheckAndSetDefault(&Config); err != nil {
+		log.Panic(err)
 	}
 
+	// 为参数添加默认值
+	if err := helper.CheckAndSetDefault(co); err != nil {
+		log.Panic(err)
+	}
+
+	// 获取json配置文件的绝对路径
 	fileNameFull, err := filepath.Abs(co.ConfigFile)
 	if err != nil {
 		log.Panic(err)
