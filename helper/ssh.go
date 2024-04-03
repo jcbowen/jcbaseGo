@@ -2,7 +2,6 @@ package helper
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,7 +21,7 @@ func GetSSHKey() (string, error) {
 			return "", err
 		}
 	}
-	pubKeyBytes, err := ioutil.ReadFile(pubKeyFile)
+	pubKeyBytes, err := os.ReadFile(pubKeyFile)
 	if err != nil {
 		return "", fmt.Errorf("无法读取公钥文件：%v", err)
 	}
@@ -42,7 +41,7 @@ func GenerateSSHKey() error {
 	}
 	keyFile := filepath.Join(sshDir, "id_ed25519")
 	if _, err := os.Stat(keyFile); os.IsNotExist(err) {
-		cmd := exec.Command("ssh-keygen", "-t", "ed25519", "-C", "jcsite SSH Key", "-f", keyFile, "-N", "", "-q")
+		cmd := exec.Command("ssh-keygen", "-t", "ed25519", "-C", "jcbase@jiuchet.com", "-f", keyFile, "-N", "", "-q")
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("无法生成 SSH 密钥：%v", err)
 		}
