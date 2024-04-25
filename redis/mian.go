@@ -8,6 +8,8 @@ import (
 	"github.com/jcbowen/jcbaseGo/helper"
 )
 
+const Nil = redis.Nil
+
 type RedisContext struct {
 	Ctx    context.Context
 	Rdb    *redis.Client
