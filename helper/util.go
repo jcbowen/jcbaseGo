@@ -2,11 +2,13 @@ package helper
 
 import (
 	"errors"
+	"math/rand"
 	"net"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ----- map[string]string 类型相关操作 -----/
@@ -274,6 +276,23 @@ func ParseIP(s string) (net.IP, int) {
 		}
 	}
 	return nil, 0
+}
+
+// Random 生成随机字符
+func Random(length int, numericOnly bool) string {
+	var charset string
+	if numericOnly {
+		charset = "0123456789"
+	} else {
+		charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	randomString := make([]byte, length)
+	for i := range randomString {
+		randomString[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(randomString)
 }
 
 // IsError 判断[]error是否存在错误
