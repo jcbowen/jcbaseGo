@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"encoding/base64"
 	"errors"
 	"math/rand"
 	"net"
@@ -306,6 +307,20 @@ func GetHostInfo(req *http.Request) string {
 	}
 
 	return hostInfo
+}
+
+// Base64Encode base64加密
+func Base64Encode(str string) string {
+	return base64.StdEncoding.EncodeToString([]byte(str))
+}
+
+// Base64Decode base64解密
+func Base64Decode(str string) (string, error) {
+	data, err := base64.StdEncoding.DecodeString(str)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 // Random 生成随机字符
