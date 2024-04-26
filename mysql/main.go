@@ -33,8 +33,8 @@ func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
 	}
 
 	// 拼接dsn
-	dsn = "%s:%s@%s(%s:%s)/%s?charset=%s&parseTime=True&loc=Local"
-	dsn = fmt.Sprintf(dsn, dbConfig.Username, dbConfig.Password, dbConfig.Protocol, dbConfig.Host, dbConfig.Port, dbConfig.Dbname, dbConfig.Charset)
+	dsn = "%s:%s@%s(%s:%s)/%s?charset=%s&parseTime=%s&loc=Local"
+	dsn = fmt.Sprintf(dsn, dbConfig.Username, dbConfig.Password, dbConfig.Protocol, dbConfig.Host, dbConfig.Port, dbConfig.Dbname, dbConfig.Charset, dbConfig.ParseTime)
 
 	return
 }
