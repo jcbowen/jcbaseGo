@@ -260,6 +260,29 @@ func InArray(val interface{}, array interface{}) (exists bool) {
 	return
 }
 
+// StructToMap 将结构体转换为map
+func StructToMap(obj interface{}, toLower bool) map[string]interface{} {
+	objValue := reflect.ValueOf(obj)
+	if objValue.Kind() == reflect.Ptr {
+		objValue = objValue.Elem()
+	}
+
+	objType := objValue.Type()
+
+	result := make(map[string]interface{})
+	for i := 0; i < objType.NumField(); i++ {
+		field := objType.Field(i)
+		fieldValue := objValue.Field(i).Interface()
+		fieldName := field.Name
+		if toLower {
+			fieldName = strings.ToLower(fieldName)
+		}
+		result[fieldName] = fieldValue
+	}
+
+	return result
+}
+
 // ParseIP 解析IP地址，输出是ipv4或ipv6
 // 0: invalid ip
 // 4: ipv4
