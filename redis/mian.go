@@ -10,6 +10,9 @@ import (
 
 const Nil = redis.Nil
 
+type StatusCmd = redis.StatusCmd
+type StringCmd = redis.StringCmd
+
 type RedisContext struct {
 	Ctx    context.Context
 	Rdb    *redis.Client
