@@ -7,27 +7,24 @@ import (
 	"path/filepath"
 )
 
-// ----- 结构体转json，Begin -----/
-
-// JsonHelper
 type JsonHelper struct {
 	Struct   interface{}            // 结构体
 	String   string                 // json字符串
 	Map      map[string]interface{} // map
-	Sort     bool                   // 是否需要排序
-	NeedFile bool                   // 是否需要输出json文件
-	FilePath string                 // 输出json文件路径
+	sort     bool                   // 是否需要排序
+	needFile bool                   // 是否需要输出json文件
+	filePath string                 // 输出json文件路径
 	errors   []error
 }
 
-// JsonStruct
-// 初始化json结构体
+// ----- 实例化，Begin ----- /
+
 func JsonStruct(jsonStruct interface{}) *JsonHelper {
 	return &JsonHelper{Struct: jsonStruct}
 }
 
-// JsonFile
-// 初始化文件中的json字符串
+// JsonFile 根据传入的文件路径自动读取文件中的json内容
+// path: json文件路径
 func JsonFile(path string) *JsonHelper {
 	jsonStruct := &JsonHelper{}
 	// 获取绝对路径
@@ -50,29 +47,38 @@ func JsonFile(path string) *JsonHelper {
 	return jsonStruct
 }
 
-// JsonString 初始化json字符串
 func JsonString(jsonString string) *JsonHelper {
 	return &JsonHelper{String: jsonString}
 }
 
+func JsonMap(jsonMap map[string]interface{}) *JsonHelper {
+	return &JsonHelper{Map: jsonMap}
+}
+
+// ----- 实例化，End ----- /
+
+// ----- 参数配置，Begin ----- /
+
 // DoSort
-// 对json结构根据key重新进行排序
+// 输出json字符串时是否根据key排序
 func (opt *JsonHelper) DoSort() *JsonHelper {
-	opt.Sort = true
+	opt.sort = true
 	return opt
 }
 
-// File
-// 将json输出到
-func (opt *JsonHelper) File(filepath string) *JsonHelper {
-	opt.NeedFile = true
+// MakeFile
+// 是否生成json文件
+func (opt *JsonHelper) MakeFile(filepath string) *JsonHelper {
+	opt.needFile = true
 	absFilePath, err := GetAbsPath(filepath)
 	if err != nil {
 		opt.errors = append(opt.errors, err)
 	}
-	opt.FilePath = absFilePath
+	opt.filePath = absFilePath
 	return opt
 }
+
+// ----- 参数配置，End ----- /
 
 func (opt *JsonHelper) ToStruct(data interface{}) *JsonHelper {
 	if opt.Struct == nil { // 如果没有传入结构体，则将字符串转为结构体
@@ -90,13 +96,13 @@ func (opt *JsonHelper) ToStruct(data interface{}) *JsonHelper {
 		opt.Struct = data
 	}
 
-	if opt.NeedFile {
-		_, err := DirExists(opt.FilePath, true, os.ModePerm)
+	if opt.needFile {
+		_, err := DirExists(opt.filePath, true, os.ModePerm)
 		if err != nil {
 			opt.errors = append(opt.errors, err)
 			return opt
 		}
-		err = CreateFile(opt.FilePath, []byte(opt.String), os.ModePerm, true)
+		err = CreateFile(opt.filePath, []byte(opt.String), os.ModePerm, true)
 		if err != nil {
 			opt.errors = append(opt.errors, err)
 			return opt
@@ -106,25 +112,6 @@ func (opt *JsonHelper) ToStruct(data interface{}) *JsonHelper {
 	return opt
 }
 
-// Get 支持以.分割的key获取json中的值
-// key: json的key, 例如: "a.b.c"
-//func (opt *JsonHelper) Get(key string) (interface{}, []error) {
-//
-//}
-
-// HasError 判断是否有错误
-func (opt *JsonHelper) HasError() bool {
-	return len(opt.errors) > 0
-}
-
-// Errors
-// 获取错误信息
-func (opt *JsonHelper) Errors() []error {
-	return opt.errors
-}
-
-// ToString
-// 将json字符串以字符串的形式返回
 func (opt *JsonHelper) ToString(str *string) *JsonHelper {
 	jsonStr := opt.String
 
@@ -143,14 +130,14 @@ func (opt *JsonHelper) ToString(str *string) *JsonHelper {
 		}
 	}
 
-	if opt.Sort { // 如果需要排序
+	if opt.sort { // 如果需要排序
 		jsonStr = JsonStrSort(jsonStr)
 	}
 
 	// 判断是否需要输出json文件
-	if opt.NeedFile {
-		_ = os.MkdirAll(filepath.Dir(opt.FilePath), os.ModePerm)
-		cfgFile, err := os.Create(opt.FilePath)
+	if opt.needFile {
+		_ = os.MkdirAll(filepath.Dir(opt.filePath), os.ModePerm)
+		cfgFile, err := os.Create(opt.filePath)
 		if err != nil {
 			opt.errors = append(opt.errors, err)
 			return opt
@@ -175,7 +162,22 @@ func (opt *JsonHelper) ToString(str *string) *JsonHelper {
 	return opt
 }
 
-// ----- 结构体转json，End -----/
+// Get 支持以.分割的key获取json中的值
+// key: json的key, 例如: "a.b.c"
+//func (opt *JsonHelper) Get(key string) (interface{}, []error) {
+//
+//}
+
+// HasError 判断是否有错误
+func (opt *JsonHelper) HasError() bool {
+	return len(opt.errors) > 0
+}
+
+// Errors
+// 获取错误信息
+func (opt *JsonHelper) Errors() []error {
+	return opt.errors
+}
 
 // ----- Json -----/
 
