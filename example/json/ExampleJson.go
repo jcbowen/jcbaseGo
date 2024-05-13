@@ -50,3 +50,15 @@ func JsonFileToString() {
 
 	fmt.Println("testData:", testData)
 }
+
+func JsonFileToMap() {
+	testData := map[string]interface{}{}
+
+	result := helper.JsonFile("../example/json/example.json").ToMap(&testData)
+	if result.HasError() {
+		fmt.Println(result.Errors())
+		return
+	}
+
+	fmt.Println("testData:", testData)
+}
