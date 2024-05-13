@@ -13,24 +13,24 @@ import (
 	"time"
 )
 
-// ----- map[string]string 类型相关操作 -----/
+// ----- map[string]interface{} 类型相关操作 -----/
 
-type MapStrInterface struct {
+type MapHelper struct {
 	Data map[string]interface{}
 	Keys []string
 	Sort bool
 }
 
-func SetMapStrInterface(data map[string]interface{}) *MapStrInterface {
-	return &MapStrInterface{Data: data}
+func NewMap(mapData map[string]interface{}) *MapHelper {
+	return &MapHelper{Data: mapData}
 }
 
-func (d *MapStrInterface) DoSort() *MapStrInterface {
+func (d *MapHelper) DoSort() *MapHelper {
 	d.Sort = true
 	return d
 }
 
-func (d *MapStrInterface) ArrayKeys() []string {
+func (d *MapHelper) ArrayKeys() []string {
 	if len(d.Data) == 0 {
 		return d.Keys
 	}
@@ -46,7 +46,7 @@ func (d *MapStrInterface) ArrayKeys() []string {
 	return d.Keys
 }
 
-func (d *MapStrInterface) ArrayValues() []interface{} {
+func (d *MapHelper) ArrayValues() []interface{} {
 	var values []interface{}
 
 	if len(d.Data) == 0 {
@@ -66,7 +66,7 @@ func (d *MapStrInterface) ArrayValues() []interface{} {
 	return values
 }
 
-func (d *MapStrInterface) GetData() map[string]interface{} {
+func (d *MapHelper) GetData() map[string]interface{} {
 	if d.Sort {
 		data := make(map[string]interface{})
 		for _, k := range d.ArrayKeys() {
@@ -76,6 +76,12 @@ func (d *MapStrInterface) GetData() map[string]interface{} {
 	}
 
 	return d.Data
+}
+
+// SetMapStrInterface
+// Deprecated: 请使用 NewMap
+func SetMapStrInterface(data map[string]interface{}) *MapHelper {
+	return NewMap(data)
 }
 
 // ----- []string 类型相关操作 -----/
@@ -260,7 +266,8 @@ func InArray(val interface{}, array interface{}) (exists bool) {
 	return
 }
 
-// StructToMap 将结构体转换为map
+// StructToMap 通过reflect将结构体转换为map
+// 该方法有弊端，无法识别tag，导致字段名可能不是理想的字段名
 func StructToMap(obj interface{}, toLower bool) map[string]interface{} {
 	objValue := reflect.ValueOf(obj)
 	if objValue.Kind() == reflect.Ptr {
