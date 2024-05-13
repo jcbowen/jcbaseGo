@@ -77,7 +77,7 @@ func (jh *JsonHelper) MakeFile(filepath string) *JsonHelper {
 
 // ----- 转换，Begin ----- /
 
-func (jh *JsonHelper) ToStruct(newStruct *interface{}) *JsonHelper {
+func (jh *JsonHelper) ToStruct(newStruct interface{}) *JsonHelper {
 	if len(jh.Map) == 0 && jh.String == "" {
 		err := errors.New("没有提供可供转换的数据")
 		jh.errors = append(jh.errors, err)
