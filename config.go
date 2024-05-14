@@ -7,8 +7,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 )
 
+// DbStruct 数据库配置
 type DbStruct struct {
 	DriverName  string `json:"driverName" default:"mysql"` // 驱动类型
 	Protocol    string `json:"protocol" default:"tcp"`     // 协议
@@ -22,6 +24,7 @@ type DbStruct struct {
 	ParseTime   string `json:"parseTime" default:"False"`  // 是否开启时间解析
 }
 
+// RedisStruct redis配置
 type RedisStruct struct {
 	Host     string `json:"host" default:"localhost"` // redis地址
 	Port     string `json:"port" default:"6379"`      // redis端口号
@@ -29,11 +32,13 @@ type RedisStruct struct {
 	Db       string `json:"db" default:"0"`           // redis数据库
 }
 
+// AttachmentStruct 附件配置
 type AttachmentStruct struct {
 	Dir        string `json:"dir" default:"attachment"`   // 附件存储目录
 	RemoteType string `json:"remoteType" default:"local"` // 附件存储类型 local 本地存储 oss 阿里云存储 cos 腾讯云存储
 }
 
+// OssStruct oss配置
 type OssStruct struct {
 	AccessKeyId     string `json:"AccessKeyId" default:""`     // 阿里云AccessKeyId
 	AccessKeySecret string `json:"AccessKeySecret" default:""` // 阿里云AccessKeySecret
@@ -41,6 +46,7 @@ type OssStruct struct {
 	Bucket          string `json:"bucket" default:""`          // 阿里云Oss bucket
 }
 
+// CosStruct cos配置
 type CosStruct struct {
 	SecretId  string `json:"secretId" default:""`  // 腾讯云Cos SecretId
 	SecretKey string `json:"secretKey" default:""` // 腾讯云Cos SecretKey
@@ -49,10 +55,12 @@ type CosStruct struct {
 	Url       string `json:"url" default:""`       // 腾讯云Cos Url
 }
 
+// ProjectStruct 项目配置
 type ProjectStruct struct {
 	Name string `json:"name" default:"jcbaseGo"` // 项目名称
 }
 
+// RepositoryStruct 仓库配置
 type RepositoryStruct struct {
 	Dir        string `json:"dir" default:"./project/app/"`                            // 本地仓库目录
 	Branch     string `json:"branch" default:"master"`                                 // 远程仓库分支
@@ -60,7 +68,9 @@ type RepositoryStruct struct {
 	RemoteURL  string `json:"remoteURL" default:"git@github.com:jcbowen/jcbaseGo.git"` // 远程仓库地址
 }
 
-type ConfigStruct struct {
+// DefaultConfigStruct 默认配置信息结构
+// 一般情况下推荐自定义，不想自定义的情况下可以采用默认结构
+type DefaultConfigStruct struct {
 	Db         DbStruct         `json:"db"`         // 数据库配置信息
 	Redis      RedisStruct      `json:"redis"`      // redis配置信息
 	Attachment AttachmentStruct `json:"attachment"` // 附件配置信息
@@ -71,36 +81,44 @@ type ConfigStruct struct {
 }
 
 // Config 为Config添加默认数据
-var Config ConfigStruct
+var Config interface{}
 
-type ConfigOption struct {
-	ConfigFile  string       `json:"config_file" default:"./data/config.json"` // 配置文件路径
-	ConfigData  ConfigStruct `json:"config_data"`                              // 配置信息
-	RuntimePath string       `json:"runtime_path" default:"/runtime/"`         // 运行缓存目录
+// Option jcbaseGo配置选项
+type Option struct {
+	ConfigFile  string      `json:"config_file" default:"./config/main.json"` // 配置文件路径
+	ConfigData  interface{} `json:"config_data"`                              // 配置信息
+	RuntimePath string      `json:"runtime_path" default:"/runtime/"`         // 运行缓存目录
 }
 
-func New(c ConfigOption) *ConfigOption {
-	c.checkConfig()
-	return &c
+// New 初始化配置
+func New(opt Option) *Option {
+	if opt.ConfigData != nil {
+		opt.checkConfig()
+	}
+	return &opt
 }
 
 // checkConfig 将json配置信息初始化到Config中
-func (co *ConfigOption) checkConfig() {
-	// 判断是否传入了ConfigData，如果传入了ConfigData，则直接使用ConfigData
-	if co.ConfigData != (ConfigStruct{}) {
-		Config = co.ConfigData
+func (opt *Option) checkConfig() {
+	if reflect.TypeOf(opt.ConfigData) == nil {
+		panic("配置信息不能为空")
+		return
 	}
+
+	Config = opt.ConfigData
+
+	// 为Config添加默认值
 	if err := helper.CheckAndSetDefault(&Config); err != nil {
 		log.Panic(err)
 	}
 
 	// 为参数添加默认值
-	if err := helper.CheckAndSetDefault(co); err != nil {
+	if err := helper.CheckAndSetDefault(opt); err != nil {
 		log.Panic(err)
 	}
 
 	// 获取json配置文件的绝对路径
-	fileNameFull, err := filepath.Abs(co.ConfigFile)
+	fileNameFull, err := filepath.Abs(opt.ConfigFile)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -131,22 +149,26 @@ func (co *ConfigOption) checkConfig() {
 }
 
 // GetConfig 获取配置信息
-func (co *ConfigOption) GetConfig() *ConfigStruct {
+func (opt *Option) GetConfig() *interface{} {
 	return &Config
 }
 
 // ----- 终结方法 ----- /
 
-func (co *ConfigOption) GetConfigOption() ConfigOption {
-	return *co
+func (opt *Option) GetConfigOption() Option {
+	return *opt
 }
 
 // ------ 弃用函数 ------ /
 
+// ConfigStruct 配置信息
+// Deprecated: 已经弃用，请自定义数据配置结构
+type ConfigStruct = DefaultConfigStruct
+
 // Get 获取配置信息(兼容旧的写法)
 // Deprecated: 请使用
-func (c *ConfigStruct) Get() *ConfigStruct {
-	New(ConfigOption{
+func (c *DefaultConfigStruct) Get() *DefaultConfigStruct {
+	New(Option{
 		ConfigFile: "",
 	}).checkConfig()
 	return c
