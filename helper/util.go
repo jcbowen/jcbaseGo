@@ -394,12 +394,17 @@ func CheckAndSetDefault(i interface{}) error {
 	// 获取结构体反射值
 	val := reflect.ValueOf(i).Elem()
 
+	// 不是结构体的时候直接跳过处理
+	if val.Kind() != reflect.Struct {
+		return nil
+	}
+
 	// 遍历结构体字段
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 
-		// 如果字段是结构体，则递归检查
-		if field.Kind() == reflect.Struct {
+		// 如果字段是struct或interface，则递归检查
+		if field.Kind() == reflect.Struct || field.Kind() == reflect.Interface {
 			if err := CheckAndSetDefault(field.Addr().Interface()); err != nil {
 				return err
 			}
