@@ -3,6 +3,7 @@ package helper
 import (
 	"encoding/base64"
 	"errors"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -267,8 +268,7 @@ func InArray(val interface{}, array interface{}) (exists bool) {
 }
 
 // StructToMap 通过reflect将结构体转换为map
-// 该方法有弊端，无法识别tag，导致字段名可能不是理想的字段名
-func StructToMap(obj interface{}, toLower bool) map[string]interface{} {
+func StructToMap(obj interface{}, useJsonTag bool) map[string]interface{} {
 	objValue := reflect.ValueOf(obj)
 	if objValue.Kind() == reflect.Ptr {
 		objValue = objValue.Elem()
@@ -281,13 +281,84 @@ func StructToMap(obj interface{}, toLower bool) map[string]interface{} {
 		field := objType.Field(i)
 		fieldValue := objValue.Field(i).Interface()
 		fieldName := field.Name
-		if toLower {
-			fieldName = strings.ToLower(fieldName)
+		if useJsonTag {
+			jsonTag := field.Tag.Get("json")
+			if jsonTag != "" {
+				fieldName = jsonTag
+			} else {
+				log.Println("StructToMap: json tag not found in struct field:", field.Name)
+				fieldName = strings.ToLower(fieldName)
+			}
 		}
 		result[fieldName] = fieldValue
 	}
 
 	return result
+}
+
+// MapToStruct 通过reflect将map转换为结构体
+func MapToStruct(mapData interface{}, obj interface{}) {
+	objValue := reflect.ValueOf(obj).Elem()
+
+	for key, value := range mapData.(map[string]interface{}) {
+		field := objValue.FieldByName(key)
+		if !field.IsValid() {
+			// 如果结构体中不存在这个字段，则尝试匹配 JSON 标记
+			fieldName := GetFieldNameByJSONTag(objValue.Type(), key)
+			if fieldName == "" {
+				log.Println("未找到对应的字段：", key)
+				// 如果结构体中仍不存在这个字段，跳过
+				continue
+			}
+			field = objValue.FieldByName(fieldName)
+		}
+
+		// 将 map 中的值转换为对应的类型，并设置到结构体字段中
+		if !setFieldValue(field, value) {
+			log.Println("值类型无法转换为字段类型：", key)
+		}
+	}
+}
+
+// setFieldValue 将 map 中的值转换为对应的类型，并设置到结构体字段中（属于MapToStruct的递归调用）
+func setFieldValue(field reflect.Value, value interface{}) bool {
+	fieldValue := reflect.ValueOf(value)
+	if !fieldValue.IsValid() {
+		return false
+	}
+
+	if fieldValue.Type().ConvertibleTo(field.Type()) {
+		convertedValue := fieldValue.Convert(field.Type())
+		field.Set(convertedValue)
+		return true
+	}
+
+	if field.Kind() == reflect.Struct && fieldValue.Kind() == reflect.Map {
+		// 如果字段是结构体，并且值是一个 map，则递归调用 MapToStruct 函数
+		MapToStruct(value.(map[string]interface{}), field.Addr().Interface()) // 传递值的指针
+		return true
+	}
+
+	return false
+}
+
+// GetFieldNameByJSONTag 根据 JSON 标记获取结构体字段名
+func GetFieldNameByJSONTag(objType reflect.Type, jsonKey string) string {
+	for i := 0; i < objType.NumField(); i++ {
+		field := objType.Field(i)
+		tag := field.Tag.Get("json")
+		if tag == jsonKey {
+			return field.Name
+		}
+		// 支持逗号分隔的多个 JSON 名称
+		tags := strings.Split(tag, ",")
+		for _, t := range tags {
+			if t == jsonKey {
+				return field.Name
+			}
+		}
+	}
+	return ""
 }
 
 // ParseIP 解析IP地址，输出是ipv4或ipv6
