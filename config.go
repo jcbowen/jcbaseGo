@@ -101,7 +101,7 @@ func New(opt Option) *Option {
 // checkConfig 将json配置信息初始化到Config中
 func (opt *Option) checkConfig() {
 	if reflect.TypeOf(opt.ConfigData) == nil {
-		panic("配置信息不能为空")
+		log.Panic("配置信息不能为空")
 		return
 	}
 

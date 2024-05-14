@@ -3,6 +3,7 @@ package mysql
 import (
 	"errors"
 	"github.com/jcbowen/jcbaseGo/helper"
+	"log"
 	"reflect"
 	"sort"
 	"strconv"
@@ -40,7 +41,7 @@ type Schema struct {
 }
 
 // TableSchema 获得指定数据表的结构
-func TableSchema(c Context, tableName string) (*Schema, error) {
+func TableSchema(c Helper, tableName string) (*Schema, error) {
 
 	if !(len(tableName) > 0) {
 		return nil, errors.New("数据表名称不能为空")
@@ -578,7 +579,7 @@ func BuildFieldSql(field *Column) string {
 }
 
 // TableSchemas 生成清空表内数据的sql语句
-func TableSchemas(c Context, tableName string) (dump string) {
+func TableSchemas(c Helper, tableName string) (dump string) {
 	sql := "SHOW CREATE TABLE " + tableName
 	var result map[string]interface{}
 	c.Db.Raw(sql).Scan(&result)
@@ -590,7 +591,7 @@ func TableSchemas(c Context, tableName string) (dump string) {
 }
 
 // MakeInsertSql 获取某个表的insert语句
-func MakeInsertSql(c Context, tableName string, start int, size int) (data string, result []map[string]interface{}) {
+func MakeInsertSql(c Helper, tableName string, start int, size int) (data string, result []map[string]interface{}) {
 	var (
 		keyBuilder strings.Builder
 		tmpBuilder strings.Builder
@@ -642,11 +643,11 @@ func MakeInsertSql(c Context, tableName string, start int, size int) (data strin
 	defer func() {
 		sqlDB, err := c.Db.DB()
 		if err != nil {
-			panic(err)
+			log.Panic(err)
 		}
 		err = sqlDB.Close()
 		if err != nil {
-			panic(err)
+			log.Panic(err)
 		}
 	}()
 

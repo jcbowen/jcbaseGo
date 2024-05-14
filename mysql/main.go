@@ -11,16 +11,14 @@ import (
 	"log"
 )
 
-type DB = gorm.DB
-
 type AllTableName struct {
 	TableName string `gorm:"table_name"`
 }
 
-type Context struct {
+type Helper struct {
 	Dsn    string
 	Conf   jcbaseGo.DbStruct
-	Db     *DB
+	Db     *gorm.DB
 	Errors []error
 }
 
@@ -40,8 +38,8 @@ func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
 }
 
 // New 获取新的数据库连接
-func New(dbConfig jcbaseGo.DbStruct) *Context {
-	context := &Context{}
+func New(dbConfig jcbaseGo.DbStruct) *Helper {
+	context := &Helper{}
 
 	// 判断dbConfig是否为空
 	if dbConfig.Dbname == "" {
@@ -65,13 +63,13 @@ func New(dbConfig jcbaseGo.DbStruct) *Context {
 	return context
 }
 
-func (c *Context) AddError(err error) {
+func (c *Helper) AddError(err error) {
 	if err != nil {
 		c.Errors = append(c.Errors, err)
 	}
 }
 
-func (c *Context) Error() []error {
+func (c *Helper) Error() []error {
 	// 过滤掉c.Errors中的nil
 	var errs []error
 	for _, err := range c.Errors {
@@ -83,17 +81,17 @@ func (c *Context) Error() []error {
 	return errs
 }
 
-func (c *Context) GetDb() *DB {
+func (c *Helper) GetDb() *gorm.DB {
 	return c.Db
 }
 
-func (c *Context) GetAllTableName() (tableNames []AllTableName) {
+func (c *Helper) GetAllTableName() (tableNames []AllTableName) {
 	// 如果有错误，就不再执行
 	if len(c.Errors) > 0 {
 		return
 	}
 
-	c.Db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema='" + jcbaseGo.Config.Db.Dbname + "' AND table_type='base table'").Scan(&tableNames)
+	c.Db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema='" + c.Conf.Dbname + "' AND table_type='base table'").Scan(&tableNames)
 	return
 }
 
@@ -102,7 +100,7 @@ func (c *Context) GetAllTableName() (tableNames []AllTableName) {
 // param tableName string 表名
 //
 // param quotes bool 是否加上反单引号
-func (c *Context) TableName(tableName *string, quotes ...bool) *Context {
+func (c *Helper) TableName(tableName *string, quotes ...bool) *Helper {
 	// 如果有错误，就不再执行
 	if len(c.Errors) > 0 {
 		return c
@@ -125,43 +123,4 @@ func (c *Context) TableName(tableName *string, quotes ...bool) *Context {
 
 // ----- 弃用 ----- /
 
-var (
-	// Db 数据库连接
-	// Deprecated: As of jcbaseGo 0.3, this variable is no longer used
-	Db *DB
-	// conf 数据库配置
-	// Deprecated: As of jcbaseGo 0.3, this variable is no longer used
-	conf jcbaseGo.DbStruct
-)
-
-// Get 获取数据库连接
-// Deprecated: As of jcbaseGo 0.3, this function simply calls New.GetDb
-func Get() *DB {
-	if Db == nil {
-		var err error
-		conf = jcbaseGo.Config.Get().Db
-		Db = New(conf).GetDb()
-
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	return Db
-}
-
-// TableName 获取表名，
-// Deprecated: As of jcbaseGo 0.3, this function simply calls New.TableName
-func TableName(tableName string, quotes bool) string {
-	tablePrefix := conf.TablePrefix
-	// 如果已经有前缀了，就不再添加
-	if len(tablePrefix) > 0 && helper.StringStartWith(tableName, tablePrefix) {
-		tablePrefix = ""
-	}
-
-	if quotes {
-		return "`" + tablePrefix + tableName + "`"
-	} else {
-		return tablePrefix + tableName
-	}
-}
+type Context = Helper

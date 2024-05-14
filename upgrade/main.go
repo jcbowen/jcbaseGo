@@ -6,6 +6,7 @@ import (
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/command"
 	"github.com/jcbowen/jcbaseGo/helper"
+	"log"
 	"os"
 	"strings"
 )
@@ -55,7 +56,7 @@ func checkGitDir(conf jcbaseGo.RepositoryStruct) bool {
 	// 判断是否有配置仓库
 	if conf.RemoteURL == "" {
 		err := errors.New("repository is empty")
-		panic(err)
+		log.Panic(err)
 	}
 
 	command.CmdPath = conf.Dir

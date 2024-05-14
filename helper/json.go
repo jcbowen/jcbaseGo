@@ -3,6 +3,7 @@ package helper
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 )
 
@@ -270,7 +271,7 @@ func JsonStr2Map(str string) map[string]interface{} {
 	jsonHelper := JsonString(str).ToMap(&tempMap)
 	if jsonHelper.HasError() {
 		for _, err := range jsonHelper.Errors() {
-			panic(err)
+			log.Panic(err)
 		}
 	}
 

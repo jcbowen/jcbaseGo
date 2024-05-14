@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/redis"
+	"log"
 )
 
 func Redis() {
@@ -20,7 +21,7 @@ func Redis() {
 
 	val, err := rdb.Get(ctx, "key").Result()
 	if err != nil {
-		panic(err)
+		log.Panic(err)
 	}
 	fmt.Println("key", val)
 }

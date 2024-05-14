@@ -4,6 +4,7 @@ import (
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/command"
 	"github.com/jcbowen/jcbaseGo/helper"
+	"log"
 )
 
 type ConfigStruct struct {
@@ -25,7 +26,7 @@ func New(opt jcbaseGo.Option) *ConfigStruct {
 	if !helper.FileExists(conf.funcFilePath) {
 		err := helper.CreateFile(conf.funcFilePath, []byte(TmpJcbasePHP), 0755, true)
 		if err != nil {
-			panic(err)
+			log.Panic(err)
 		}
 	}
 
