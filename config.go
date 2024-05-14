@@ -105,10 +105,8 @@ func (opt *Option) checkConfig() {
 		return
 	}
 
-	Config = opt.ConfigData
-
 	// 为Config添加默认值
-	if err := helper.CheckAndSetDefault(&Config); err != nil {
+	if err := helper.CheckAndSetDefault(&opt.ConfigData); err != nil {
 		log.Panic(err)
 	}
 
@@ -126,7 +124,7 @@ func (opt *Option) checkConfig() {
 	// json配置文件不存在，根据默认配置生成json配置文件
 	if !helper.FileExists(fileNameFull) {
 		// 如果配置文件不存在，则创建配置文件
-		file, _ := json.MarshalIndent(Config, "", " ")
+		file, _ := json.MarshalIndent(opt.ConfigData, "", " ")
 		err := helper.CreateFile(fileNameFull, file, 0755, false)
 		if err != nil {
 			log.Panic(err)
@@ -142,15 +140,23 @@ func (opt *Option) checkConfig() {
 	}
 	fileDataString := string(file)
 
-	err = json.Unmarshal([]byte(fileDataString), &Config)
+	err = json.Unmarshal([]byte(fileDataString), &opt.ConfigData)
 	if err != nil {
 		log.Panic(err)
 	}
+
+	Config = opt.ConfigData
 }
 
 // GetConfig 获取配置信息
 func (opt *Option) GetConfig() *interface{} {
-	return &Config
+	return &opt.ConfigData
+}
+
+// GetConfigStruct 将Option.ConfigData赋值到自定义结构体中
+func (opt *Option) ConfigToStruct(configStruct interface{}) {
+	// 由于opt.ConfigData是interface，在json解析后会变为map，所以这里需要进行类型转换
+	helper.MapToStruct(opt.ConfigData, configStruct)
 }
 
 // ----- 终结方法 ----- /
