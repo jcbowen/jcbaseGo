@@ -32,6 +32,15 @@ type RedisStruct struct {
 	Db       string `json:"db" default:"0"`           // redis数据库
 }
 
+// MailerStruct 发送邮箱配置
+type MailerStruct struct {
+	Scheme   string `json:"scheme" default:"smtp"`             // 邮箱协议
+	Host     string `json:"host" default:"smtp.qq.com"`        // 邮箱地址
+	Port     string `json:"port" default:"465"`                // 邮箱端口号
+	Username string `json:"username" default:"example@qq.com"` // 邮箱用户名
+	Password string `json:"password" default:"123456"`         // 邮箱密码
+}
+
 // AttachmentStruct 附件配置
 type AttachmentStruct struct {
 	Dir        string `json:"dir" default:"attachment"`   // 附件存储目录
