@@ -115,7 +115,7 @@ func (opt *Option) checkConfig() {
 	}
 
 	// 为Config添加默认值
-	if err := helper.CheckAndSetDefault(&opt.ConfigData); err != nil {
+	if err := helper.CheckAndSetDefault(opt.ConfigData); err != nil {
 		log.Panic(err)
 	}
 
