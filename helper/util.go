@@ -472,7 +472,7 @@ func CheckAndSetDefault(i interface{}) error {
 
 	// 不是结构体的时候直接跳过处理
 	if val.Kind() != reflect.Struct {
-		log.Printf("不是结构体，直接跳过处理", val.Kind())
+		log.Printf("%s 不是结构体，直接跳过处理", val.String())
 		return nil
 	}
 
