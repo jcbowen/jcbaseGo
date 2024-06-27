@@ -463,16 +463,23 @@ func IsError(errs []error) bool {
 // CheckAndSetDefault 检查结构体中的字段是否为空，如果为空则设置为默认值
 func CheckAndSetDefault(i interface{}) error {
 	// 获取结构体反射值
-	val := reflect.ValueOf(i).Elem()
+	val := reflect.ValueOf(i)
+
+	// 如果传入的是指针类型，获取指向的结构体
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
 
 	// 不是结构体的时候直接跳过处理
 	if val.Kind() != reflect.Struct {
+		log.Printf("不是结构体，直接跳过处理", val.Kind())
 		return nil
 	}
 
 	// 遍历结构体字段
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
+		fieldType := val.Type().Field(i)
 
 		// 忽略非导出字段
 		if !field.CanSet() {
@@ -488,8 +495,7 @@ func CheckAndSetDefault(i interface{}) error {
 		}
 
 		// 获取字段类型和默认值标签
-		tag := val.Type().Field(i).Tag.Get("default")
-		fieldType := field.Type().String()
+		tag := fieldType.Tag.Get("default")
 		fieldKind := field.Kind()
 
 		// 如果字段为空字符串，则设置为默认值
@@ -504,7 +510,7 @@ func CheckAndSetDefault(i interface{}) error {
 		}
 
 		// 如果字段是int类型，则设置默认值
-		if strings.HasPrefix(fieldType, "int") && field.Int() == 0 {
+		if strings.HasPrefix(field.Type().String(), "int") && field.Int() == 0 {
 			defaultVal, _ := strconv.ParseInt(tag, 10, 64)
 			field.SetInt(defaultVal)
 		}
