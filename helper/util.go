@@ -474,6 +474,11 @@ func CheckAndSetDefault(i interface{}) error {
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 
+		// 忽略非导出字段
+		if !field.CanSet() {
+			continue
+		}
+
 		// 如果字段是struct或interface，则递归检查
 		if field.Kind() == reflect.Struct || field.Kind() == reflect.Interface {
 			if err := CheckAndSetDefault(field.Addr().Interface()); err != nil {
@@ -485,14 +490,15 @@ func CheckAndSetDefault(i interface{}) error {
 		// 获取字段类型和默认值标签
 		tag := val.Type().Field(i).Tag.Get("default")
 		fieldType := field.Type().String()
+		fieldKind := field.Kind()
 
 		// 如果字段为空字符串，则设置为默认值
-		if field.Kind() == reflect.String && field.Len() == 0 {
+		if fieldKind == reflect.String && field.Len() == 0 {
 			field.SetString(tag)
 		}
 
 		// 如果字段是bool类型，则设置默认值
-		if fieldType == "bool" && !field.Bool() {
+		if fieldKind == reflect.Bool && !field.Bool() {
 			defaultVal := tag == "true"
 			field.SetBool(defaultVal)
 		}
@@ -504,7 +510,7 @@ func CheckAndSetDefault(i interface{}) error {
 		}
 
 		// 如果字段是float类型，则设置默认值
-		if fieldType == "float32" || fieldType == "float64" {
+		if fieldKind == reflect.Float32 || fieldKind == reflect.Float64 {
 			defaultVal, _ := strconv.ParseFloat(tag, 64)
 			if field.Float() == 0 {
 				field.SetFloat(defaultVal)
