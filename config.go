@@ -120,7 +120,7 @@ func (opt *Option) checkConfig() {
 	}
 
 	// 为参数添加默认值
-	if err := helper.CheckAndSetDefault(opt); err != nil {
+	if err := helper.CheckAndSetDefault(*opt); err != nil {
 		log.Panic(err)
 	}
 
