@@ -23,27 +23,19 @@ func New(Conf jcbaseGo.SqlLiteStruct) (i *Instance) {
 	i = &Instance{}
 
 	err := helper.CheckAndSetDefault(&Conf)
-	if err != nil {
-		i.AddError(err)
-		return
-	}
+	jcbaseGo.PanicIfError(err)
 
 	// 获取dbFile的绝对路径
 	fileNameFull, err := filepath.Abs(Conf.DbFile)
-	if err != nil {
-		log.Panic(err)
-	}
+	jcbaseGo.PanicIfError(err)
 
 	// 检查目录是否存在，如果不存在则创建
 	_, err = helper.DirExists(fileNameFull, true, 0755)
-	if err != nil {
-		i.AddError(err)
-		return
-	}
+	jcbaseGo.PanicIfError(err)
 
 	// 判断dbConfig是否为空
 	if Conf.DbFile == "" {
-		i.AddError(errors.New("dbConfig is empty"))
+		log.Panic(errors.New("dbConfig is empty"))
 		return
 	}
 
@@ -54,10 +46,10 @@ func New(Conf jcbaseGo.SqlLiteStruct) (i *Instance) {
 			SingularTable: Conf.SingularTable == "true", // 使用单数表名，启用该选项后，`User` 表将是`user`
 		},
 	})
+	jcbaseGo.PanicIfError(err)
 
 	i.Conf = Conf
 	i.Db = db
-	i.AddError(err)
 
 	return
 }

@@ -8,7 +8,6 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
-	"log"
 )
 
 type AllTableName struct {
@@ -36,9 +35,7 @@ func New(dbConfig jcbaseGo.DbStruct) *Helper {
 	context := &Helper{}
 
 	err := helper.CheckAndSetDefault(&dbConfig)
-	if err != nil {
-		log.Panic(err)
-	}
+	jcbaseGo.PanicIfError(err)
 
 	// 判断dbConfig是否为空
 	if dbConfig.Dbname == "" {
@@ -53,11 +50,11 @@ func New(dbConfig jcbaseGo.DbStruct) *Helper {
 			SingularTable: dbConfig.SingularTable == "true", // 使用单数表名，启用该选项后，`User` 表将是`user`
 		},
 	})
+	jcbaseGo.PanicIfError(err)
 
 	context.Dsn = dsn
 	context.Conf = dbConfig
 	context.Db = db
-	context.AddError(err)
 
 	return context
 }
