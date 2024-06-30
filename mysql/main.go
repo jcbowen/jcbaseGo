@@ -24,12 +24,6 @@ type Helper struct {
 
 // GetDSN 拼接DataSourceName
 func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
-	err := helper.CheckAndSetDefault(&dbConfig)
-	if err != nil {
-		log.Fatalln(err)
-		return ""
-	}
-
 	// 拼接dsn
 	dsn = "%s:%s@%s(%s:%s)/%s?charset=%s&parseTime=%s&loc=Local"
 	dsn = fmt.Sprintf(dsn, dbConfig.Username, dbConfig.Password, dbConfig.Protocol, dbConfig.Host, dbConfig.Port, dbConfig.Dbname, dbConfig.Charset, dbConfig.ParseTime)
@@ -41,6 +35,11 @@ func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
 func New(dbConfig jcbaseGo.DbStruct) *Helper {
 	context := &Helper{}
 
+	err := helper.CheckAndSetDefault(&dbConfig)
+	if err != nil {
+		log.Panic(err)
+	}
+
 	// 判断dbConfig是否为空
 	if dbConfig.Dbname == "" {
 		context.AddError(errors.New("dbConfig is empty"))
@@ -50,8 +49,8 @@ func New(dbConfig jcbaseGo.DbStruct) *Helper {
 	dsn := getDSN(dbConfig)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
-			TablePrefix:   dbConfig.TablePrefix, // 表名前缀，`User`表为`t_users`
-			SingularTable: true,                 // 使用单数表名，启用该选项后，`User` 表将是`user`
+			TablePrefix:   dbConfig.TablePrefix,             // 表名前缀，`User`表为`t_users`
+			SingularTable: dbConfig.SingularTable == "true", // 使用单数表名，启用该选项后，`User` 表将是`user`
 		},
 	})
 
@@ -81,24 +80,24 @@ func (c *Helper) Error() []error {
 	return errs
 }
 
+// GetDb 获取db
 func (c *Helper) GetDb() *gorm.DB {
 	return c.Db
 }
 
-func (c *Helper) GetAllTableName() (tableNames []AllTableName) {
+// GetAllTableName 获取所有表名
+func (c *Helper) GetAllTableName() (tableNames []AllTableName, err error) {
 	// 如果有错误，就不再执行
 	if len(c.Errors) > 0 {
 		return
 	}
 
-	c.Db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema='" + c.Conf.Dbname + "' AND table_type='base table'").Scan(&tableNames)
+	err = c.Db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema='" + c.Conf.Dbname + "' AND table_type='base table'").Scan(&tableNames).Error
 	return
 }
 
 // TableName 获取表名，
-//
 // param tableName string 表名
-//
 // param quotes bool 是否加上反单引号
 func (c *Helper) TableName(tableName *string, quotes ...bool) *Helper {
 	// 如果有错误，就不再执行
