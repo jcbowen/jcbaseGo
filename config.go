@@ -181,6 +181,21 @@ func (opt *Option) GetConfigOption() Option {
 	return *opt
 }
 
+// Panic 相当于省略if的log.Panic写法
+func Panic(errs interface{}) {
+	if err, ok := errs.(error); ok {
+		if err != nil {
+			log.Panic(err)
+		}
+	} else if errs != nil {
+		for _, err := range errs.([]error) {
+			if err != nil {
+				log.Panic(err)
+			}
+		}
+	}
+}
+
 // ------ 弃用函数 ------ /
 
 // ConfigStruct 配置信息
