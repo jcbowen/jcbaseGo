@@ -181,18 +181,22 @@ func (opt *Option) GetConfigOption() Option {
 	return *opt
 }
 
-// Panic 相当于省略if的log.Panic写法
-func Panic(errs interface{}) {
-	if err, ok := errs.(error); ok {
-		if err != nil {
-			log.Panic(err)
+// PanicIfError 异常处理
+// 如果err不为nil，则直接panic，用于省略if判断
+func PanicIfError(err interface{}) {
+	switch v := err.(type) {
+	case error:
+		if v != nil {
+			log.Panic(v)
 		}
-	} else if errs != nil {
-		for _, err := range errs.([]error) {
+	case []error:
+		for _, err := range v {
 			if err != nil {
 				log.Panic(err)
 			}
 		}
+	default:
+		// If the type is not error or []error, do nothing
 	}
 }
 
