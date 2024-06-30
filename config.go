@@ -12,16 +12,23 @@ import (
 
 // DbStruct 数据库配置
 type DbStruct struct {
-	DriverName  string `json:"driverName" default:"mysql"` // 驱动类型
-	Protocol    string `json:"protocol" default:"tcp"`     // 协议
-	Host        string `json:"host" default:"localhost"`   // 数据库地址
-	Port        string `json:"port" default:"3306"`        // 数据库端口号
-	Dbname      string `json:"dbname" default:"dbname"`    // 表名称
-	Username    string `json:"username" default:"root"`    // 用户名
-	Password    string `json:"password" default:""`        // 密码
-	Charset     string `json:"charset" default:"utf8mb4"`  // 编码
-	TablePrefix string `json:"tablePrefix" default:"jc_"`  // 表前缀
-	ParseTime   string `json:"parseTime" default:"False"`  // 是否开启时间解析
+	DriverName    string `json:"driverName" default:"mysql"`   // 驱动类型
+	Protocol      string `json:"protocol" default:"tcp"`       // 协议
+	Host          string `json:"host" default:"localhost"`     // 数据库地址
+	Port          string `json:"port" default:"3306"`          // 数据库端口号
+	Dbname        string `json:"dbname" default:"dbname"`      // 表名称
+	Username      string `json:"username" default:"root"`      // 用户名
+	Password      string `json:"password" default:""`          // 密码
+	Charset       string `json:"charset" default:"utf8mb4"`    // 编码
+	TablePrefix   string `json:"tablePrefix" default:"jc_"`    // 表前缀
+	ParseTime     string `json:"parseTime" default:"False"`    // 是否开启时间解析
+	SingularTable string `json:"singularTable" default:"true"` // 使用单数表名
+}
+
+type SqlLiteStruct struct {
+	DbFile        string `json:"dbFile" default:"./db/jcbaseGo.db"` // 数据库文件
+	TablePrefix   string `json:"tablePrefix" default:"jc_"`         // 表前缀
+	SingularTable string `json:"singularTable" default:"true"`      // 使用单数表名
 }
 
 // RedisStruct redis配置
