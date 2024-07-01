@@ -22,6 +22,7 @@ type DbStruct struct {
 	SingularTable string `json:"singularTable" default:"true"` // 使用单数表名
 }
 
+// SqlLiteStruct sqlite配置
 type SqlLiteStruct struct {
 	DbFile        string `json:"dbFile" default:"./db/jcbaseGo.db"` // 数据库文件
 	TablePrefix   string `json:"tablePrefix" default:"jc_"`         // 表前缀
@@ -91,4 +92,12 @@ type DefaultConfigStruct struct {
 	Cos        CosStruct        `json:"cos"`        // cos配置信息
 	Project    ProjectStruct    `json:"project"`    // 项目配置信息
 	Repository RepositoryStruct `json:"repository"` // 仓库配置信息
+}
+
+// Model gorm基础模型
+type Model struct {
+	Id        uint   `gorm:"column:id;type:INT(11);PRIMARY_KEY;autoIncrement;NOT NULL" json:"id"`
+	UpdatedAt string `gorm:"column:updated_at;type:DATETIME;default:NULL" json:"updated_at"`       // 更新时间
+	CreatedAt string `gorm:"column:created_at;type:DATETIME;default:NULL" json:"created_at"`       // 创建时间
+	DeletedAt string `gorm:"column:deleted_at;type:DATETIME;index;default:NULL" json:"deleted_at"` // 删除时间
 }
