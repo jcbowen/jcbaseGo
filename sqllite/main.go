@@ -1,4 +1,4 @@
-package sqlLite
+package sqllite
 
 import (
 	"errors"
