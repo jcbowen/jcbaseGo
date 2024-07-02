@@ -94,9 +94,17 @@ type DefaultConfigStruct struct {
 	Repository RepositoryStruct `json:"repository"` // 仓库配置信息
 }
 
-// Model gorm基础模型
-type Model struct {
-	Id        uint   `gorm:"column:id;type:INT(11);PRIMARY_KEY;autoIncrement;NOT NULL" json:"id"`
+// MysqlModel gorm基础模型
+type MysqlModel struct {
+	Id        uint   `gorm:"column:id;type:INT(11);primaryKey;autoIncrement" json:"id"`
+	UpdatedAt string `gorm:"column:updated_at;type:DATETIME;default:NULL" json:"updated_at"`       // 更新时间
+	CreatedAt string `gorm:"column:created_at;type:DATETIME;default:NULL" json:"created_at"`       // 创建时间
+	DeletedAt string `gorm:"column:deleted_at;type:DATETIME;index;default:NULL" json:"deleted_at"` // 删除时间
+}
+
+// SQLLiteModel gorm基础模型，主要问题出在SQLLite的自
+type SQLLiteModel struct {
+	Id        uint   `gorm:"column:id;type:INTEGER;primaryKey;autoIncrement" json:"id"`
 	UpdatedAt string `gorm:"column:updated_at;type:DATETIME;default:NULL" json:"updated_at"`       // 更新时间
 	CreatedAt string `gorm:"column:created_at;type:DATETIME;default:NULL" json:"created_at"`       // 创建时间
 	DeletedAt string `gorm:"column:deleted_at;type:DATETIME;index;default:NULL" json:"deleted_at"` // 删除时间
