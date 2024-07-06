@@ -102,10 +102,10 @@ type MysqlModel struct {
 	DeletedAt string `gorm:"column:deleted_at;type:DATETIME;index;default:NULL" json:"deleted_at"` // 删除时间
 }
 
-// SQLLiteModel gorm基础模型，主要问题出在SQLLite的自
+// SQLLiteModel gorm基础模型
 type SQLLiteModel struct {
 	Id        uint   `gorm:"column:id;type:INTEGER;primaryKey;autoIncrement" json:"id"`
-	UpdatedAt string `gorm:"column:updated_at;type:DATETIME;default:NULL" json:"updated_at"`       // 更新时间
-	CreatedAt string `gorm:"column:created_at;type:DATETIME;default:NULL" json:"created_at"`       // 创建时间
-	DeletedAt string `gorm:"column:deleted_at;type:DATETIME;index;default:NULL" json:"deleted_at"` // 删除时间
+	UpdatedAt string `gorm:"column:updated_at;type:STRING;default:NULL" json:"updated_at"`       // 更新时间
+	CreatedAt string `gorm:"column:created_at;type:STRING;default:NULL" json:"created_at"`       // 创建时间
+	DeletedAt string `gorm:"column:deleted_at;type:STRING;index;default:NULL" json:"deleted_at"` // 删除时间
 }
