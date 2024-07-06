@@ -7,6 +7,12 @@ type Option struct {
 	RuntimePath string      `json:"runtime_path" default:"/runtime/"`         // 运行缓存目录
 }
 
+// SSLStruct ssl配置
+type SSLStruct struct {
+	CertPath string `json:"cert_path" default:""`
+	KeyPath  string `json:"key_path" default:""`
+}
+
 // DbStruct 数据库配置
 type DbStruct struct {
 	DriverName    string `json:"driverName" default:"mysql"`   // 驱动类型
