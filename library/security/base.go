@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/hkdf"
 	"golang.org/x/crypto/pbkdf2"
 	"io"
@@ -22,7 +21,6 @@ type CipherConfig struct {
 	MacHash              string
 	AuthKeyInfo          string
 	DerivationIterations int
-	PasswordHashCost     int
 }
 
 // DefaultCipherConfig is the default cipher configuration
@@ -37,7 +35,6 @@ var DefaultCipherConfig = CipherConfig{
 	MacHash:              "sha256",
 	AuthKeyInfo:          "AuthorizationKey",
 	DerivationIterations: 100000,
-	PasswordHashCost:     13,
 }
 
 // GenerateRandomBytes generates random bytes of specified length
@@ -151,22 +148,4 @@ func Decrypt(data, secret string, passwordBased bool, config CipherConfig) (stri
 	}
 
 	return string(plaintext), nil
-}
-
-// GeneratePasswordHash generates a hash of the password
-func GeneratePasswordHash(password string, cost int) (string, error) {
-	if cost == 0 {
-		cost = DefaultCipherConfig.PasswordHashCost
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
-	if err != nil {
-		return "", err
-	}
-	return string(hash), nil
-}
-
-// ValidatePassword validates the password against a given hash
-func ValidatePassword(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
 }
