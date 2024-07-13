@@ -14,7 +14,7 @@ type AllTableName struct {
 	TableName string `gorm:"table_name"`
 }
 
-type Helper struct {
+type Instance struct {
 	Dsn    string
 	Conf   jcbaseGo.DbStruct
 	Db     *gorm.DB
@@ -31,8 +31,8 @@ func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
 }
 
 // New 获取新的数据库连接
-func New(dbConfig jcbaseGo.DbStruct) *Helper {
-	context := &Helper{}
+func New(dbConfig jcbaseGo.DbStruct) *Instance {
+	context := &Instance{}
 
 	err := helper.CheckAndSetDefault(&dbConfig)
 	jcbaseGo.PanicIfError(err)
@@ -59,13 +59,13 @@ func New(dbConfig jcbaseGo.DbStruct) *Helper {
 	return context
 }
 
-func (c *Helper) AddError(err error) {
+func (c *Instance) AddError(err error) {
 	if err != nil {
 		c.Errors = append(c.Errors, err)
 	}
 }
 
-func (c *Helper) Error() []error {
+func (c *Instance) Error() []error {
 	// 过滤掉c.Errors中的nil
 	var errs []error
 	for _, err := range c.Errors {
@@ -78,12 +78,12 @@ func (c *Helper) Error() []error {
 }
 
 // GetDb 获取db
-func (c *Helper) GetDb() *gorm.DB {
+func (c *Instance) GetDb() *gorm.DB {
 	return c.Db
 }
 
 // GetAllTableName 获取所有表名
-func (c *Helper) GetAllTableName() (tableNames []AllTableName, err error) {
+func (c *Instance) GetAllTableName() (tableNames []AllTableName, err error) {
 	// 如果有错误，就不再执行
 	if len(c.Errors) > 0 {
 		return
@@ -96,7 +96,7 @@ func (c *Helper) GetAllTableName() (tableNames []AllTableName, err error) {
 // TableName 获取表名，
 // param tableName string 表名
 // param quotes bool 是否加上反单引号
-func (c *Helper) TableName(tableName *string, quotes ...bool) *Helper {
+func (c *Instance) TableName(tableName *string, quotes ...bool) *Instance {
 	// 如果有错误，就不再执行
 	if len(c.Errors) > 0 {
 		return c
@@ -119,4 +119,4 @@ func (c *Helper) TableName(tableName *string, quotes ...bool) *Helper {
 
 // ----- 弃用 ----- /
 
-type Context = Helper
+type Context = Instance

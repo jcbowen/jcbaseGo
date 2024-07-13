@@ -10,60 +10,57 @@ import (
 
 const Nil = redis.Nil
 
+type Client = redis.Client
+
 type StatusCmd = redis.StatusCmd
 type StringCmd = redis.StringCmd
 
-type RedisContext struct {
-	Ctx    context.Context
-	Rdb    *redis.Client
-	Config jcbaseGo.RedisStruct
-	Errors []error
+type Instance struct {
+	Context context.Context
+	Conf    jcbaseGo.RedisStruct
+	Client  *redis.Client
+	Errors  []error
 }
 
-func New(conf jcbaseGo.RedisStruct) *RedisContext {
-	redisContext := &RedisContext{}
+func New(conf jcbaseGo.RedisStruct) *Instance {
+	instance := &Instance{}
 
 	err := helper.CheckAndSetDefault(&conf)
 	if err != nil {
-		redisContext.AddError(err)
-		return redisContext
+		instance.AddError(err)
+		return instance
 	}
 
-	rdb := redis.NewClient(&redis.Options{
+	newClient := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", conf.Host, conf.Port),
 		Password: conf.Password,
 		DB:       helper.ToInt(conf.Db),
 	})
 	ctx := context.Background()
-	_, err = rdb.Ping(ctx).Result()
+	_, err = newClient.Ping(ctx).Result()
 
-	redisContext.Ctx = ctx
-	redisContext.Rdb = rdb
-	redisContext.Config = conf
-	redisContext.AddError(err)
+	instance.Context = ctx
+	instance.Client = newClient
+	instance.Conf = conf
+	instance.AddError(err)
 
-	return redisContext
+	return instance
 }
 
-func (cs *RedisContext) GetCtx(ctx *RedisContext) *RedisContext {
-	ctx = cs
-	return cs
+func (i *Instance) GetClient() *redis.Client {
+	return i.Client
 }
 
-func (cs *RedisContext) GetRdb() *redis.Client {
-	return cs.Rdb
-}
-
-func (c *RedisContext) AddError(err error) {
+func (i *Instance) AddError(err error) {
 	if err != nil {
-		c.Errors = append(c.Errors, err)
+		i.Errors = append(i.Errors, err)
 	}
 }
 
-func (c *RedisContext) Error() []error {
+func (i *Instance) Error() []error {
 	// 过滤掉c.Errors中的nil
 	var errs []error
-	for _, err := range c.Errors {
+	for _, err := range i.Errors {
 		if err != nil {
 			errs = append(errs, err)
 		}
