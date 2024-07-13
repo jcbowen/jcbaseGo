@@ -10,6 +10,9 @@ import (
 	"strings"
 )
 
+// Config 实例化后配置信息将储存在此全局变量中
+var Config interface{}
+
 // New 初始化配置
 func New(opt Option) *Option {
 	if opt.ConfigData != nil {
@@ -40,12 +43,18 @@ func (opt *Option) checkConfig() {
 		return
 	}
 
+	// 初始化默认配置
 	opt.initializeConfigWithDefaults()
+	// 获取配置文件绝对路径
 	fileNameFull := opt.getConfigFilePath()
+	// 如果配置文件不存在，则创建
 	opt.createConfigFileIfNotExists(fileNameFull)
+	// 从文件中读取配置
 	opt.readConfigFile(fileNameFull)
-	opt.updateConfigFromFile(fileNameFull)
+	// 配置结构体是有可能更新升级的，所以每次运行之后，应当更新一下配置文件
+	opt.updateConfigFile(fileNameFull, true)
 
+	// 将配置信息写入全局变量
 	Config = opt.ConfigData
 }
 
@@ -86,11 +95,7 @@ func (opt *Option) getConfigFilePath() string {
 
 func (opt *Option) createConfigFileIfNotExists(fileNameFull string) {
 	if !helper.FileExists(fileNameFull) {
-		file, _ := json.MarshalIndent(opt.ConfigData, "", " ")
-		err := helper.CreateFile(fileNameFull, file, 0755, false)
-		if err != nil {
-			log.Fatalf("创建配置文件错误: %v", err)
-		}
+		opt.updateConfigFile(fileNameFull, false)
 		log.Fatalf("配置文件不存在，已创建默认配置文件，请修改配置文件后重启程序！\n配置文件路径：%s", fileNameFull)
 	}
 }
@@ -107,39 +112,13 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 	}
 }
 
-func (opt *Option) updateConfigFromFile(fileNameFull string) {
-	var fileConfig interface{}
-	err := json.Unmarshal([]byte(fileNameFull), &fileConfig)
+// updateConfigFile 更新配置文件
+func (opt *Option) updateConfigFile(fileNameFull string, overwrite bool) {
+	file, _ := json.MarshalIndent(opt.ConfigData, "", " ")
+	err := helper.CreateFile(fileNameFull, file, 0755, overwrite)
 	if err != nil {
-		log.Fatalf("解析文件配置错误: %v", err)
+		log.Fatalf("更新配置文件出错: %v", err)
 	}
-
-	if updated := compareAndUpdateConfig(opt.ConfigData, fileConfig); updated {
-		updatedFile, _ := json.MarshalIndent(opt.ConfigData, "", " ")
-		err = os.WriteFile(fileNameFull, updatedFile, 0755)
-		if err != nil {
-			log.Fatalf("更新配置文件错误: %v", err)
-		}
-	}
-}
-
-// compareAndUpdateConfig 比较并更新配置文件
-func compareAndUpdateConfig(structConfig, fileConfig interface{}) bool {
-	structValue := reflect.ValueOf(structConfig).Elem()
-	fileValue := reflect.ValueOf(fileConfig).Elem()
-	updated := false
-
-	for i := 0; i < structValue.NumField(); i++ {
-		structField := structValue.Field(i)
-		fileField := fileValue.FieldByName(structValue.Type().Field(i).Name)
-
-		if !reflect.DeepEqual(structField.Interface(), fileField.Interface()) {
-			fileField.Set(structField)
-			updated = true
-		}
-	}
-
-	return updated
 }
 
 // formatErrors 将 []error 格式化为单个字符串
