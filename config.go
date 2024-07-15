@@ -2,6 +2,8 @@ package jcbaseGo
 
 import (
 	"encoding/json"
+	"errors"
+	"github.com/go-redis/redis/v8"
 	"github.com/jcbowen/jcbaseGo/helper"
 	"log"
 	"os"
@@ -68,8 +70,12 @@ func PanicIfError(err interface{}) {
 		}
 	case []error:
 		log.Panic(formatErrors(v))
+	case redis.Error:
+		if !errors.Is(v, redis.Nil) {
+			log.Panic(v)
+		}
 	default:
-		// If the type is not error or []error, do nothing
+		// If the type is not error , []error or redis.Error, do nothing
 	}
 }
 
