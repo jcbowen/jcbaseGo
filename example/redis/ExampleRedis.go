@@ -17,9 +17,9 @@ func Redis() {
 	}
 	var ctx = context.Background()
 
-	rdb := redis.New(conf).GetRdb()
+	client := redis.New(conf).GetClient()
 
-	val, err := rdb.Get(ctx, "key").Result()
+	val, err := client.Get(ctx, "key").Result()
 	if err != nil {
 		log.Panic(err)
 	}
