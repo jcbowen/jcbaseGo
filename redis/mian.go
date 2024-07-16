@@ -49,10 +49,29 @@ func New(conf jcbaseGo.RedisStruct) *Instance {
 	return instance
 }
 
+// ------ 基础方法 ------ /
+
 // GetClient 获取redis client
 func (i *Instance) GetClient() *redis.Client {
 	return i.Client
 }
+
+// Ping 检查与 Redis 服务器的连接是否正常。
+func (i *Instance) Ping() (string, error) {
+	return i.Client.Ping(i.Context).Result()
+}
+
+// Info 获取 Redis 服务器的信息。
+func (i *Instance) Info() (string, error) {
+	return i.Client.Info(i.Context).Result()
+}
+
+// Eval 执行 Lua 脚本。
+func (i *Instance) Eval(script string, keys []string, args ...interface{}) (interface{}, error) {
+	return i.Client.Eval(i.Context, script, keys, args...).Result()
+}
+
+// ------ 常用操作 ------ /
 
 // GetString 根据键值，返回字符串值。
 // 如果键不存在或发生错误，则返回默认值（如果提供）。
@@ -173,4 +192,222 @@ func (i *Instance) Set(key string, value interface{}, args ...time.Duration) err
 	jsonString, _ := json.Marshal(value)
 	err := i.Client.Set(i.Context, key, string(jsonString), expire).Err()
 	return err
+}
+
+// Del 删除键值。
+//
+// 参数:
+//   - key (必需): 要删除的键值。
+//
+// 返回值:
+//   - error: 如果发生错误则返回相应的错误信息。
+//
+// 示例:
+//
+//	err := redis.New(config).GetClient().Del(key)
+//	if err != nil {
+//	    // 处理错误
+//	}
+func (i *Instance) Del(key string) error {
+	return i.Client.Del(i.Context, key).Err()
+}
+
+// Exists 检查键值是否存在。
+//
+// 参数:
+//   - key (必需): 要检查的键值。
+//
+// 返回值:
+//   - bool: 如果键值存在则返回 true，否则返回 false。
+//   - error: 如果发生错误则返回相应的错误信息。
+//
+// 示例:
+//
+//	exists, err := redis.New(config).GetClient().Exists(key)
+//	if err != nil {
+//	    // 处理错误
+//	}
+func (i *Instance) Exists(key string) (bool, error) {
+	exists, err := i.Client.Exists(i.Context, key).Result()
+	if err != nil {
+		return false, err
+	}
+	return exists == 1, nil
+}
+
+// ----- 列表操作 ----- /
+
+// LPush 向列表左端插入一个或多个元素。
+func (i *Instance) LPush(key string, values ...interface{}) error {
+	_, err := i.Client.LPush(i.Context, key, values...).Result()
+	return err
+}
+
+// RPush 向列表右端插入一个或多个元素。
+func (i *Instance) RPush(key string, values ...interface{}) error {
+	_, err := i.Client.RPush(i.Context, key, values...).Result()
+	return err
+}
+
+// LRange 获取列表中指定范围的元素。
+func (i *Instance) LRange(key string, start, stop int64) ([]string, error) {
+	result, err := i.Client.LRange(i.Context, key, start, stop).Result()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// LLen 获取列表的长度。
+func (i *Instance) LLen(key string) (int64, error) {
+	result, err := i.Client.LLen(i.Context, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	return result, nil
+}
+
+// LPop 从列表左端弹出一个元素。
+func (i *Instance) LPop(key string) (string, error) {
+	result, err := i.Client.LPop(i.Context, key).Result()
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
+// RPop 从列表右端弹出一个元素。
+func (i *Instance) RPop(key string) (string, error) {
+	result, err := i.Client.RPop(i.Context, key).Result()
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
+// ----- 集合操作 ----- /
+
+// SAdd 向集合添加一个或多个成员。
+func (i *Instance) SAdd(key string, members ...interface{}) (int64, error) {
+	result, err := i.Client.SAdd(i.Context, key, members...).Result()
+	if err != nil {
+		return 0, err
+	}
+	return result, nil
+}
+
+// SRem 从集合中移除一个或多个成员。
+func (i *Instance) SRem(key string, members ...interface{}) (int64, error) {
+	result, err := i.Client.SRem(i.Context, key, members...).Result()
+	if err != nil {
+		return 0, err
+	}
+	return result, nil
+}
+
+// SMembers 获取集合中的所有成员。
+func (i *Instance) SMembers(key string) ([]string, error) {
+	result, err := i.Client.SMembers(i.Context, key).Result()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SIsMember 检查成员是否存在于集合中。
+func (i *Instance) SIsMember(key string, member interface{}) (bool, error) {
+	result, err := i.Client.SIsMember(i.Context, key, member).Result()
+	if err != nil {
+		return false, err
+	}
+	return result, nil
+}
+
+// ----- 哈希表操作 ----- /
+
+// HSet 设置哈希表中的字段值。
+func (i *Instance) HSet(key, field string, value interface{}) error {
+	return i.Client.HSet(i.Context, key, field, value).Err()
+}
+
+// HGet 获取哈希表中指定字段的值。
+func (i *Instance) HGet(key, field string) (string, error) {
+	result, err := i.Client.HGet(i.Context, key, field).Result()
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
+// HGetAll 获取哈希表中所有字段和值。
+func (i *Instance) HGetAll(key string) (map[string]string, error) {
+	result, err := i.Client.HGetAll(i.Context, key).Result()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// HExists 检查哈希表中是否存在指定字段。
+func (i *Instance) HExists(key, field string) (bool, error) {
+	result, err := i.Client.HExists(i.Context, key, field).Result()
+	if err != nil {
+		return false, err
+	}
+	return result, nil
+}
+
+// ----- 计数/计时器操作 ----- /
+
+// Incr 增加计数器的值。
+func (i *Instance) Incr(key string) (int64, error) {
+	result, err := i.Client.Incr(i.Context, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	return result, nil
+}
+
+// Decr 减少计数器的值。
+func (i *Instance) Decr(key string) (int64, error) {
+	result, err := i.Client.Decr(i.Context, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	return result, nil
+}
+
+// Expire 设置键的过期时间。
+func (i *Instance) Expire(key string, expiration time.Duration) (bool, error) {
+	result, err := i.Client.Expire(i.Context, key, expiration).Result()
+	if err != nil {
+		return false, err
+	}
+	return result, nil
+}
+
+// TTL 获取键的剩余过期时间。
+func (i *Instance) TTL(key string) (time.Duration, error) {
+	result, err := i.Client.TTL(i.Context, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	return result, nil
+}
+
+// ----- 发布与订阅 ----- /
+
+// Publish 向指定频道发布消息。
+func (i *Instance) Publish(channel string, message interface{}) error {
+	return i.Client.Publish(i.Context, channel, message).Err()
+}
+
+// Subscribe 订阅指定频道接收消息。
+func (i *Instance) Subscribe(channels ...string) (*redis.PubSub, error) {
+	pubsub := i.Client.Subscribe(i.Context, channels...)
+	_, err := pubsub.Receive(i.Context)
+	if err != nil {
+		return nil, err
+	}
+	return pubsub, nil
 }
