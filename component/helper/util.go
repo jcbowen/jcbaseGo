@@ -434,18 +434,35 @@ func Base64Decode(str string) (string, error) {
 }
 
 // Random 生成随机字符
-func Random(length int, numericOnly bool) string {
+//
+// 参数:
+//   - length (必需): 随机字符长度。
+//   - numericOnly (可选): 如果为 true，则只包含数字字符。
+//
+// 返回值:
+//   - string: 生成的随机字符串。
+//
+// 示例:
+//
+//	randomString := Random(16)
+//	randomString := Random(16, true)
+func Random(length int, args ...bool) string {
 	var charset string
+	var numericOnly bool
+	if len(args) > 0 {
+		numericOnly = args[0]
+	}
 	if numericOnly {
 		charset = "0123456789"
 	} else {
 		charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	}
 
-	rand.Seed(time.Now().UnixNano())
+	seed := rand.NewSource(time.Now().UnixNano())
+	random := rand.New(seed)
 	randomString := make([]byte, length)
 	for i := range randomString {
-		randomString[i] = charset[rand.Intn(len(charset))]
+		randomString[i] = charset[random.Intn(len(charset))]
 	}
 	return string(randomString)
 }
