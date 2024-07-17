@@ -105,7 +105,7 @@ func (i *Instance) Set(key string, value interface{}, args ...time.Duration) err
 //
 // 参数:
 //   - key (必需): 用于查找数据的字符串键值。
-//   - args (可选): 可选的默认值（字符串类型）。
+//   - defaultValue (可选): 可选的默认值（字符串类型）。
 //
 // 返回值:
 //   - value: 获取到的字符串值，或者是默认值。
