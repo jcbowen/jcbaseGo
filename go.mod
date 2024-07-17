@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
-	golang.org/x/crypto v0.0.0-20221012134737-56aed061732a
+	golang.org/x/crypto v0.23.0
 	gorm.io/driver/mysql v1.4.1
 	gorm.io/driver/sqlite v1.5.6
 	gorm.io/gorm v1.25.7-0.20240204074919-46816ad31dde
