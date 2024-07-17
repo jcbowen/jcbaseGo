@@ -2,8 +2,8 @@ package php
 
 import (
 	"github.com/jcbowen/jcbaseGo"
-	"github.com/jcbowen/jcbaseGo/command"
-	"github.com/jcbowen/jcbaseGo/helper"
+	"github.com/jcbowen/jcbaseGo/component/command"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 	"log"
 )
 

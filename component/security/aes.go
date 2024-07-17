@@ -7,7 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/jcbowen/jcbaseGo/helper"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 type AES struct {

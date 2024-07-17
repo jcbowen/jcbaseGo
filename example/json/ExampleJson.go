@@ -2,7 +2,7 @@ package ExampleJson
 
 import (
 	"fmt"
-	"github.com/jcbowen/jcbaseGo/helper"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 type itemStruct struct {

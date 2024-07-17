@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/go-redis/redis/v8"
-	"github.com/jcbowen/jcbaseGo/helper"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 	"log"
 	"os"
 	"path/filepath"

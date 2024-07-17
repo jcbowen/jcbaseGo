@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jcbowen/jcbaseGo"
-	"github.com/jcbowen/jcbaseGo/helper"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"

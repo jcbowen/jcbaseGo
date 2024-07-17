@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/jcbowen/jcbaseGo"
-	"github.com/jcbowen/jcbaseGo/redis"
+	"github.com/jcbowen/jcbaseGo/component/redis"
 	"log"
 )
 

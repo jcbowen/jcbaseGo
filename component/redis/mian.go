@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/jcbowen/jcbaseGo"
-	"github.com/jcbowen/jcbaseGo/helper"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 	"reflect"
 	"time"
 )
@@ -73,6 +73,33 @@ func (i *Instance) Eval(script string, keys []string, args ...interface{}) (inte
 
 // ------ 常用操作 ------ /
 
+// Set 设置键值。
+//
+// 参数:
+//   - key (必需): 要设置的键值。
+//   - value (必需): 要设置的值，将被转换为 JSON 格式保存。
+//   - expire (可选): 数据的过期时间，如果未设置则数据将永不过期。
+//
+// 返回值:
+//   - error: 如果发生错误则返回相应的错误信息。
+//
+// 示例:
+//
+//	err := Set(key, value, time.Hour)
+//	if err != nil {
+//	    // 处理错误
+//	}
+func (i *Instance) Set(key string, value interface{}, args ...time.Duration) error {
+	var expire time.Duration
+	if len(args) > 0 {
+		expire = args[0]
+	}
+
+	jsonString, _ := json.Marshal(value)
+	err := i.Client.Set(i.Context, key, string(jsonString), expire).Err()
+	return err
+}
+
 // GetString 根据键值，返回字符串值。
 // 如果键不存在或发生错误，则返回默认值（如果提供）。
 //
@@ -86,14 +113,14 @@ func (i *Instance) Eval(script string, keys []string, args ...interface{}) (inte
 //
 // 示例:
 //
-//	value, err := redis.New(config).GetClient().GetString(key)
+//	value, err := GetString(key)
 //	if err != nil {
 //	    // 处理错误
 //	} else {
 //	    // 使用 value
 //	}
 //
-//	value, err := redis.New(config).GetClient().GetString(key, "default")
+//	value, err := GetString(key, "default")
 //	if err != nil {
 //	    // 处理错误
 //	} else {
@@ -132,7 +159,7 @@ func (i *Instance) GetString(key string, args ...string) (string, error) {
 //
 //	var value MyStruct
 //	defaultValue := MyStruct{Field: "default"}
-//	err := redis.New(config).GetClient().GetStruct(key, &value, defaultValue)
+//	err := GetStruct(key, &value, defaultValue)
 //	if err != nil {
 //	    // 处理错误
 //	} else {
@@ -167,33 +194,6 @@ func (i *Instance) GetStruct(key string, value interface{}, args ...interface{})
 	return err
 }
 
-// Set 设置键值。
-//
-// 参数:
-//   - key (必需): 要设置的键值。
-//   - value (必需): 要设置的值，将被转换为 JSON 格式保存。
-//   - expire (可选): 数据的过期时间，如果未设置则数据将永不过期。
-//
-// 返回值:
-//   - error: 如果发生错误则返回相应的错误信息。
-//
-// 示例:
-//
-//	err := redis.New(config).GetClient().Set(key, value, time.Hour)
-//	if err != nil {
-//	    // 处理错误
-//	}
-func (i *Instance) Set(key string, value interface{}, args ...time.Duration) error {
-	var expire time.Duration
-	if len(args) > 0 {
-		expire = args[0]
-	}
-
-	jsonString, _ := json.Marshal(value)
-	err := i.Client.Set(i.Context, key, string(jsonString), expire).Err()
-	return err
-}
-
 // Del 删除键值。
 //
 // 参数:
@@ -204,7 +204,7 @@ func (i *Instance) Set(key string, value interface{}, args ...time.Duration) err
 //
 // 示例:
 //
-//	err := redis.New(config).GetClient().Del(key)
+//	err := Del(key)
 //	if err != nil {
 //	    // 处理错误
 //	}
@@ -223,7 +223,7 @@ func (i *Instance) Del(key string) error {
 //
 // 示例:
 //
-//	exists, err := redis.New(config).GetClient().Exists(key)
+//	exists, err := Exists(key)
 //	if err != nil {
 //	    // 处理错误
 //	}

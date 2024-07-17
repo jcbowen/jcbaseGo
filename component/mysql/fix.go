@@ -2,7 +2,7 @@ package mysql
 
 import (
 	"errors"
-	"github.com/jcbowen/jcbaseGo/helper"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 	"log"
 	"reflect"
 	"sort"
