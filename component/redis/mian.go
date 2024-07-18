@@ -166,28 +166,40 @@ func (i *Instance) GetString(key string, args ...string) (string, error) {
 //	    // 使用 value
 //	}
 func (i *Instance) GetStruct(key string, value interface{}, args ...interface{}) error {
-	var defaultValue interface{}
+	// 检查 value 是否为指针
+	v := reflect.ValueOf(value)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return errors.New("value must be a non-nil pointer")
+	}
 
+	var defaultValue interface{}
 	if len(args) >= 1 {
 		defaultValue = args[0]
 	}
 
 	strValue, err := i.GetString(key, "")
 	if err != nil || strValue == "" {
+		// 处理默认值
 		if defaultValue != nil {
-			v := reflect.ValueOf(value)
-			if v.Kind() == reflect.Ptr && !v.IsNil() {
-				reflect.ValueOf(value).Elem().Set(reflect.ValueOf(defaultValue))
+			defaultV := reflect.ValueOf(defaultValue)
+			if defaultV.Type() == v.Elem().Type() {
+				v.Elem().Set(defaultV)
+			} else {
+				return errors.New("defaultValue type does not match value type")
 			}
 		}
 		return err
 	}
 
+	// 反序列化 JSON 字符串
 	err = json.Unmarshal([]byte(strValue), value)
 	if err != nil && defaultValue != nil {
-		v := reflect.ValueOf(value)
-		if v.Kind() == reflect.Ptr && !v.IsNil() {
-			reflect.ValueOf(value).Elem().Set(reflect.ValueOf(defaultValue))
+		// 反序列化失败时处理默认值
+		defaultV := reflect.ValueOf(defaultValue)
+		if defaultV.Type() == v.Elem().Type() {
+			v.Elem().Set(defaultV)
+		} else {
+			return errors.New("defaultValue type does not match value type")
 		}
 	}
 
@@ -208,8 +220,8 @@ func (i *Instance) GetStruct(key string, value interface{}, args ...interface{})
 //	if err != nil {
 //	    // 处理错误
 //	}
-func (i *Instance) Del(key string) error {
-	return i.Client.Del(i.Context, key).Err()
+func (i *Instance) Del(key ...string) error {
+	return i.Client.Del(i.Context, key...).Err()
 }
 
 // Exists 检查键值是否存在。
@@ -233,6 +245,25 @@ func (i *Instance) Exists(key string) (bool, error) {
 		return false, err
 	}
 	return exists == 1, nil
+}
+
+// Keys 获取键值列表。
+//
+// 参数:
+//   - pattern (必需): 匹配的键值模式。
+//
+// 返回值:
+//   - []string: 匹配到的键值列表。
+//   - error: 如果发生错误则返回相应的错误信息。
+//
+// 示例:
+//
+//	keys, err := Keys(pattern)
+//	if err != nil {
+//	    // 处理错误
+//	}
+func (i *Instance) Keys(pattern string) ([]string, error) {
+	return i.Client.Keys(i.Context, pattern).Result()
 }
 
 // ----- 列表操作 ----- /
