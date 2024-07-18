@@ -35,7 +35,7 @@ type InlineImage struct {
 }
 
 // New 创建一个新的Email实例
-func New(conf *jcbaseGo.MailerStruct) *Email {
+func New(conf jcbaseGo.MailerStruct) *Email {
 	return &Email{
 		SMTPHost: conf.Host,
 		SMTPPort: conf.Port,
@@ -43,9 +43,9 @@ func New(conf *jcbaseGo.MailerStruct) *Email {
 		SMTPPass: conf.Password,
 		From:     conf.From,
 		UseTLS:   conf.UseTLS,
-		CertFile: conf.CertFile,
-		KeyFile:  conf.KeyFile,
-		CAFile:   conf.CAFile,
+		CertFile: conf.CertPath,
+		KeyFile:  conf.KeyPath,
+		CAFile:   conf.CAPath,
 	}
 }
 

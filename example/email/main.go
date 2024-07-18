@@ -8,7 +8,7 @@ import (
 
 func main() {
 	// 创建一个新的Email实例
-	e := mailer.New(&jcbaseGo.MailerStruct{
+	e := mailer.New(jcbaseGo.MailerStruct{
 		Host:     "smtp.qiye.aliyun.com",
 		Port:     "465",
 		Username: "",

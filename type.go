@@ -50,10 +50,10 @@ type MailerStruct struct {
 	Username string `json:"username" default:"example@qq.com"` // 邮箱用户名
 	Password string `json:"password" default:"123456"`         // 邮箱密码
 	From     string `json:"from" default:"example@qq.com"`     // 发件邮箱
-	UseTLS   bool   `json:"useTls" default:"false"`            // 是否使用TLS
-	CertFile string `json:"certFile" default:""`               // 证书文件路径
-	KeyFile  string `json:"keyFile" default:""`                // 私钥文件路径
-	CAFile   string `json:"caFile" default:""`                 // CA证书文件路径
+	UseTLS   bool   `json:"useTls" default:"true"`             // 是否使用TLS
+	CertPath string `json:"cert_path" default:""`              // 证书文件路径
+	KeyPath  string `json:"key_path" default:""`               // 私钥文件路径
+	CAPath   string `json:"ca_path" default:""`                // CA证书文件路径
 }
 
 // AttachmentStruct 附件配置
