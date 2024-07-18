@@ -342,6 +342,25 @@ func setFieldValue(field reflect.Value, value interface{}) bool {
 	return false
 }
 
+// CopyStruct 复制结构体，将 src 的值复制到 dst
+//
+// 用法：CopyStruct(&src, &dst)
+//
+// 注意：src、dst 必须是一个指针
+func CopyStruct(src, dst interface{}) {
+	srcVal := reflect.ValueOf(src).Elem()
+	dstVal := reflect.ValueOf(dst).Elem()
+
+	for i := 0; i < srcVal.NumField(); i++ {
+		srcField := srcVal.Field(i)
+		dstField := dstVal.FieldByName(srcVal.Type().Field(i).Name)
+
+		if dstField.IsValid() && dstField.CanSet() && srcField.Type() == dstField.Type() {
+			dstField.Set(srcField)
+		}
+	}
+}
+
 // GetFieldNameByJSONTag 根据 JSON 标记获取结构体字段名
 func GetFieldNameByJSONTag(objType reflect.Type, jsonKey string) string {
 	for i := 0; i < objType.NumField(); i++ {
