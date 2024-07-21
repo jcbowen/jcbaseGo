@@ -8,23 +8,23 @@ import (
 	"path/filepath"
 )
 
-type FileHelper struct {
+type File struct {
 	Path string      `json:"path"`
 	Perm os.FileMode `json:"perm" default:"0755"`
 }
 
-func NewFileHelper(args ...any) *FileHelper {
-	var fileHelper *FileHelper
+func NewFile(args ...any) *File {
+	var fileHelper *File
 	if len(args) > 0 {
-		fileHelper = args[0].(*FileHelper)
+		fileHelper = args[0].(*File)
 	} else {
-		fileHelper = &FileHelper{}
+		fileHelper = &File{}
 	}
 	fileHelper.init()
 	return fileHelper
 }
 
-func (fh *FileHelper) init() {
+func (fh *File) init() {
 	_ = CheckAndSetDefault(fh)
 	if fh.Perm <= 0 {
 		fh.Perm = 0755
@@ -32,7 +32,7 @@ func (fh *FileHelper) init() {
 }
 
 // Exists 检查文件是否存在
-func (fh *FileHelper) Exists() bool {
+func (fh *File) Exists() bool {
 	if fh.Path == "" {
 		return false
 	}
@@ -47,7 +47,7 @@ func (fh *FileHelper) Exists() bool {
 }
 
 // JsonToData 将文件中的json数据解析到data中
-func (fh *FileHelper) JsonToData(data *interface{}) error {
+func (fh *File) JsonToData(data *interface{}) error {
 	// 读取json配置文件
 	file, fErr := os.ReadFile(fh.Path)
 	if fErr != nil {
@@ -60,7 +60,7 @@ func (fh *FileHelper) JsonToData(data *interface{}) error {
 }
 
 // IsDir 判断是否是目录
-func (fh *FileHelper) IsDir() bool {
+func (fh *File) IsDir() bool {
 	s, err := os.Stat(fh.Path)
 	if err != nil {
 		return false
@@ -69,22 +69,22 @@ func (fh *FileHelper) IsDir() bool {
 }
 
 // GetAbsPath 获取绝对路径
-func (fh *FileHelper) GetAbsPath() (string, error) {
+func (fh *File) GetAbsPath() (string, error) {
 	return filepath.Abs(fh.Path)
 }
 
 // DirName 获取目录部分
-func (fh *FileHelper) DirName() string {
+func (fh *File) DirName() string {
 	return filepath.Dir(fh.Path)
 }
 
 // IsFile 判断是否是文件
-func (fh *FileHelper) IsFile() bool {
+func (fh *File) IsFile() bool {
 	return !fh.IsDir()
 }
 
 // IsEmptyDir 判断目录是否为空
-func (fh *FileHelper) IsEmptyDir() bool {
+func (fh *File) IsEmptyDir() bool {
 	f, err := os.Open(fh.Path)
 	if err != nil {
 		return false
@@ -100,7 +100,7 @@ func (fh *FileHelper) IsEmptyDir() bool {
 }
 
 // IsEmptyFile 判断文件是否为空
-func (fh *FileHelper) IsEmptyFile() bool {
+func (fh *File) IsEmptyFile() bool {
 	f, err := os.Open(fh.Path)
 	if err != nil {
 		return false
@@ -119,7 +119,7 @@ func (fh *FileHelper) IsEmptyFile() bool {
 }
 
 // IsEmpty 判断文件或目录是否为空
-func (fh *FileHelper) IsEmpty() bool {
+func (fh *File) IsEmpty() bool {
 	if fh.IsDir() {
 		return fh.IsEmptyDir()
 	}
@@ -127,7 +127,7 @@ func (fh *FileHelper) IsEmpty() bool {
 }
 
 // IsReadable 判断文件是否可读
-func (fh *FileHelper) IsReadable() bool {
+func (fh *File) IsReadable() bool {
 	_, err := os.OpenFile(fh.Path, os.O_RDONLY, 0666)
 	if err != nil {
 		return false
@@ -136,7 +136,7 @@ func (fh *FileHelper) IsReadable() bool {
 }
 
 // IsWritable 判断文件是否可写
-func (fh *FileHelper) IsWritable() bool {
+func (fh *File) IsWritable() bool {
 	_, err := os.OpenFile(fh.Path, os.O_WRONLY, 0666)
 	if err != nil {
 		return false
@@ -145,7 +145,7 @@ func (fh *FileHelper) IsWritable() bool {
 }
 
 // IsExecutable 判断文件是否可执行
-func (fh *FileHelper) IsExecutable() bool {
+func (fh *File) IsExecutable() bool {
 	_, err := os.OpenFile(fh.Path, os.O_RDONLY, 0666)
 	if err != nil {
 		return false
@@ -154,7 +154,7 @@ func (fh *FileHelper) IsExecutable() bool {
 }
 
 // IsSymlink 判断是否是软链接
-func (fh *FileHelper) IsSymlink() bool {
+func (fh *File) IsSymlink() bool {
 	fi, err := os.Lstat(fh.Path)
 	if err != nil {
 		return false
@@ -163,12 +163,12 @@ func (fh *FileHelper) IsSymlink() bool {
 }
 
 // IsHidden 判断文件是否隐藏
-func (fh *FileHelper) IsHidden() bool {
+func (fh *File) IsHidden() bool {
 	return len(fh.Path) > 1 && fh.Path[0] == '.'
 }
 
 // DirExists 判断目录是否存在，可选在不存在时是否创建目录
-func (fh *FileHelper) DirExists(createIfNotExists bool) (exists bool, err error) {
+func (fh *File) DirExists(createIfNotExists bool) (exists bool, err error) {
 	// 判断path是否为一个目录，如果不是目录则取出目录部分
 	if !fh.IsDir() {
 		fh.Path = fh.DirName()
@@ -194,7 +194,7 @@ func (fh *FileHelper) DirExists(createIfNotExists bool) (exists bool, err error)
 }
 
 // CreateFile 创建文件，可设置文件权限，可设置是否覆盖
-func (fh *FileHelper) CreateFile(content []byte, overwrite bool) error {
+func (fh *File) CreateFile(content []byte, overwrite bool) error {
 	// 如果已经存在且不需要覆盖则返回错误
 	if exists := fh.Exists(); exists {
 		if !overwrite {
@@ -213,12 +213,12 @@ func (fh *FileHelper) CreateFile(content []byte, overwrite bool) error {
 }
 
 // Remove 删除文件或目录
-func (fh *FileHelper) Remove() error {
+func (fh *File) Remove() error {
 	return os.RemoveAll(fh.Path)
 }
 
 // CopyFileAttr 复制文件属性到目标文件
-func (fh *FileHelper) CopyFileAttr(targetFile string) error {
+func (fh *File) CopyFileAttr(targetFile string) error {
 	srcInfo, err := os.Stat(fh.Path)
 	if err != nil {
 		return err
@@ -227,7 +227,7 @@ func (fh *FileHelper) CopyFileAttr(targetFile string) error {
 }
 
 // CopyFile 复制文件到指定位置，可设置是否覆盖，可设置是否复制文件属性
-func (fh *FileHelper) CopyFile(targetPath string, overwrite bool, copyAttr bool) error {
+func (fh *File) CopyFile(targetPath string, overwrite bool, copyAttr bool) error {
 	if !fh.Exists() {
 		return errors.New("file not exists")
 	}

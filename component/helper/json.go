@@ -28,9 +28,9 @@ func JsonStruct(jsonStruct interface{}) *JsonHelper {
 func JsonFile(path string) *JsonHelper {
 	jsonStruct := &JsonHelper{}
 	// 获取绝对路径
-	absPath, _ := NewFileHelper(&FileHelper{Path: path}).GetAbsPath()
+	absPath, _ := NewFile(&File{Path: path}).GetAbsPath()
 	// 判断文件是否存在
-	if !(NewFileHelper(&FileHelper{Path: path}).Exists()) {
+	if !(NewFile(&File{Path: path}).Exists()) {
 		jsonStruct.errors = append(jsonStruct.errors, errors.New("json文件不存在\n文件路径: "+absPath))
 		return jsonStruct
 	}
@@ -66,7 +66,7 @@ func (jh *JsonHelper) MakeFile(filepath string) *JsonHelper {
 		filepath = "./file.json"
 	}
 	jh.needFile = true
-	absFilePath, err := NewFileHelper(&FileHelper{Path: filepath}).GetAbsPath()
+	absFilePath, err := NewFile(&File{Path: filepath}).GetAbsPath()
 	if err != nil {
 		jh.errors = append(jh.errors, err)
 	}
@@ -195,7 +195,7 @@ func (jh *JsonHelper) ToFile() *JsonHelper {
 	}
 
 	// 生成json文件
-	err := NewFileHelper(&FileHelper{Path: jh.filePath, Perm: os.ModePerm}).CreateFile([]byte(jh.String), true)
+	err := NewFile(&File{Path: jh.filePath, Perm: os.ModePerm}).CreateFile([]byte(jh.String), true)
 	if err != nil {
 		jh.errors = append(jh.errors, err)
 	}

@@ -14,17 +14,17 @@ type ConfigStruct struct {
 func New(opt jcbaseGo.Option) *ConfigStruct {
 	funcFilePath := "/tmp/php/main.go"
 	if opt.RuntimePath != "" {
-		funcFilePath = helper.NewFileHelper(&helper.FileHelper{Path: opt.RuntimePath}).DirName() + funcFilePath
+		funcFilePath = helper.NewFile(&helper.File{Path: opt.RuntimePath}).DirName() + funcFilePath
 	} else {
-		funcFilePath = helper.NewFileHelper(&helper.FileHelper{Path: opt.ConfigFile}).DirName() + funcFilePath
+		funcFilePath = helper.NewFile(&helper.File{Path: opt.ConfigFile}).DirName() + funcFilePath
 	}
 
 	conf := &ConfigStruct{
 		funcFilePath: funcFilePath,
 	}
 
-	if !helper.NewFileHelper(&helper.FileHelper{Path: conf.funcFilePath}).Exists() {
-		err := helper.NewFileHelper(&helper.FileHelper{Path: conf.funcFilePath}).CreateFile([]byte(TmpJcbasePHP), true)
+	if !helper.NewFile(&helper.File{Path: conf.funcFilePath}).Exists() {
+		err := helper.NewFile(&helper.File{Path: conf.funcFilePath}).CreateFile([]byte(TmpJcbasePHP), true)
 		if err != nil {
 			log.Panic(err)
 		}
