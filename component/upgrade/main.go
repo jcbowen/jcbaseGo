@@ -61,7 +61,7 @@ func checkGitDir(conf jcbaseGo.RepositoryStruct) bool {
 
 	command.CmdPath = conf.Dir
 
-	checkExists, err := helper.DirExists(command.CmdPath, true, 0755)
+	checkExists, err := helper.NewFileHelper(&helper.FileHelper{Path: command.CmdPath}).DirExists(true)
 	if err != nil {
 		fmt.Printf("checkCmdPath:\033[31m%s\033[0m\n", err)
 		os.Exit(1)
@@ -71,13 +71,13 @@ func checkGitDir(conf jcbaseGo.RepositoryStruct) bool {
 		os.Exit(1)
 	}
 
-	// 检查是否存在.git目录，存在则删除
-	exist, _ := helper.DirExists(command.CmdPath+".git/", false, 0)
+	// 检查是否存在.git目录
+	exist, _ := helper.NewFileHelper(&helper.FileHelper{Path: command.CmdPath + ".git/"}).DirExists(false)
 
 	if exist {
-		fmt.Println("存在.git目录")
+		log.Println("存在.git目录")
 	} else {
-		fmt.Println("不存在.git目录")
+		log.Println("不存在.git目录")
 	}
 
 	return exist

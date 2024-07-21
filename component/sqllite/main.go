@@ -30,7 +30,7 @@ func New(Conf jcbaseGo.SqlLiteStruct) (i *Instance) {
 	jcbaseGo.PanicIfError(err)
 
 	// 检查目录是否存在，如果不存在则创建
-	_, err = helper.DirExists(fileNameFull, true, 0755)
+	_, err = helper.NewFileHelper(&helper.FileHelper{Path: fileNameFull}).DirExists(true)
 	jcbaseGo.PanicIfError(err)
 
 	// 判断dbConfig是否为空

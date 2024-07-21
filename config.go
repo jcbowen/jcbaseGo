@@ -100,7 +100,7 @@ func (opt *Option) getConfigFilePath() string {
 }
 
 func (opt *Option) createConfigFileIfNotExists(fileNameFull string) {
-	if !helper.FileExists(fileNameFull) {
+	if !helper.NewFileHelper(&helper.FileHelper{Path: fileNameFull}).Exists() {
 		opt.updateConfigFile(fileNameFull, false)
 		log.Fatalf("配置文件不存在，已创建默认配置文件，请修改配置文件后重启程序！\n配置文件路径：%s", fileNameFull)
 	}
@@ -120,8 +120,8 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 
 // updateConfigFile 更新配置文件
 func (opt *Option) updateConfigFile(fileNameFull string, overwrite bool) {
-	file, _ := json.MarshalIndent(opt.ConfigData, "", " ")
-	err := helper.CreateFile(fileNameFull, file, 0755, overwrite)
+	fileData, _ := json.MarshalIndent(opt.ConfigData, "", " ")
+	err := helper.NewFileHelper(&helper.FileHelper{Path: fileNameFull}).CreateFile(fileData, overwrite)
 	if err != nil {
 		log.Fatalf("更新配置文件出错: %v", err)
 	}

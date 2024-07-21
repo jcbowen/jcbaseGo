@@ -8,11 +8,35 @@ import (
 	"path/filepath"
 )
 
-var defaultPerm os.FileMode = 0755
+type FileHelper struct {
+	Path string      `json:"path"`
+	Perm os.FileMode `json:"perm" default:"0755"`
+}
 
-// FileExists 检查文件是否存在
-func FileExists(path string) bool {
-	_, err := os.Stat(path)
+func NewFileHelper(args ...any) *FileHelper {
+	var fileHelper *FileHelper
+	if len(args) > 0 {
+		fileHelper = args[0].(*FileHelper)
+	} else {
+		fileHelper = &FileHelper{}
+	}
+	fileHelper.init()
+	return fileHelper
+}
+
+func (fh *FileHelper) init() {
+	_ = CheckAndSetDefault(fh)
+	if fh.Perm <= 0 {
+		fh.Perm = 0755
+	}
+}
+
+// Exists 检查文件是否存在
+func (fh *FileHelper) Exists() bool {
+	if fh.Path == "" {
+		return false
+	}
+	_, err := os.Stat(fh.Path)
 	if err != nil {
 		if os.IsExist(err) {
 			return true
@@ -22,22 +46,22 @@ func FileExists(path string) bool {
 	return true
 }
 
-// ReadJsonFile 读取json文件，并解析到结构体
-func ReadJsonFile(filePath string, data any) error {
+// JsonToData 将文件中的json数据解析到data中
+func (fh *FileHelper) JsonToData(data *interface{}) error {
 	// 读取json配置文件
-	file, fErr := os.ReadFile(filePath)
+	file, fErr := os.ReadFile(fh.Path)
 	if fErr != nil {
 		return fErr
 	}
 	fileDataString := string(file)
 
-	err := json.Unmarshal([]byte(fileDataString), &data)
+	err := json.Unmarshal([]byte(fileDataString), data)
 	return err
 }
 
 // IsDir 判断是否是目录
-func IsDir(path string) bool {
-	s, err := os.Stat(path)
+func (fh *FileHelper) IsDir() bool {
+	s, err := os.Stat(fh.Path)
 	if err != nil {
 		return false
 	}
@@ -45,42 +69,39 @@ func IsDir(path string) bool {
 }
 
 // GetAbsPath 获取绝对路径
-func GetAbsPath(path string) (string, error) {
-	return filepath.Abs(path)
+func (fh *FileHelper) GetAbsPath() (string, error) {
+	return filepath.Abs(fh.Path)
 }
 
 // DirName 获取目录部分
-func DirName(path string) string {
-	return filepath.Dir(path)
+func (fh *FileHelper) DirName() string {
+	return filepath.Dir(fh.Path)
 }
 
 // IsFile 判断是否是文件
-func IsFile(path string) bool {
-	return !IsDir(path)
+func (fh *FileHelper) IsFile() bool {
+	return !fh.IsDir()
 }
 
 // IsEmptyDir 判断目录是否为空
-func IsEmptyDir(path string) bool {
-	f, err := os.Open(path)
+func (fh *FileHelper) IsEmptyDir() bool {
+	f, err := os.Open(fh.Path)
 	if err != nil {
 		return false
 	}
 	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-
-		}
+		_ = f.Close()
 	}(f)
 	_, err = f.Readdirnames(1)
-	if err == os.ErrNotExist {
+	if errors.Is(err, os.ErrNotExist) {
 		return true
 	}
 	return false
 }
 
 // IsEmptyFile 判断文件是否为空
-func IsEmptyFile(path string) bool {
-	f, err := os.Open(path)
+func (fh *FileHelper) IsEmptyFile() bool {
+	f, err := os.Open(fh.Path)
 	if err != nil {
 		return false
 	}
@@ -98,16 +119,16 @@ func IsEmptyFile(path string) bool {
 }
 
 // IsEmpty 判断文件或目录是否为空
-func IsEmpty(path string) bool {
-	if IsDir(path) {
-		return IsEmptyDir(path)
+func (fh *FileHelper) IsEmpty() bool {
+	if fh.IsDir() {
+		return fh.IsEmptyDir()
 	}
-	return IsEmptyFile(path)
+	return fh.IsEmptyFile()
 }
 
 // IsReadable 判断文件是否可读
-func IsReadable(path string) bool {
-	_, err := os.OpenFile(path, os.O_RDONLY, 0666)
+func (fh *FileHelper) IsReadable() bool {
+	_, err := os.OpenFile(fh.Path, os.O_RDONLY, 0666)
 	if err != nil {
 		return false
 	}
@@ -115,8 +136,8 @@ func IsReadable(path string) bool {
 }
 
 // IsWritable 判断文件是否可写
-func IsWritable(path string) bool {
-	_, err := os.OpenFile(path, os.O_WRONLY, 0666)
+func (fh *FileHelper) IsWritable() bool {
+	_, err := os.OpenFile(fh.Path, os.O_WRONLY, 0666)
 	if err != nil {
 		return false
 	}
@@ -124,8 +145,8 @@ func IsWritable(path string) bool {
 }
 
 // IsExecutable 判断文件是否可执行
-func IsExecutable(path string) bool {
-	_, err := os.OpenFile(path, os.O_RDONLY, 0666)
+func (fh *FileHelper) IsExecutable() bool {
+	_, err := os.OpenFile(fh.Path, os.O_RDONLY, 0666)
 	if err != nil {
 		return false
 	}
@@ -133,8 +154,8 @@ func IsExecutable(path string) bool {
 }
 
 // IsSymlink 判断是否是软链接
-func IsSymlink(path string) bool {
-	fi, err := os.Lstat(path)
+func (fh *FileHelper) IsSymlink() bool {
+	fi, err := os.Lstat(fh.Path)
 	if err != nil {
 		return false
 	}
@@ -142,27 +163,24 @@ func IsSymlink(path string) bool {
 }
 
 // IsHidden 判断文件是否隐藏
-func IsHidden(path string) bool {
-	return len(path) > 1 && path[0] == '.'
+func (fh *FileHelper) IsHidden() bool {
+	return len(fh.Path) > 1 && fh.Path[0] == '.'
 }
 
 // DirExists 判断目录是否存在，可选在不存在时是否创建目录
-func DirExists(path string, create bool, perm os.FileMode) (bool, error) {
+func (fh *FileHelper) DirExists(createIfNotExists bool) (exists bool, err error) {
 	// 判断path是否为一个目录，如果不是目录则取出目录部分
-	if !IsDir(path) {
-		path = DirName(path)
-		if path == "." || path == "/" {
+	if !fh.IsDir() {
+		fh.Path = fh.DirName()
+		if fh.Path == "." || fh.Path == "/" {
 			return false, errors.New("请输入正确的目录路径(不能为当前目录或根目录;目录必须以/结尾，否则目录名会被当做文件处理)")
 		}
 	}
-	_, err := os.Stat(path)
+	_, err = os.Stat(fh.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if create {
-				if perm == 0 {
-					perm = defaultPerm
-				}
-				err = os.MkdirAll(path, perm)
+			if createIfNotExists {
+				err = os.MkdirAll(fh.Path, fh.Perm)
 				if err != nil {
 					return false, err
 				}
@@ -176,51 +194,46 @@ func DirExists(path string, create bool, perm os.FileMode) (bool, error) {
 }
 
 // CreateFile 创建文件，可设置文件权限，可设置是否覆盖
-func CreateFile(path string, content []byte, perm os.FileMode, overwrite bool) error {
+func (fh *FileHelper) CreateFile(content []byte, overwrite bool) error {
 	// 如果已经存在且不需要覆盖则返回错误
-	if exists := FileExists(path); exists {
+	if exists := fh.Exists(); exists {
 		if !overwrite {
-			return errors.New("文件已存在，路径：" + path)
+			return errors.New("文件已存在，路径：" + fh.Path)
 		}
 	}
 
-	// 如果没有设置权限则使用默认权限
-	if perm == 0 {
-		perm = defaultPerm
-	}
-
 	// 检查目录是否存在，不存在则创建
-	_, err := DirExists(path, true, perm)
+	_, err := fh.DirExists(true)
 	if err != nil {
 		return err
 	}
 
 	// 创建文件
-	return os.WriteFile(path, content, perm)
+	return os.WriteFile(fh.Path, content, fh.Perm)
 }
 
 // Remove 删除文件或目录
-func Remove(path string) error {
-	return os.RemoveAll(path)
+func (fh *FileHelper) Remove() error {
+	return os.RemoveAll(fh.Path)
 }
 
-// CopyFileAttr 复制文件属性
-func CopyFileAttr(src, dst string) error {
-	srcInfo, err := os.Stat(src)
+// CopyFileAttr 复制文件属性到目标文件
+func (fh *FileHelper) CopyFileAttr(targetFile string) error {
+	srcInfo, err := os.Stat(fh.Path)
 	if err != nil {
 		return err
 	}
-	return os.Chmod(dst, srcInfo.Mode())
+	return os.Chmod(targetFile, srcInfo.Mode())
 }
 
-// CopyFile 复制文件，可设置是否覆盖，可设置文件权限，可设置是否复制文件属性
-func CopyFile(src, dst string, overwrite bool, perm os.FileMode, copyAttr bool) error {
-	if !FileExists(src) {
+// CopyFile 复制文件到指定位置，可设置是否覆盖，可设置是否复制文件属性
+func (fh *FileHelper) CopyFile(targetPath string, overwrite bool, copyAttr bool) error {
+	if !fh.Exists() {
 		return errors.New("file not exists")
 	}
-	if FileExists(dst) {
+	if fh.Exists() {
 		if overwrite {
-			err := os.Remove(dst)
+			err := os.Remove(targetPath)
 			if err != nil {
 				return err
 			}
@@ -228,7 +241,7 @@ func CopyFile(src, dst string, overwrite bool, perm os.FileMode, copyAttr bool) 
 			return nil
 		}
 	}
-	srcFile, err := os.Open(src)
+	srcFile, err := os.Open(fh.Path)
 	if err != nil {
 		return err
 	}
@@ -238,7 +251,7 @@ func CopyFile(src, dst string, overwrite bool, perm os.FileMode, copyAttr bool) 
 
 		}
 	}(srcFile)
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY, perm)
+	dstFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY, fh.Perm)
 	if err != nil {
 		return err
 	}
@@ -253,19 +266,10 @@ func CopyFile(src, dst string, overwrite bool, perm os.FileMode, copyAttr bool) 
 		return err
 	}
 	if copyAttr {
-		err = CopyFileAttr(src, dst)
+		err = fh.CopyFileAttr(targetPath)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// ------------------------ 以下是弃用了的函数，将在后续版本中被移除 ------------------------ /
-
-// CreateFileIfNotExist 判断文件是否存在，不存在则根据传入的文件内容创建，可设置文件权限
-//
-// Deprecated: As of jcbaseGo 0.2.1, this function simply calls CreateFile.
-func CreateFileIfNotExist(path string, content []byte, perm os.FileMode, overwrite bool) error {
-	return CreateFile(path, content, perm, false)
 }
