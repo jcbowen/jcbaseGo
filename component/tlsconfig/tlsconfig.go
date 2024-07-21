@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"os"
 )
 
 // Get 获取TLS配置
@@ -24,7 +24,7 @@ func Get(certFile, keyFile, caFile, serverName string) (*tls.Config, error) {
 
 	// 如果提供了CA证书文件，则加载它
 	if caFile != "" {
-		caCert, err := ioutil.ReadFile(caFile)
+		caCert, err := os.ReadFile(caFile)
 		if err != nil {
 			return nil, fmt.Errorf("读取CA证书失败: %v", err)
 		}
