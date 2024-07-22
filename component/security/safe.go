@@ -3,24 +3,34 @@ package security
 import (
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"html"
+	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
-type SanitizeInput struct {
+type Input struct {
 	Value        interface{}
 	DefaultValue interface{}
 }
 
 var (
-	htmlEntityRegex = regexp.MustCompile(`&((#(\d{3,5}|x[a-fA-F0-9]{4}));)`)
-	sqlRegex        = regexp.MustCompile(`(?i)(union|select|insert|update|delete|drop|truncate|alter|exec|;|--)`)
-	badStr          = []string{"\000", "%00", "%3C", "%3E", "<?", "<%", "<?php", "{php", "{if", "{foreach", "{for", "../"}
-	replacementStr  = []string{"", "", "<", ">", "", "", "", "", "", "", "", ".."}
+	htmlEntityRegex  = regexp.MustCompile(`&((#(\d{3,5}|x[a-fA-F0-9]{4}));)`)
+	sqlRegex         = regexp.MustCompile(`(?i)(union|select|insert|update|delete|drop|truncate|alter|exec|;|--)`)
+	badStrRegex      = regexp.MustCompile(`\000|%00|%3C|%3E|<\?|<%|\{\?|{php|{if|{foreach|{for|\.\./`)
+	controlCharRegex = regexp.MustCompile(`[\x00-\x1F\x7F]`)
+	xssEventRegex    = regexp.MustCompile(`(?i)on[a-z]+\s*=\s*['"].*?['"]`)
+	xssTagRegex      = regexp.MustCompile(`(?i)<(?:script|style|object|embed|link|meta|img|form|base|blink|xml|applet|bgsound|ilayer|layer|marquee|frameset|frame|iframe).*?>`)
+	specialCharRegex = regexp.MustCompile(`&[a-zA-Z0-9#]{2,8};`)
+	urlPattern       = regexp.MustCompile(`(href|src)=['"](.*?)['"]`)
+	replacementStr   = ""
 )
 
-// Belong checks if the value belongs to the allowed list
-func (s SanitizeInput) Belong(allow []interface{}, strict bool) interface{} {
+// Belong 检查值是否属于允许列表
+func (s Input) Belong(allow []interface{}, strict bool) interface{} {
+	if helper.IsEmptyValue(s.Value) {
+		return s.DefaultValue
+	}
 	for _, v := range allow {
 		if strict && v == s.Value {
 			return s.Value
@@ -31,20 +41,21 @@ func (s SanitizeInput) Belong(allow []interface{}, strict bool) interface{} {
 	return s.DefaultValue
 }
 
-// String sanitizes and returns the string representation of the value
-func (s SanitizeInput) String() string {
+// Html 清理并返回HTML内容
+func (s Input) Html() string {
 	val, ok := s.Value.(string)
-	if !ok {
+	if !ok || val == "" {
 		if defVal, ok := s.DefaultValue.(string); ok {
 			return defVal
 		}
 		return ""
 	}
 
+	// 先进行badStrReplace
 	val = s.badStrReplace(val)
-	val = htmlEntityRegex.ReplaceAllString(val, "&$1")
-	val = sqlRegex.ReplaceAllString(val, "")
-	val = html.EscapeString(val)
+
+	// 然后进行XSS过滤
+	val = s.removeXss(val)
 
 	if val == "" && s.DefaultValue != "" {
 		return s.DefaultValue.(string)
@@ -52,13 +63,110 @@ func (s SanitizeInput) String() string {
 	return val
 }
 
-// badStrReplace replaces potentially harmful substrings
-func (s SanitizeInput) badStrReplace(str string) string {
+// Sanitize 清理并返回值
+func (s Input) Sanitize() interface{} {
+	if helper.IsEmptyValue(s.Value) {
+		return s.DefaultValue
+	}
+
+	valueType := reflect.TypeOf(s.Value)
+	switch valueType.Kind() {
+	case reflect.Slice:
+		return s.sanitizeSlice()
+	case reflect.Map:
+		return s.sanitizeMap()
+	case reflect.String:
+		return s.sanitizeString(helper.Convert{Value: s.Value}.ToString())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64, reflect.Bool:
+		return s.Value
+	default:
+		return s.DefaultValue
+	}
+}
+
+// sanitizeString 清理字符串以防止 SQL 注入和 XSS 攻击
+func (s Input) sanitizeString(str string) string {
 	if str == "" {
+		if defVal, ok := s.DefaultValue.(string); ok {
+			return defVal
+		}
 		return ""
 	}
-	for i := range badStr {
-		str = strings.ReplaceAll(str, badStr[i], replacementStr[i])
-	}
+	str = s.badStrReplace(str)
+	str = htmlEntityRegex.ReplaceAllString(str, "&$1")
+	str = sqlRegex.ReplaceAllString(str, "")
+	str = html.EscapeString(str)
 	return str
+}
+
+// badStrReplace 替换潜在的有害子字符串
+func (s Input) badStrReplace(str string) string {
+	return badStrRegex.ReplaceAllString(str, replacementStr)
+}
+
+// sanitizeSlice 清理切片
+func (s Input) sanitizeSlice() []interface{} {
+	sliceValue := reflect.ValueOf(s.Value)
+	sanitizedSlice := make([]interface{}, sliceValue.Len())
+
+	for i := 0; i < sliceValue.Len(); i++ {
+		sanitizedSlice[i] = Input{Value: sliceValue.Index(i).Interface(), DefaultValue: s.DefaultValue}.Sanitize()
+	}
+
+	return sanitizedSlice
+}
+
+// sanitizeMap 清理映射
+func (s Input) sanitizeMap() map[interface{}]interface{} {
+	mapValue := reflect.ValueOf(s.Value)
+	sanitizedMap := make(map[interface{}]interface{})
+
+	for _, key := range mapValue.MapKeys() {
+		sanitizedKey := Input{Value: key.Interface(), DefaultValue: s.DefaultValue}.Sanitize()
+		sanitizedValue := Input{Value: mapValue.MapIndex(key).Interface(), DefaultValue: s.DefaultValue}.Sanitize()
+		sanitizedMap[sanitizedKey] = sanitizedValue
+	}
+
+	return sanitizedMap
+}
+
+// removeXss 清理输入以防止 XSS 攻击
+func (s Input) removeXss(val string) string {
+	// 删除控制字符
+	val = controlCharRegex.ReplaceAllString(val, "")
+
+	// 处理特殊 HTML 实体字符
+	val = specialCharRegex.ReplaceAllStringFunc(val, func(entity string) string {
+		return html.UnescapeString(entity)
+	})
+
+	// 替换危险的事件属性和标签
+	val = xssEventRegex.ReplaceAllString(val, "")
+	val = xssTagRegex.ReplaceAllString(val, "")
+
+	// 处理 URL
+	matches := urlPattern.FindAllStringSubmatch(val, -1)
+	var urlList []string
+	for _, match := range matches {
+		if match[2] != "" {
+			urlList = append(urlList, match[2])
+		}
+	}
+
+	var encodedUrlList []string
+	for key, url := range urlList {
+		placeholder := "jc_" + strconv.Itoa(key) + "_placeholder"
+		val = strings.ReplaceAll(val, url, placeholder)
+		encodedUrlList = append(encodedUrlList, url)
+	}
+
+	// 替换 URL 中的占位符
+	for key, url := range encodedUrlList {
+		placeholder := "jc_" + strconv.Itoa(key) + "_placeholder"
+		val = strings.ReplaceAll(val, placeholder, url)
+	}
+
+	return val
 }
