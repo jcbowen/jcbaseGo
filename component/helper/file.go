@@ -169,18 +169,19 @@ func (fh *File) IsHidden() bool {
 
 // DirExists 判断目录是否存在，可选在不存在时是否创建目录
 func (fh *File) DirExists(createIfNotExists bool) (exists bool, err error) {
+	dirPath := fh.Path
 	// 判断path是否为一个目录，如果不是目录则取出目录部分
 	if !fh.IsDir() {
-		fh.Path = fh.DirName()
-		if fh.Path == "." || fh.Path == "/" {
+		dirPath = fh.DirName()
+		if dirPath == "." || dirPath == "/" {
 			return false, errors.New("请输入正确的目录路径(不能为当前目录或根目录;目录必须以/结尾，否则目录名会被当做文件处理)")
 		}
 	}
-	_, err = os.Stat(fh.Path)
+	_, err = os.Stat(dirPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			if createIfNotExists {
-				err = os.MkdirAll(fh.Path, fh.Perm)
+				err = os.MkdirAll(dirPath, fh.Perm)
 				if err != nil {
 					return false, err
 				}
