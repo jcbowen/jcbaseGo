@@ -159,3 +159,22 @@ func (c Convert) ToInt() int {
 		return 0
 	}
 }
+
+// ToNumber 将字符串变量转为int类型
+func (c Convert) ToNumber() (interface{}, bool) {
+	s, ok := c.Value.(string)
+	if !ok {
+		return nil, false
+	}
+
+	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return i, true
+	}
+	if u, err := strconv.ParseUint(s, 10, 64); err == nil {
+		return u, true
+	}
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		return f, true
+	}
+	return nil, false
+}
