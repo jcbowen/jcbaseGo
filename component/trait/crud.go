@@ -9,7 +9,7 @@ import (
 
 type CRUDTrait struct {
 	PkId           string `default:"id"` // 数据表主键
-	Model          any    // 模型
+	Model          any    // 模型指针
 	ModelTableName string // 模型表名
 	OperateTime    string // 操作时间
 }
