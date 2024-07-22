@@ -2,6 +2,7 @@ package helper
 
 import (
 	"encoding/base64"
+	"html"
 	"regexp"
 	"strconv"
 	"strings"
@@ -159,6 +160,32 @@ func (s *Str) MbUcWords() string {
 		words[i] = NewStr(word).MbUcFirst()
 	}
 	return strings.Join(words, " ")
+}
+
+// ToLower converts the value to a lower case string
+func (s *Str) ToLower() string {
+	return strings.ToLower(s.String)
+}
+
+// ToUpper converts the value to an upper case string
+func (s *Str) ToUpper() string {
+	return strings.ToUpper(s.String)
+}
+
+// TrimSpace removes leading and trailing white spaces from the value
+func (s *Str) TrimSpace() string {
+	return strings.TrimSpace(s.String)
+}
+
+// Trim returns a slice of the string s with all leading and
+// trailing Unicode code points contained in cutSet removed.
+func (s *Str) Trim(cutSet string) string {
+	return strings.Trim(s.String, cutSet)
+}
+
+// EscapeHTML escapes HTML characters in the value to prevent XSS
+func (s *Str) EscapeHTML() string {
+	return html.EscapeString(s.String)
 }
 
 // ConvertCamelToSnake 转换驼峰字符串为下划线字符串
