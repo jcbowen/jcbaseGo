@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 	"log"
+	"os"
 	"path/filepath"
 )
 
@@ -42,14 +43,20 @@ func New(Conf jcbaseGo.SqlLiteStruct) (i *Instance) {
 	// 创建数据库连接
 	db, err := gorm.Open(sqlite.Open(Conf.DbFile), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
-			TablePrefix:   Conf.TablePrefix,             // 表名前缀，`User`表为`t_users`
-			SingularTable: Conf.SingularTable == "true", // 使用单数表名，启用该选项后，`User` 表将是`user`
+			TablePrefix:   Conf.TablePrefix,   // 表名前缀，`User`表为`t_users`
+			SingularTable: Conf.SingularTable, // 使用单数表名，启用该选项后，`User` 表将是`user`
 		},
 	})
 	jcbaseGo.PanicIfError(err)
 
 	i.Conf = Conf
 	i.Db = db
+
+	// 将配置信息储存到环境变量
+	envStr := ""
+	helper.JsonStruct(Conf).ToString(&envStr)
+	err = os.Setenv("jc_sql_lite_"+Conf.Alias, envStr)
+	jcbaseGo.PanicIfError(err)
 
 	return
 }

@@ -8,6 +8,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
+	"os"
 )
 
 type AllTableName struct {
@@ -46,8 +47,8 @@ func New(dbConfig jcbaseGo.DbStruct) *Instance {
 	dsn := getDSN(dbConfig)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
-			TablePrefix:   dbConfig.TablePrefix,             // 表名前缀，`User`表为`t_users`
-			SingularTable: dbConfig.SingularTable == "true", // 使用单数表名，启用该选项后，`User` 表将是`user`
+			TablePrefix:   dbConfig.TablePrefix,   // 表名前缀，`User`表为`t_users`
+			SingularTable: dbConfig.SingularTable, // 使用单数表名，启用该选项后，`User` 表将是`user`
 		},
 	})
 	jcbaseGo.PanicIfError(err)
@@ -55,6 +56,12 @@ func New(dbConfig jcbaseGo.DbStruct) *Instance {
 	context.Dsn = dsn
 	context.Conf = dbConfig
 	context.Db = db
+
+	// 将配置信息储存到环境变量
+	envStr := ""
+	helper.JsonStruct(dbConfig).ToString(&envStr)
+	err = os.Setenv("jc_mysql_"+dbConfig.Alias, envStr)
+	jcbaseGo.PanicIfError(err)
 
 	return context
 }

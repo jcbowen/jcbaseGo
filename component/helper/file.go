@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type File struct {
@@ -71,6 +72,14 @@ func (fh *File) IsDir() bool {
 // GetAbsPath 获取绝对路径
 func (fh *File) GetAbsPath() (string, error) {
 	return filepath.Abs(fh.Path)
+}
+
+// Basename 返回路径的最后一个名字组件
+func (fh *File) Basename(suffix string) string {
+	path := strings.TrimSuffix(fh.Path, suffix)
+	path = strings.ReplaceAll(path, "\\", "/")
+	parts := strings.Split(path, "/")
+	return parts[len(parts)-1]
 }
 
 // DirName 获取目录部分

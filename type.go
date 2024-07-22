@@ -25,14 +25,16 @@ type DbStruct struct {
 	Charset       string `json:"charset" default:"utf8mb4"`    // 编码
 	TablePrefix   string `json:"tablePrefix" default:"jc_"`    // 表前缀
 	ParseTime     string `json:"parseTime" default:"False"`    // 是否开启时间解析
-	SingularTable string `json:"singularTable" default:"true"` // 使用单数表名
+	SingularTable bool   `json:"singularTable" default:"true"` // 使用单数表名
+	Alias         string `json:"alias" default:"db"`           // 配置信息别名
 }
 
 // SqlLiteStruct sqlite配置
 type SqlLiteStruct struct {
 	DbFile        string `json:"dbFile" default:"./db/jcbaseGo.db"` // 数据库文件
 	TablePrefix   string `json:"tablePrefix" default:"jc_"`         // 表前缀
-	SingularTable string `json:"singularTable" default:"true"`      // 使用单数表名
+	SingularTable bool   `json:"singularTable" default:"true"`      // 使用单数表名
+	Alias         string `json:"alias" default:"main"`              // 配置信息别名
 }
 
 // RedisStruct redis配置
@@ -102,20 +104,4 @@ type DefaultConfigStruct struct {
 	Cos        CosStruct        `json:"cos"`        // cos配置信息
 	Project    ProjectStruct    `json:"project"`    // 项目配置信息
 	Repository RepositoryStruct `json:"repository"` // 仓库配置信息
-}
-
-// MysqlModel gorm基础模型
-type MysqlModel struct {
-	Id        uint   `gorm:"column:id;type:INT(11) UNSIGNED;primaryKey;autoIncrement" json:"id"`
-	UpdatedAt string `gorm:"column:updated_at;type:DATETIME;default:NULL;comment:更新时间" json:"updated_at"`       // 更新时间
-	CreatedAt string `gorm:"column:created_at;type:DATETIME;default:NULL;comment:创建时间" json:"created_at"`       // 创建时间
-	DeletedAt string `gorm:"column:deleted_at;type:DATETIME;index;default:NULL;comment:删除时间" json:"deleted_at"` // 删除时间
-}
-
-// SQLLiteModel gorm基础模型
-type SQLLiteModel struct {
-	Id        uint   `gorm:"column:id;type:INTEGER;primaryKey;autoIncrement" json:"id"`
-	UpdatedAt string `gorm:"column:updated_at;type:STRING;default:NULL" json:"updated_at"`       // 更新时间
-	CreatedAt string `gorm:"column:created_at;type:STRING;default:NULL" json:"created_at"`       // 创建时间
-	DeletedAt string `gorm:"column:deleted_at;type:STRING;index;default:NULL" json:"deleted_at"` // 删除时间
 }
