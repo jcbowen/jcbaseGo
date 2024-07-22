@@ -496,6 +496,45 @@ func IsError(errs []error) bool {
 	return false
 }
 
+// IsEmptyValue 检查值是否为空
+func IsEmptyValue(val interface{}) bool {
+	if val == nil {
+		return true
+	}
+
+	value := reflect.ValueOf(val)
+	switch value.Kind() {
+	case reflect.String:
+		return value.Len() == 0
+	case reflect.Slice, reflect.Map, reflect.Array:
+		return value.Len() == 0
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return value.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return value.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return value.Float() == 0
+	case reflect.Bool:
+		return !value.Bool()
+	case reflect.Interface, reflect.Ptr:
+		return value.IsNil()
+	case reflect.Struct:
+		return isEmptyStruct(value)
+	default:
+		return false
+	}
+}
+
+// isEmptyStruct 检查是否是一个空结构体
+func isEmptyStruct(value reflect.Value) bool {
+	for i := 0; i < value.NumField(); i++ {
+		if !IsEmptyValue(value.Field(i).Interface()) {
+			return false
+		}
+	}
+	return true
+}
+
 // CheckAndSetDefault 检查结构体中的字段是否为空，如果为空则设置为默认值
 func CheckAndSetDefault(i interface{}) error {
 	// 获取结构体反射值
@@ -561,13 +600,4 @@ func CheckAndSetDefault(i interface{}) error {
 	}
 
 	return nil
-}
-
-// ------------------------ 以下是弃用了的函数，将在后续版本中被移除 ------------------------ /
-
-// Str2Int 字符串转数字
-//
-// Deprecated: As of jcbaseGo 0.2.1, this function simply calls ToInt.
-func Str2Int(str string) int {
-	return ToInt(str)
 }
