@@ -250,21 +250,26 @@ func StrReplace(search interface{}, replace interface{}, subject interface{}, co
 	}
 }
 
+// InArray 检查某个值是否存在于切片中
+// val 是要检查的值
+// array 是要检查的切片
+// exists 是返回的布尔值，表示 val 是否存在于 array 中
 func InArray(val interface{}, array interface{}) (exists bool) {
-	exists = false
-	//index = -1
-	switch reflect.TypeOf(array).Kind() {
-	case reflect.Slice:
-		s := reflect.ValueOf(array)
-		for i := 0; i < s.Len(); i++ {
-			if reflect.DeepEqual(val, s.Index(i).Interface()) == true {
-				//index = i
-				exists = true
-				return
-			}
+	arr := reflect.ValueOf(array)
+
+	// 确保 array 是一个切片
+	if arr.Kind() != reflect.Slice {
+		panic("第二个参数必须是一个切片")
+	}
+
+	// 遍历切片，检查 val 是否存在
+	for i := 0; i < arr.Len(); i++ {
+		if reflect.DeepEqual(val, arr.Index(i).Interface()) {
+			return true
 		}
 	}
-	return
+
+	return false
 }
 
 // StructToMap 通过reflect将结构体转换为map
@@ -600,4 +605,94 @@ func CheckAndSetDefault(i interface{}) error {
 	}
 
 	return nil
+}
+
+// CompareNumber 比较两个值，如果 a < b 返回 -1，如果 a == b 返回 0，如果 a > b 返回 1，如果错误则 panic
+func CompareNumber(a, b interface{}) int {
+	va := reflect.ValueOf(a)
+	vb := reflect.ValueOf(b)
+
+	vaK := va.Kind()
+	vbK := vb.Kind()
+
+	if vaK != vbK {
+		log.Panic(errors.New("比较的值应当是同一种类型"))
+	}
+
+	// 如果是字符串，就转换为数字
+	if vaK == reflect.String {
+		ai, ok := Convert{Value: va}.ToNumber()
+		if !ok {
+			log.Panic(errors.New("字符串转数值失败"))
+		}
+		bi, ok := Convert{Value: vb}.ToNumber()
+		if !ok {
+			log.Panic(errors.New("字符串转数值失败"))
+		}
+		va = reflect.ValueOf(ai)
+		vb = reflect.ValueOf(bi)
+	}
+
+	switch va.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		ai, bi := va.Int(), vb.Int()
+		switch {
+		case ai < bi:
+			return -1
+		case ai > bi:
+			return 1
+		default:
+			return 0
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		au, bu := va.Uint(), vb.Uint()
+		switch {
+		case au < bu:
+			return -1
+		case au > bu:
+			return 1
+		default:
+			return 0
+		}
+	case reflect.Float32, reflect.Float64:
+		af, bf := va.Float(), vb.Float()
+		switch {
+		case af < bf:
+			return -1
+		case af > bf:
+			return 1
+		default:
+			return 0
+		}
+	default:
+		panic(errors.New("不支持的比较类型"))
+	}
+}
+
+// Max 返回可变参数中最大的值
+func Max(numbers ...interface{}) interface{} {
+	if len(numbers) == 0 {
+		panic("未提供任何数字")
+	}
+	maxValue := numbers[0]
+	for _, num := range numbers[1:] {
+		if CompareNumber(maxValue, num) < 0 {
+			maxValue = num
+		}
+	}
+	return maxValue
+}
+
+// Min 返回可变参数中最小的值
+func Min(numbers ...interface{}) interface{} {
+	if len(numbers) == 0 {
+		panic("未提供任何数字")
+	}
+	minValue := numbers[0]
+	for _, num := range numbers[1:] {
+		if CompareNumber(minValue, num) > 0 {
+			minValue = num
+		}
+	}
+	return minValue
 }
