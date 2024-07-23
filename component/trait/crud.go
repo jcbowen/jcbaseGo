@@ -2,21 +2,23 @@ package trait
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/mysql"
 	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"reflect"
-	"strconv"
 	"time"
 )
 
 type CRUDTrait struct {
 	Model          any // 模型指针
 	MysqlMain      *mysql.Instance
-	PkId           string `default:"id"` // 数据表主键
-	ModelTableName string // 模型表名
-	OperateTime    string // 操作时间
+	PkId           string      `default:"id"` // 数据表主键
+	ModelTableName string      // 模型表名
+	OperateTime    string      // 操作时间
+	Custom         interface{} // 自定义控制器
 }
 
 func (t *CRUDTrait) ActionList(c *gin.Context) {
@@ -25,50 +27,93 @@ func (t *CRUDTrait) ActionList(c *gin.Context) {
 	// 获取分页参数
 	pageStr := c.DefaultQuery("page", "1")
 	pageSizeStr := c.DefaultQuery("page_size", "10")
-	page, _ := strconv.Atoi(pageStr)
-	pageSize, _ := strconv.Atoi(pageSizeStr)
-
-	// 获取排序参数
-	sortBy := c.DefaultQuery("sort_by", t.PkId)
-	order := c.DefaultQuery("order", "asc")
+	showDeletedStr := c.DefaultQuery("show_deleted", "0")
+	page := max(helper.Convert{Value: pageStr}.ToInt(), 1)
+	pageSize := helper.Convert{Value: pageSizeStr}.ToInt()
+	showDeleted := helper.Convert{Value: showDeletedStr}.ToBool()
+	if pageSize < 1 {
+		pageSize = 10
+	} else if pageSize > 1000 {
+		pageSize = 1000
+	}
 
 	// 构建查询
 	query := t.MysqlMain.GetDb().Table(t.ModelTableName)
 
-	// 处理回调函数
-	query = t.ListRow(query)
+	if !showDeleted {
+		query = query.Where("deleted_at IS NULL")
+	}
 
-	var results []map[string]interface{}
-	err := query.Select("*").Order(sortBy + " " + order).Offset((page - 1) * pageSize).Limit(pageSize).Find(&results).Error
+	query = t.invokeCustomMethod("ListQuery", query).(*gorm.DB)
+
+	// 动态创建模型实例
+	modelType := reflect.TypeOf(t.Model).Elem()
+	sliceType := reflect.SliceOf(modelType)
+	results := reflect.New(sliceType).Interface()
+
+	err := query.Order(t.invokeCustomMethod("ListOrder")).
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(results).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	total := int64(0)
-	err = query.Count(&total).Error
+	err = query.Model(reflect.New(modelType).Interface()).Count(&total).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	// 遍历结果到ListEach中
+	resultsValue := reflect.ValueOf(results).Elem()
+	for i := 0; i < resultsValue.Len(); i++ {
+		item := resultsValue.Index(i).Addr().Interface()
+		eachResult := t.invokeCustomMethod("ListEach", item)
+		if reflect.TypeOf(eachResult).Kind() == reflect.Ptr {
+			eachResult = reflect.ValueOf(eachResult).Elem().Interface()
+		}
+		resultsValue.Index(i).Set(reflect.ValueOf(eachResult))
+	}
+
 	// 返回结果
-	c.JSON(http.StatusOK, gin.H{
-		"data":      results,
-		"page":      page,
-		"page_size": pageSize,
-		"total":     total,
+	t.invokeCustomMethod("ListReturn", c, jcbaseGo.ListData{
+		List:     results,
+		Total:    int(total),
+		Page:     page,
+		PageSize: pageSize,
 	})
 }
 
-func (t *CRUDTrait) ListRow(query *gorm.DB) *gorm.DB {
-	// 可以在这里添加用户自定义的查询逻辑
+func (t *CRUDTrait) ListQuery(query *gorm.DB) *gorm.DB {
 	return query
+}
+
+func (t *CRUDTrait) ListOrder() (order interface{}) {
+	return t.PkId + " DESC"
+}
+
+func (t *CRUDTrait) ListEach(item interface{}) interface{} {
+	return item
+}
+
+func (t *CRUDTrait) ListReturn(c *gin.Context, listData jcbaseGo.ListData) bool {
+	c.JSON(http.StatusOK, jcbaseGo.Result{
+		Code: 200,
+		Msg:  "ok",
+		Data: listData,
+	})
+	return true
 }
 
 // ----- 私有方法 ----- /
 
+// 初始化
 func (t *CRUDTrait) checkInit() {
+	_ = helper.CheckAndSetDefault(t)
+
 	// 判断模型是否为空
 	if t.Model == nil {
 		log.Panic("模型不能为空")
@@ -95,4 +140,28 @@ func (t *CRUDTrait) checkInit() {
 
 	// 设置操作时间
 	t.OperateTime = time.Now().Format("2006-01-02 15:04:05")
+}
+
+// 调用自定义方法，如果方法不存在则调用默认方法
+func (t *CRUDTrait) invokeCustomMethod(methodName string, args ...interface{}) interface{} {
+	// 调用自定义方法
+	method := reflect.ValueOf(t.Custom).MethodByName(methodName)
+	if method.IsValid() {
+		in := make([]reflect.Value, len(args))
+		for i, arg := range args {
+			in[i] = reflect.ValueOf(arg)
+		}
+		return method.Call(in)[0].Interface()
+	}
+
+	// 调用默认方法
+	defaultMethod := reflect.ValueOf(t).MethodByName(methodName)
+	if !defaultMethod.IsValid() {
+		log.Panic("默认方法不存在：" + methodName)
+	}
+	in := make([]reflect.Value, len(args))
+	for i, arg := range args {
+		in[i] = reflect.ValueOf(arg)
+	}
+	return defaultMethod.Call(in)[0].Interface()
 }
