@@ -8,6 +8,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
+	"log"
 	"os"
 )
 
@@ -86,6 +87,10 @@ func (c *Instance) Error() []error {
 
 // GetDb 获取db
 func (c *Instance) GetDb() *gorm.DB {
+	if c.Db == nil {
+		log.Println("Database connection is nil")
+		return nil
+	}
 	return c.Db
 }
 
