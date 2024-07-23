@@ -105,3 +105,18 @@ type DefaultConfigStruct struct {
 	Project    ProjectStruct    `json:"project"`    // 项目配置信息
 	Repository RepositoryStruct `json:"repository"` // 仓库配置信息
 }
+
+// ListData 分页查询数据输出
+type ListData struct {
+	List     interface{} `json:"list"`
+	Total    int         `json:"total"`
+	Page     int         `json:"page"`
+	PageSize int         `json:"page_size"`
+}
+
+// Result 响应结构
+type Result struct {
+	Code int         `json:"code" default:"200"`
+	Msg  string      `json:"msg" default:"success"`
+	Data interface{} `json:"data"`
+}
