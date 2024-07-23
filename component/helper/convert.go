@@ -2,6 +2,7 @@ package helper
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"reflect"
 	"strconv"
@@ -37,6 +38,7 @@ func (c Convert) ToString() string {
 	default:
 		newValue, err := json.Marshal(c.Value)
 		if err != nil {
+			log.Println("Error marshaling value to JSON:", err)
 			return ""
 		}
 		return string(newValue)
@@ -53,32 +55,17 @@ func (c Convert) ToBool() bool {
 	case bool:
 		return v
 	case string:
-		b, _ := strconv.ParseBool(v)
-		return b
-	case int:
-		return v > 0
-	case int8:
-		return v > 0
-	case int16:
-		return v > 0
-	case int32:
-		return v > 0
-	case int64:
-		return v > 0
-	case uint:
-		return v > 0
-	case uint8:
-		return v > 0
-	case uint16:
-		return v > 0
-	case uint32:
-		return v > 0
-	case uint64:
-		return v > 0
-	case float32:
-		return v > 0
-	case float64:
-		return v > 0
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			log.Println("Error parsing bool from string:", err)
+		}
+		return err == nil && b
+	case int, int8, int16, int32, int64:
+		return reflect.ValueOf(v).Int() > 0
+	case uint, uint8, uint16, uint32, uint64:
+		return reflect.ValueOf(v).Uint() > 0
+	case float32, float64:
+		return reflect.ValueOf(v).Float() > 0
 	default:
 		return false
 	}
@@ -94,7 +81,11 @@ func (c Convert) ToFileMode() os.FileMode {
 	case os.FileMode:
 		return v
 	case string:
-		m, _ := strconv.ParseUint(v, 8, 32)
+		m, err := strconv.ParseUint(v, 8, 32)
+		if err != nil {
+			log.Println("Error parsing FileMode from string:", err)
+			return 0
+		}
 		return os.FileMode(m)
 	case int, int8, int16, int32, int64:
 		return os.FileMode(reflect.ValueOf(v).Int())
@@ -153,7 +144,11 @@ func (c Convert) ToInt() int {
 	case float64:
 		return int(v)
 	case string:
-		i, _ := strconv.Atoi(v)
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			log.Println("Error parsing int from string:", err)
+			return 0
+		}
 		return i
 	default:
 		return 0
