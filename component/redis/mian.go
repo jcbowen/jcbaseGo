@@ -35,7 +35,7 @@ func New(conf jcbaseGo.RedisStruct) *Instance {
 	newClient := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", conf.Host, conf.Port),
 		Password: conf.Password,
-		DB:       helper.ToInt(conf.Db),
+		DB:       helper.Convert{Value: conf.Db}.ToInt(),
 	})
 	ctx := context.Background()
 	_, err = newClient.Ping(ctx).Result()
