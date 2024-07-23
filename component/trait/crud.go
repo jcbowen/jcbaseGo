@@ -46,22 +46,23 @@ func (t *CRUDTrait) ActionList(c *gin.Context) {
 
 	query = t.invokeCustomMethod("ListQuery", query).(*gorm.DB)
 
-	// 动态创建模型实例
-	modelType := reflect.TypeOf(t.Model).Elem()
-	sliceType := reflect.SliceOf(modelType)
-	results := reflect.New(sliceType).Interface()
-
-	err := query.Order(t.invokeCustomMethod("ListOrder")).
-		Offset((page - 1) * pageSize).
-		Limit(pageSize).
-		Find(results).Error
+	// 获取总数
+	total := int64(0)
+	err := query.Model(reflect.New(reflect.TypeOf(t.Model).Elem()).Interface()).Count(&total).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	total := int64(0)
-	err = query.Model(reflect.New(modelType).Interface()).Count(&total).Error
+	// 动态创建模型实例
+	modelType := reflect.TypeOf(t.Model).Elem()
+	sliceType := reflect.SliceOf(modelType)
+	results := reflect.New(sliceType).Interface()
+
+	err = query.Order(t.invokeCustomMethod("ListOrder")).
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(results).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -151,7 +152,11 @@ func (t *CRUDTrait) invokeCustomMethod(methodName string, args ...interface{}) i
 		for i, arg := range args {
 			in[i] = reflect.ValueOf(arg)
 		}
-		return method.Call(in)[0].Interface()
+		results := method.Call(in)
+		if len(results) > 0 {
+			return results[0].Interface()
+		}
+		return nil
 	}
 
 	// 调用默认方法
@@ -163,5 +168,9 @@ func (t *CRUDTrait) invokeCustomMethod(methodName string, args ...interface{}) i
 	for i, arg := range args {
 		in[i] = reflect.ValueOf(arg)
 	}
-	return defaultMethod.Call(in)[0].Interface()
+	results := defaultMethod.Call(in)
+	if len(results) > 0 {
+		return results[0].Interface()
+	}
+	return nil
 }
