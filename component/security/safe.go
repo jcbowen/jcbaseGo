@@ -77,6 +77,8 @@ func (s Input) Sanitize() interface{} {
 		return s.sanitizeMap()
 	case reflect.String:
 		return s.sanitizeString(helper.Convert{Value: s.Value}.ToString())
+	case reflect.Struct:
+		return s.sanitizeStruct()
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64, reflect.Bool:
@@ -130,6 +132,23 @@ func (s Input) sanitizeMap() map[interface{}]interface{} {
 	}
 
 	return sanitizedMap
+}
+
+// sanitizeStruct 清理结构体
+func (s Input) sanitizeStruct() interface{} {
+	value := reflect.ValueOf(s.Value)
+	sanitizedStruct := reflect.New(value.Type()).Elem()
+
+	for i := 0; i < value.NumField(); i++ {
+		field := value.Field(i)
+		fieldType := value.Type().Field(i)
+		if field.CanInterface() {
+			sanitizedField := Input{Value: field.Interface(), DefaultValue: reflect.Zero(fieldType.Type).Interface()}.Sanitize()
+			sanitizedStruct.Field(i).Set(reflect.ValueOf(sanitizedField))
+		}
+	}
+
+	return sanitizedStruct.Interface()
 }
 
 // removeXss 清理输入以防止 XSS 攻击
