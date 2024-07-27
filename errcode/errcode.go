@@ -11,6 +11,21 @@ const (
 	// Unknown 未知错误
 	Unknown = 1
 
+	//----- 客户端错误 ----- /
+
+	// BadRequest 请求无效或格式错误
+	BadRequest = 400
+	// Unauthorized 未授权
+	Unauthorized = 401
+	// Forbidden 服务器理解请求但拒绝执行
+	Forbidden = 403
+	// NotFound 请求的资源不存在
+	NotFound = 404
+	// MethodNotAllowed 请求方法不被允许
+	MethodNotAllowed = 405
+	// Conflict 请求与服务器的状态冲突
+	Conflict = 409
+
 	// SuccessResponse 响应成功
 	SuccessResponse = Success
 	// SuccessChange 新建或修改成功
@@ -75,7 +90,8 @@ const (
 	// IllegalCertificate 不合法的凭证
 	IllegalCertificate = 9002018
 	// UNAUTHORIZED 未授权
-	UNAUTHORIZED = 9002019
+	// @deprecated 请使用 Unauthorized
+	UNAUTHORIZED = Unauthorized
 	// InvalidAuthorizationInformation 无效的授权信息
 	InvalidAuthorizationInformation = 9002020
 	// ExpirationService 服务到期
