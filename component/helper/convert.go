@@ -155,11 +155,35 @@ func (c Convert) ToInt() int {
 	}
 }
 
-// ToNumber 将字符串变量转为int类型
+// ToUint 将变量转为uint类型
+func (c Convert) ToUint() uint {
+	newValue, ok := c.ToNumber()
+	if !ok {
+		return 0
+	}
+	switch v := newValue.(type) {
+	case int64:
+		if v < 0 {
+			return 0
+		}
+		return uint(v)
+	case uint64:
+		return uint(v)
+	case float64:
+		if v < 0 {
+			return 0
+		}
+		return uint(v)
+	default:
+		return 0
+	}
+}
+
+// ToNumber 将字符串变量转为数字类型
 func (c Convert) ToNumber() (interface{}, bool) {
 	s, ok := c.Value.(string)
 	if !ok {
-		return nil, false
+		return int(0), false
 	}
 
 	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
@@ -171,5 +195,5 @@ func (c Convert) ToNumber() (interface{}, bool) {
 	if f, err := strconv.ParseFloat(s, 64); err == nil {
 		return f, true
 	}
-	return nil, false
+	return int(0), false
 }
