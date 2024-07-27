@@ -116,7 +116,8 @@ type ListData struct {
 
 // Result 响应结构
 type Result struct {
-	Code int         `json:"code" default:"200"`
-	Msg  string      `json:"msg" default:"success"`
-	Data interface{} `json:"data"`
+	Code    int         `json:"code" default:"200"`
+	Message string      `json:"message" default:"success"`
+	Data    interface{} `json:"data,omitempty"`
+	Total   *int        `json:"total,omitempty"`
 }
