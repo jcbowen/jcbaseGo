@@ -107,7 +107,7 @@ func (jh *JsonHelper) ToStruct(newStruct interface{}) *JsonHelper {
 
 	// 判断是否需要输出json文件
 	if jh.needFile {
-		jh = jh.ToFile()
+		jh.ToFile()
 	}
 
 	return jh
