@@ -509,9 +509,7 @@ func IsEmptyValue(val interface{}) bool {
 
 	value := reflect.ValueOf(val)
 	switch value.Kind() {
-	case reflect.String:
-		return value.Len() == 0
-	case reflect.Slice, reflect.Map, reflect.Array:
+	case reflect.String, reflect.Array, reflect.Slice, reflect.Map, reflect.Chan:
 		return value.Len() == 0
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return value.Int() == 0
@@ -522,11 +520,16 @@ func IsEmptyValue(val interface{}) bool {
 	case reflect.Bool:
 		return !value.Bool()
 	case reflect.Interface, reflect.Ptr:
-		return value.IsNil()
+		return value.IsNil() || IsEmptyValue(value.Elem().Interface())
 	case reflect.Struct:
-		return isEmptyStruct(value)
+		for i := 0; i < value.NumField(); i++ {
+			if !IsEmptyValue(value.Field(i).Interface()) {
+				return false
+			}
+		}
+		return true
 	default:
-		return false
+		return reflect.DeepEqual(val, reflect.Zero(reflect.TypeOf(val)).Interface())
 	}
 }
 
