@@ -3,35 +3,32 @@ package crud
 import (
 	"errors"
 	"github.com/gin-gonic/gin"
-	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/errcode"
 	"gorm.io/gorm"
-	"net/http"
 	"reflect"
 )
 
 func (t *Trait) ActionDetail(c *gin.Context) {
 	t.checkInit(c)
 
-	idStr := c.DefaultQuery(t.PkId, "0")
+	id, _ := t.ExtractPkId()
 	showDeletedStr := c.DefaultQuery("show_deleted", "0")
-	id := helper.Convert{Value: idStr}.ToInt()
 	showDeleted := helper.Convert{Value: showDeletedStr}.ToBool()
 
 	if helper.IsEmptyValue(id) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id is required"})
+		t.Result(errcode.ParamError, t.PkId+" 不能为空")
 		return
 	}
 
 	// 构建查询
 	query := t.MysqlMain.GetDb().Table(t.ModelTableName)
 
-	if !showDeleted {
+	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
 		query = query.Where("deleted_at IS NULL")
 	}
 
-	query = t.invokeCustomMethod("DetailQuery", query).(*gorm.DB)
+	query = t.callCustomMethod("DetailQuery", query)[0].(*gorm.DB)
 
 	// 动态创建模型实例
 	modelType := reflect.TypeOf(t.Model).Elem()
@@ -40,26 +37,18 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 	err := query.Where(t.PkId+" = ?", id).First(result).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, jcbaseGo.Result{
-				Code: errcode.NotExist,
-				Msg:  "数据不存在或已被删除",
-				Data: nil,
-			})
+			t.Result(errcode.NotExist, "数据不存在或已被删除")
 		} else {
-			c.JSON(http.StatusInternalServerError, jcbaseGo.Result{
-				Code: errcode.DatabaseError,
-				Msg:  err.Error(),
-				Data: nil,
-			})
+			t.Result(errcode.DatabaseError, err.Error())
 		}
 		return
 	}
 
 	// 调用自定义的Detail方法处理结果
-	result = t.invokeCustomMethod("Detail", result)
+	result = t.callCustomMethod("Detail", result)[0]
 
 	// 返回结果
-	t.invokeCustomMethod("DetailReturn", c, result)
+	t.callCustomMethod("DetailReturn", result)
 }
 
 func (t *Trait) DetailQuery(query *gorm.DB) *gorm.DB {
@@ -70,13 +59,7 @@ func (t *Trait) Detail(item interface{}) interface{} {
 	return item
 }
 
-func (t *Trait) DetailReturn(c *gin.Context, detail interface{}) bool {
-	c.JSON(http.StatusOK, jcbaseGo.Result{
-		Code: errcode.Success,
-		Msg:  "ok",
-		Data: gin.H{
-			"detail": detail,
-		},
-	})
+func (t *Trait) DetailReturn(detail interface{}) bool {
+	t.Result(errcode.Success, "ok", detail)
 	return true
 }

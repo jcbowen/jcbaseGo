@@ -28,21 +28,17 @@ func (t *Trait) ActionList(c *gin.Context) {
 	// 构建查询
 	query := t.MysqlMain.GetDb().Table(t.ModelTableName)
 
-	if !showDeleted {
+	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
 		query = query.Where("deleted_at IS NULL")
 	}
 
-	query = t.invokeCustomMethod("ListQuery", query).(*gorm.DB)
+	query = t.callCustomMethod("ListQuery", query)[0].(*gorm.DB)
 
 	// 获取总数
 	total := int64(0)
 	err := query.Model(reflect.New(reflect.TypeOf(t.Model).Elem()).Interface()).Count(&total).Error
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, jcbaseGo.Result{
-			Code: http.StatusInternalServerError,
-			Msg:  err.Error(),
-			Data: nil,
-		})
+		t.Result(http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -51,16 +47,12 @@ func (t *Trait) ActionList(c *gin.Context) {
 	sliceType := reflect.SliceOf(modelType)
 	results := reflect.New(sliceType).Interface()
 
-	err = query.Order(t.invokeCustomMethod("ListOrder")).
+	err = query.Order(t.callCustomMethod("ListOrder")[0]).
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).
 		Find(results).Error
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, jcbaseGo.Result{
-			Code: http.StatusInternalServerError,
-			Msg:  err.Error(),
-			Data: nil,
-		})
+		t.Result(http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -68,7 +60,7 @@ func (t *Trait) ActionList(c *gin.Context) {
 	resultsValue := reflect.ValueOf(results).Elem()
 	for i := 0; i < resultsValue.Len(); i++ {
 		item := resultsValue.Index(i).Addr().Interface()
-		eachResult := t.invokeCustomMethod("ListEach", item)
+		eachResult := t.callCustomMethod("ListEach", item)[0]
 		if reflect.TypeOf(eachResult).Kind() == reflect.Ptr {
 			eachResult = reflect.ValueOf(eachResult).Elem().Interface()
 		}
@@ -76,7 +68,7 @@ func (t *Trait) ActionList(c *gin.Context) {
 	}
 
 	// 返回结果
-	t.invokeCustomMethod("ListReturn", c, jcbaseGo.ListData{
+	t.callCustomMethod("ListReturn", jcbaseGo.ListData{
 		List:     results,
 		Total:    int(total),
 		Page:     page,
@@ -96,11 +88,7 @@ func (t *Trait) ListEach(item interface{}) interface{} {
 	return item
 }
 
-func (t *Trait) ListReturn(c *gin.Context, listData jcbaseGo.ListData) bool {
-	c.JSON(http.StatusOK, jcbaseGo.Result{
-		Code: 200,
-		Msg:  "ok",
-		Data: listData,
-	})
+func (t *Trait) ListReturn(listData jcbaseGo.ListData) bool {
+	t.Result(200, "ok", listData)
 	return true
 }
