@@ -43,7 +43,7 @@ func (s Input) Belong(allow []interface{}, strict bool) interface{} {
 
 // Html 清理并返回HTML内容
 func (s Input) Html() string {
-	val, ok := s.Value.(string)
+	val, ok := s.getStringValue()
 	if !ok || val == "" {
 		if defVal, ok := s.DefaultValue.(string); ok {
 			return defVal
@@ -70,15 +70,23 @@ func (s Input) Sanitize() interface{} {
 	}
 
 	valueType := reflect.TypeOf(s.Value)
+	valueValue := reflect.ValueOf(s.Value)
+
+	// 检查是否传入的是指针
+	if valueType.Kind() == reflect.Ptr {
+		valueType = valueType.Elem()
+		valueValue = valueValue.Elem()
+	}
+
 	switch valueType.Kind() {
 	case reflect.Slice:
-		return s.sanitizeSlice()
+		return s.sanitizeSlice(valueValue)
 	case reflect.Map:
-		return s.sanitizeMap()
+		return s.sanitizeMap(valueValue)
 	case reflect.String:
-		return s.sanitizeString(helper.Convert{Value: s.Value}.ToString())
+		return s.sanitizeString(helper.Convert{Value: valueValue.Interface()}.ToString())
 	case reflect.Struct:
-		return s.sanitizeStruct()
+		return s.sanitizeStruct(valueValue)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64, reflect.Bool:
@@ -109,8 +117,7 @@ func (s Input) badStrReplace(str string) string {
 }
 
 // sanitizeSlice 清理切片
-func (s Input) sanitizeSlice() []interface{} {
-	sliceValue := reflect.ValueOf(s.Value)
+func (s Input) sanitizeSlice(sliceValue reflect.Value) []interface{} {
 	sanitizedSlice := make([]interface{}, sliceValue.Len())
 
 	for i := 0; i < sliceValue.Len(); i++ {
@@ -121,8 +128,7 @@ func (s Input) sanitizeSlice() []interface{} {
 }
 
 // sanitizeMap 清理映射
-func (s Input) sanitizeMap() map[interface{}]interface{} {
-	mapValue := reflect.ValueOf(s.Value)
+func (s Input) sanitizeMap(mapValue reflect.Value) map[interface{}]interface{} {
 	sanitizedMap := make(map[interface{}]interface{})
 
 	for _, key := range mapValue.MapKeys() {
@@ -135,8 +141,7 @@ func (s Input) sanitizeMap() map[interface{}]interface{} {
 }
 
 // sanitizeStruct 清理结构体
-func (s Input) sanitizeStruct() interface{} {
-	value := reflect.ValueOf(s.Value)
+func (s Input) sanitizeStruct(value reflect.Value) interface{} {
 	sanitizedStruct := reflect.New(value.Type()).Elem()
 
 	for i := 0; i < value.NumField(); i++ {
@@ -188,4 +193,25 @@ func (s Input) removeXss(val string) string {
 	}
 
 	return val
+}
+
+// getStringValue 获取字符串值，如果传入的是指针，解引用
+func (s Input) getStringValue() (string, bool) {
+	valueType := reflect.TypeOf(s.Value)
+	valueValue := reflect.ValueOf(s.Value)
+
+	// 检查是否传入的是指针
+	if valueType.Kind() == reflect.Ptr {
+		if valueValue.IsNil() {
+			return "", false
+		}
+		valueType = valueType.Elem()
+		valueValue = valueValue.Elem()
+	}
+
+	if valueType.Kind() != reflect.String {
+		return "", false
+	}
+
+	return valueValue.String(), true
 }
