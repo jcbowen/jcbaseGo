@@ -65,7 +65,9 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	var delArr []map[string]interface{}
 	deleteQuery := t.MysqlMain.GetDb().Table(t.ModelTableName).
 		Select(fields)
-	deleteQuery = deleteQuery.Where("deleted_at IS NULL")
+	if helper.InArray("deleted_at", t.ModelFields) {
+		deleteQuery = deleteQuery.Where("deleted_at IS NULL")
+	}
 	// 获取删除条件
 	deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
 	err := deleteQuery.Find(&delArr).Error
