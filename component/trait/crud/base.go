@@ -160,8 +160,6 @@ func (t *Trait) Result(code int, msg string, args ...any) {
 			if err != nil {
 				log.Panic(err)
 			}
-			//errs := helper.JsonStruct(data).ToMap(&resultMapData).Errors()
-			//jcbaseGo.PanicIfError(errs)
 			resultData = resultMapData
 		} else if val.Kind() == reflect.Map {
 			// 检查是否为gin.H类型
@@ -173,7 +171,7 @@ func (t *Trait) Result(code int, msg string, args ...any) {
 		} else if val.Kind() == reflect.String {
 			resultData = data.(string)
 		} else if val.Kind() == reflect.Array || val.Kind() == reflect.Slice {
-			resultData = data.([]any)
+			resultData = convertToInterfaceSlice(data)
 		} else {
 			log.Panic("不支持的数据类型：" + val.Kind().String())
 		}
@@ -294,4 +292,19 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 	}
 
 	return nil
+}
+
+// convertToInterfaceSlice 将特定类型的切片转换为通用的 interface{} 切片
+func convertToInterfaceSlice(slice interface{}) []interface{} {
+	v := reflect.ValueOf(slice)
+	if v.Kind() != reflect.Slice {
+		panic("convertToInterfaceSlice: not a slice")
+	}
+
+	interfaceSlice := make([]interface{}, v.Len())
+	for i := 0; i < v.Len(); i++ {
+		interfaceSlice[i] = v.Index(i).Interface()
+	}
+
+	return interfaceSlice
 }
