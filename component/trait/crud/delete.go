@@ -102,12 +102,19 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	// 开启事务
 	tx := t.MysqlMain.GetDb().Begin()
 
-	// 获取删除操作更新的属性值
-	condition := t.callCustomMethod("GetDeleteCondition", delArr)[0].(map[string]interface{})
-
-	deleteQuery = tx.Model(t.Model)
-	deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
-	err = deleteQuery.Updates(condition).Error
+	// 执行删除
+	if helper.InArray("deleted_at", t.ModelFields) {
+		// 软删除（更新deleted_at字段）
+		condition := t.callCustomMethod("GetDeleteCondition", delArr)[0].(map[string]interface{})
+		deleteQuery = tx.Model(t.Model)
+		deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
+		err = deleteQuery.Updates(condition).Error
+	} else {
+		// 真实删除
+		deleteQuery = tx.Model(t.Model)
+		deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
+		err = deleteQuery.Delete(t.Model).Error
+	}
 
 	// 执行删除
 	if err != nil {
