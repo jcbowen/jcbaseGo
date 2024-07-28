@@ -115,7 +115,16 @@ func (b Base) SetGPC() gin.HandlerFunc {
 		queryParams := c.Request.URL.Query()
 		for key, values := range queryParams {
 			if len(values) > 0 {
-				GPC["query"][key] = values[0]
+				if strings.HasSuffix(key, "[]") {
+					cleanKey := strings.TrimSuffix(key, "[]")
+					GPC["query"][cleanKey] = values
+				} else {
+					//if len(values) > 1 {
+					//	GPC["query"][key] = values
+					//} else {
+					GPC["query"][key] = values[0]
+					//}
+				}
 			}
 		}
 
@@ -143,7 +152,16 @@ func (b Base) SetGPC() gin.HandlerFunc {
 			if err == nil {
 				for key, values := range c.Request.PostForm {
 					if len(values) > 0 {
-						formDataMap[key] = values[0]
+						if strings.HasSuffix(key, "[]") {
+							cleanKey := strings.TrimSuffix(key, "[]")
+							formDataMap[cleanKey] = values
+						} else {
+							//if len(values) > 1 {
+							//	formDataMap[key] = values
+							//} else {
+							formDataMap[key] = values[0]
+							//}
+						}
 					}
 				}
 			}
@@ -152,7 +170,16 @@ func (b Base) SetGPC() gin.HandlerFunc {
 			if err == nil {
 				for key, values := range c.Request.MultipartForm.Value {
 					if len(values) > 0 {
-						formDataMap[key] = values[0]
+						if strings.HasSuffix(key, "[]") {
+							cleanKey := strings.TrimSuffix(key, "[]")
+							formDataMap[cleanKey] = values
+						} else {
+							//if len(values) > 1 {
+							//	formDataMap[key] = values
+							//} else {
+							formDataMap[key] = values[0]
+							//}
+						}
 					}
 				}
 			}
@@ -185,6 +212,8 @@ func (b Base) SetGPC() gin.HandlerFunc {
 		mergeToall(GPC["header"])
 		mergeToall(GPC["cookie"])
 		mergeToall(GPC["data"])
+
+		// log.Println("GPC：", GPC)
 
 		c.Set("GPC", GPC)
 
