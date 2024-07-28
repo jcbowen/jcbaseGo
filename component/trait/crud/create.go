@@ -25,14 +25,32 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	// 调用自定义的BeforeCreate方法进行前置处理
 	modelValue = t.callCustomMethod("BeforeCreate", modelValue, mapData)[0]
 
+	// 开启事务
+	tx := t.MysqlMain.GetDb().Begin()
+
 	// 插入数据
-	if err := t.MysqlMain.GetDb().Create(modelValue).Error; err != nil {
+	if err := tx.Create(modelValue).Error; err != nil {
+		tx.Rollback()
 		t.Result(errcode.DatabaseError, "ok")
 		return
 	}
 
 	// 调用自定义的AfterCreate方法进行后置处理
-	modelValue = t.callCustomMethod("AfterCreate", modelValue)[0]
+	callErr := t.callCustomMethod("AfterCreate", modelValue)[0]
+	if callErr != nil {
+		err, ok := callErr.(error)
+		if ok && err != nil {
+			tx.Rollback()
+			t.Result(errcode.Unknown, err.Error())
+			return
+		}
+	}
+
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		t.Result(errcode.DatabaseTransactionCommitError, "事务提交失败，请重试")
+		return
+	}
 
 	// 返回结果
 	t.callCustomMethod("CreateReturn", modelValue)
