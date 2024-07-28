@@ -85,8 +85,17 @@ func setFieldIfExist(model interface{}, fieldName string, value string) {
 		modelValue = modelValue.Elem()
 	}
 
-	field := modelValue.FieldByName(fieldName)
-	if field.IsValid() && field.CanSet() && field.Kind() == reflect.String {
-		field.SetString(value)
+	switch modelValue.Kind() {
+	case reflect.Struct:
+		field := modelValue.FieldByName(fieldName)
+		if field.IsValid() && field.CanSet() && field.Kind() == reflect.String {
+			field.SetString(value)
+		}
+	case reflect.Map:
+		key := reflect.ValueOf(fieldName)
+		if modelValue.MapIndex(key).IsValid() {
+			modelValue.SetMapIndex(key, reflect.ValueOf(value))
+		}
+	default:
 	}
 }
