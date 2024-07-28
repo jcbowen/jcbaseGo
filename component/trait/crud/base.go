@@ -200,8 +200,11 @@ func (t *Trait) Result(code int, msg string, args ...any) {
 		}
 	}
 
+	log.Println(reflect.TypeOf(result["data"]).Kind())
+
 	// 设置数据统计字段
-	if reflect.TypeOf(result["data"]).Kind() == reflect.Map {
+	dataKind := reflect.TypeOf(result["data"]).Kind()
+	if dataKind == reflect.Map {
 		if list, exists := result["data"].(map[string]any)["list"].([]any); exists {
 			total := len(list)
 			if countParam, exists := result["data"].(map[string]any)["total"]; exists {
@@ -218,6 +221,14 @@ func (t *Trait) Result(code int, msg string, args ...any) {
 				} else if resultDataSlice, ok := result["data"].([]any); ok {
 					result["total"] = len(resultDataSlice)
 				}
+			}
+		}
+	} else if dataKind == reflect.Slice {
+		if countParam, exists := result["total"]; exists {
+			result["total"] = countParam
+		} else {
+			if resultDataSlice, ok := result["data"].([]any); ok {
+				result["total"] = len(resultDataSlice)
 			}
 		}
 	}
