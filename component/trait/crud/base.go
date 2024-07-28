@@ -14,18 +14,19 @@ import (
 )
 
 type Trait struct {
-	PkId            string   `default:"id"` // 数据表主键
-	ModelTableName  string   // 模型表名
-	ModelFields     []string // 模型所有字段
-	ModelTableAlias string   // 模型表别名
-	OperateTime     string   // 操作时间
+	// ----- 基础配置 ----- /
+	PkId            string          `default:"id"` // 数据表主键
+	Model           any             // 模型指针
+	ModelTableAlias string          // 模型表别名
+	MysqlMain       *mysql.Instance // 数据库实例
+	Controller      interface{}     // 控制器
 
-	Model      any             // 模型指针
-	MysqlMain  *mysql.Instance // 数据库实例
-	Controller interface{}     // 控制器
-	GinContext *gin.Context    // 请求上下文
-
-	tableAlias string // 表别名（仅用于拼接查询语句）
+	// ----- 初始化时生成 ----- /
+	GinContext     *gin.Context // 请求上下文
+	ModelTableName string       // 模型表名
+	ModelFields    []string     // 模型所有字段
+	OperateTime    string       // 操作时间
+	tableAlias     string       // 表别名（仅用于拼接查询语句）
 }
 
 // 初始化crud，仅当初始化完成才可以使用
