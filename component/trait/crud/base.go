@@ -23,7 +23,7 @@ type Trait struct {
 	GinContext *gin.Context    // 请求上下文
 }
 
-// 初始化
+// 初始化crud，仅当初始化完成才可以使用
 func (t *Trait) checkInit(c *gin.Context) {
 	_ = helper.CheckAndSetDefault(t)
 	t.GinContext = c
