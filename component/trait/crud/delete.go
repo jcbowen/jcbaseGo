@@ -16,7 +16,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	// 获取GPC参数
 	gpcInterface, GPCExists := t.GinContext.Get("GPC")
 	if !GPCExists {
-		t.Result(errcode.ParamError, "参数缺失，请重试")
+		t.Result(errcode.ParamError, "未接收到有效参数，请重试")
 		return
 	}
 	formDataMap := gpcInterface.(map[string]map[string]any)["all"]
