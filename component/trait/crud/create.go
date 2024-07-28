@@ -47,7 +47,7 @@ func (t *Trait) BeforeCreate(modelValue interface{}, mapData map[string]any) (in
 	return t.BeforeSave(modelValue, mapData)
 }
 
-func (t *Trait) AfterCreate(modelValue interface{}) interface{} {
+func (t *Trait) AfterCreate(modelValue interface{}) error {
 	// 可以在此处添加一些后置处理逻辑
 	return t.AfterSave(modelValue)
 }

@@ -62,9 +62,9 @@ func (t *Trait) BeforeSave(modelValue interface{}, mapData map[string]any) (inte
 }
 
 // AfterSave 保存后
-func (t *Trait) AfterSave(modelValue interface{}) interface{} {
+func (t *Trait) AfterSave(modelValue interface{}) error {
 	// 可以在此处添加一些后置处理逻辑
-	return modelValue
+	return nil
 }
 
 // BindMapToStruct 将 map 数据绑定到 struct，并处理类型转换
