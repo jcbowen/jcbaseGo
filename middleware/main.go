@@ -184,7 +184,9 @@ func (b Base) SetGPC() gin.HandlerFunc {
 				}
 			}
 		default:
-			log.Println("Unsupported Content-Type：", c.ContentType())
+			if c.ContentType() != "" {
+				log.Println("Unsupported Content-Type：", c.ContentType())
+			}
 			/*err = gin.Error{
 				Err:  errors.New("unsupported request method"),
 				Type: gin.ErrorTypeBind,
