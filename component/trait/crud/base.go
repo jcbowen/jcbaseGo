@@ -201,7 +201,7 @@ func (t *Trait) Result(code int, msg string, args ...any) {
 		}
 	}
 
-	log.Println(reflect.TypeOf(result["data"]).Kind())
+	// log.Println(reflect.TypeOf(result["data"]).Kind())
 
 	// 设置数据统计字段
 	dataKind := reflect.TypeOf(result["data"]).Kind()
