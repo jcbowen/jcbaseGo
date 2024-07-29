@@ -95,7 +95,18 @@ func (i *Instance) Set(key string, value interface{}, args ...time.Duration) err
 		expire = args[0]
 	}
 
-	jsonString, _ := json.Marshal(value)
+	var jsonString string
+	switch v := value.(type) {
+	case string:
+		jsonString = v
+	default:
+		jsonBytes, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		jsonString = string(jsonBytes)
+	}
+
 	err := i.Client.Set(i.Context, key, string(jsonString), expire).Err()
 	return err
 }
