@@ -1,13 +1,11 @@
 package crud
 
 import (
-	"encoding/json"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/orm/mysql"
 	"log"
-	"net/http"
 	"reflect"
 	"strconv"
 	"time"
@@ -136,105 +134,7 @@ func (t *Trait) ExtractPkId() (pkValue uint, err error) {
 
 // Result 整理结果输出
 func (t *Trait) Result(code int, msg string, args ...any) {
-	// 虽然定义的是any，但是约定只能为map/string/[]any
-	var resultData any
-	resultMapData := make(map[string]any)
-
-	if len(args) > 0 && !helper.IsEmptyValue(args[0]) {
-		data := args[0]
-		val := reflect.ValueOf(data)
-
-		// 如果是指针类型，获取指针指向的数据类型
-		if val.Kind() == reflect.Ptr {
-			val = val.Elem()
-			data = val.Interface()
-		}
-
-		if val.Kind() == reflect.Struct {
-			// 将data转换为map
-			jsonData, err := json.Marshal(data)
-			if err != nil {
-				log.Panic(err)
-			}
-			// Convert JSON to map
-			err = json.Unmarshal(jsonData, &resultMapData)
-			if err != nil {
-				log.Panic(err)
-			}
-			resultData = resultMapData
-		} else if val.Kind() == reflect.Map {
-			// 检查是否为gin.H类型
-			if _, ok := data.(gin.H); ok {
-				resultData = map[string]any(data.(gin.H))
-			} else {
-				resultData = data.(map[string]any)
-			}
-		} else if val.Kind() == reflect.String {
-			resultData = data.(string)
-		} else if val.Kind() == reflect.Array || val.Kind() == reflect.Slice {
-			resultData = convertToInterfaceSlice(data)
-		} else {
-			log.Panic("不支持的数据类型：" + val.Kind().String())
-		}
-	} else {
-		resultData = make(map[string]any)
-	}
-
-	// 获取resultData的类型
-	resultDataType := reflect.TypeOf(resultData)
-	if resultDataType == nil {
-		resultData = nil
-	}
-
-	// 构建结果map
-	result := map[string]any{
-		"code":    code,
-		"message": msg,
-		"data":    resultData,
-	}
-
-	// 合并附加参数
-	if len(args) > 1 && !helper.IsEmptyValue(args[1]) {
-		additionalParams := args[1]
-		for k, v := range additionalParams.(map[string]any) {
-			result[k] = v
-		}
-	}
-
-	// log.Println(reflect.TypeOf(result["data"]).Kind())
-
-	// 设置数据统计字段
-	dataKind := reflect.TypeOf(result["data"]).Kind()
-	if dataKind == reflect.Map {
-		if list, exists := result["data"].(map[string]any)["list"].([]any); exists {
-			total := len(list)
-			if countParam, exists := result["data"].(map[string]any)["total"]; exists {
-				result["data"].(map[string]any)["total"] = countParam
-			} else {
-				result["data"].(map[string]any)["total"] = total
-			}
-		} else {
-			if countParam, exists := result["total"]; exists {
-				result["total"] = countParam
-			} else {
-				if resultDataMap, ok := result["data"].(map[string]any); ok {
-					result["total"] = len(resultDataMap)
-				} else if resultDataSlice, ok := result["data"].([]any); ok {
-					result["total"] = len(resultDataSlice)
-				}
-			}
-		}
-	} else if dataKind == reflect.Slice {
-		if countParam, exists := result["total"]; exists {
-			result["total"] = countParam
-		} else {
-			if resultDataSlice, ok := result["data"].([]any); ok {
-				result["total"] = len(resultDataSlice)
-			}
-		}
-	}
-
-	t.GinContext.JSON(http.StatusOK, result)
+	helper.Controller{GinContext: t.GinContext}.Result(code, msg, args...)
 }
 
 // BindMapToStruct 将 map 数据绑定到 struct，并处理类型转换
@@ -304,19 +204,4 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 	}
 
 	return nil
-}
-
-// convertToInterfaceSlice 将特定类型的切片转换为通用的 interface{} 切片
-func convertToInterfaceSlice(slice interface{}) []interface{} {
-	v := reflect.ValueOf(slice)
-	if v.Kind() != reflect.Slice {
-		panic("convertToInterfaceSlice: not a slice")
-	}
-
-	interfaceSlice := make([]interface{}, v.Len())
-	for i := 0; i < v.Len(); i++ {
-		interfaceSlice[i] = v.Index(i).Interface()
-	}
-
-	return interfaceSlice
 }
