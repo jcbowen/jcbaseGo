@@ -3,6 +3,7 @@ package helper
 import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo/errcode"
 	"log"
 	"net/http"
 	"reflect"
@@ -14,15 +15,60 @@ type Controller struct {
 
 // ----- 公共方法 ----- /
 
+// Success 返回成功的响应
+// 这个方法用于简化成功响应的构建，接收可变参数，
+// 并根据参数数量确定响应的data、additionalParams和message字段的值。
+func (c Controller) Success(args ...any) {
+	var (
+		message          = "success"
+		data             any
+		additionalParams map[string]any
+	)
+	switch len(args) {
+	case 1:
+		data = args[0]
+	case 2:
+		data = args[0]
+		message = args[1].(string)
+	case 3:
+		data = args[0]
+		additionalParams = args[1].(map[string]any)
+		message = args[1].(string)
+	}
+	c.Result(errcode.Success, message, data, additionalParams)
+}
+
+// Failure 返回失败的响应
+// 这个方法用于简化失败响应的构建，接收可变参数
+func (c Controller) Failure(args ...any) {
+	var (
+		code             = errcode.BadRequest
+		message          = "failure"
+		data             any
+		additionalParams map[string]any
+	)
+	switch len(args) {
+	case 1:
+		data = args[0]
+	case 2:
+		data = args[0]
+		message = args[1].(string)
+	case 3:
+		data = args[0]
+		message = args[2].(string)
+		code = args[3].(int)
+	}
+	c.Result(code, message, data, additionalParams)
+}
+
 // Result 整理结果输出
 // 这个方法用于统一返回API响应结果。接收状态码、消息以及可选的额外参数，
 // 并根据传入的数据类型对结果进行格式化和处理，最终返回JSON格式的响应。
 // 参数：
 //   - code int: 状态码，通常为HTTP状态码。
 //   - msg string: 返回的消息内容。
-//   - args ...any: 可选的附加数据参数，约定只能为map、string或slice。
-//   - args[0]: 主要数据内容，可以是结构体、map、string或slice。
-//   - args[1]: 附加参数，类型为map[string]any。
+//   - data any 选填，主要数据内容，可以是结构体、map、string或slice。
+//   - additionalParams map[string]any 选填，附加参数
 func (c Controller) Result(code int, msg string, args ...any) {
 	// 虽然定义的是any，但是约定只能为map/string/[]any
 	var resultData any
@@ -83,9 +129,11 @@ func (c Controller) Result(code int, msg string, args ...any) {
 
 	// 合并附加参数
 	if len(args) > 1 && !IsEmptyValue(args[1]) {
-		additionalParams := args[1]
-		for k, v := range additionalParams.(map[string]any) {
-			result[k] = v
+		additionalParams, ok := args[1].(map[string]any)
+		if ok {
+			for k, v := range additionalParams {
+				result[k] = v
+			}
 		}
 	}
 
