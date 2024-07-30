@@ -367,12 +367,20 @@ func CopyStruct(src, dst interface{}) {
 }
 
 // MergeStructs 函数将多个源结构体中的非零值合并到目标结构体中，后面的源结构体会覆盖前面的。
-func MergeStructs(dst interface{}, src ...interface{}) {
-	dstVal := reflect.ValueOf(dst).Elem()
+func MergeStructs(dst interface{}, src ...interface{}) error {
+	dstVal := reflect.ValueOf(dst)
+	if dstVal.Kind() != reflect.Ptr || dstVal.Elem().Kind() != reflect.Struct {
+		return errors.New("dst must be a pointer to a struct")
+	}
+	dstVal = dstVal.Elem()
 
 	// 反向遍历源结构体数组，以确保后面的覆盖前面的
 	for i := len(src) - 1; i >= 0; i-- {
-		srcVal := reflect.ValueOf(src[i]).Elem()
+		srcVal := reflect.ValueOf(src[i])
+		if srcVal.Kind() != reflect.Ptr || srcVal.Elem().Kind() != reflect.Struct {
+			return errors.New("each src must be a pointer to a struct")
+		}
+		srcVal = srcVal.Elem()
 
 		// 遍历源结构体的每个字段
 		for j := 0; j < srcVal.NumField(); j++ {
@@ -390,6 +398,7 @@ func MergeStructs(dst interface{}, src ...interface{}) {
 			}
 		}
 	}
+	return nil
 }
 
 // GetFieldNameByJSONTag 根据 JSON 标记获取结构体字段名
