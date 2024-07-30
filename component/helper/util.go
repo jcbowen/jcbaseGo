@@ -366,6 +366,32 @@ func CopyStruct(src, dst interface{}) {
 	}
 }
 
+// MergeStructs 函数将多个源结构体中的非零值合并到目标结构体中，后面的源结构体会覆盖前面的。
+func MergeStructs(dst interface{}, src ...interface{}) {
+	dstVal := reflect.ValueOf(dst).Elem()
+
+	// 反向遍历源结构体数组，以确保后面的覆盖前面的
+	for i := len(src) - 1; i >= 0; i-- {
+		srcVal := reflect.ValueOf(src[i]).Elem()
+
+		// 遍历源结构体的每个字段
+		for j := 0; j < srcVal.NumField(); j++ {
+			srcField := srcVal.Field(j)
+			dstField := dstVal.FieldByName(srcVal.Type().Field(j).Name)
+
+			// 检查目标结构体中是否有对应的字段，并且该字段可以被设置且类型相同
+			if dstField.IsValid() && dstField.CanSet() && srcField.Type() == dstField.Type() {
+				// 检查源字段是否为零值
+				zeroValue := reflect.Zero(srcField.Type()).Interface()
+				if !reflect.DeepEqual(srcField.Interface(), zeroValue) {
+					// 如果源字段不是零值，则将其设置到目标字段
+					dstField.Set(srcField)
+				}
+			}
+		}
+	}
+}
+
 // GetFieldNameByJSONTag 根据 JSON 标记获取结构体字段名
 func GetFieldNameByJSONTag(objType reflect.Type, jsonKey string) string {
 	for i := 0; i < objType.NumField(); i++ {
