@@ -366,8 +366,8 @@ func CopyStruct(src, dst interface{}) {
 	}
 }
 
-// MergeStructs 函数将多个源结构体中的非零值合并到目标结构体中，后面的源结构体会覆盖前面的。
-func MergeStructs(dst interface{}, src ...interface{}) error {
+// StructMerge 函数将多个源结构体中的非零值合并到目标结构体中，后面的源结构体会覆盖前面的。
+func StructMerge(dst interface{}, src ...interface{}) error {
 	dstVal := reflect.ValueOf(dst)
 	if dstVal.Kind() != reflect.Ptr || dstVal.Elem().Kind() != reflect.Struct {
 		return errors.New("dst must be a pointer to a struct")
