@@ -25,7 +25,7 @@ func (b *MysqlBaseModel) ModelParse(modelType reflect.Type) (tableName string, f
 	// ----- 获取数据表名称 ----- /
 	var dbConfig DbStruct
 	dbConfigStr := os.Getenv("jc_mysql_" + b.ConfigAlias())
-	helper.JsonString(dbConfigStr).ToStruct(&dbConfig)
+	helper.Json(dbConfigStr).ToStruct(&dbConfig)
 
 	// 获取表前缀
 	prefix := dbConfig.TablePrefix

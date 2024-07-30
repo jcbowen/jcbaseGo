@@ -54,7 +54,7 @@ func New(Conf jcbaseGo.SqlLiteStruct) (i *Instance) {
 
 	// 将配置信息储存到环境变量
 	envStr := ""
-	helper.JsonStruct(Conf).ToString(&envStr)
+	helper.Json(Conf).ToString(&envStr)
 	err = os.Setenv("jc_sql_lite_"+Conf.Alias, envStr)
 	jcbaseGo.PanicIfError(err)
 

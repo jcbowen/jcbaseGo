@@ -3,8 +3,10 @@ package helper
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
+	"time"
 )
 
 type JsonHelper struct {
@@ -26,11 +28,81 @@ const (
 	mapType
 )
 
-// ----- 实例化，Begin ----- /
-
-// JsonStruct 根据传入的结构体实例化JsonHelper
-func JsonStruct(jsonStruct interface{}) *JsonHelper {
-	return &JsonHelper{Struct: jsonStruct, initType: structType}
+// Json 根据传入的未知类型实例化JsonHelper
+func Json(input interface{}) *JsonHelper {
+	jh := &JsonHelper{}
+	switch v := input.(type) {
+	case string:
+		jh.String = v
+		jh.initType = stringType
+	case map[string]interface{}:
+		jh.Map = v
+		jh.initType = mapType
+	case []byte:
+		jh.String = string(v)
+		jh.initType = stringType
+	case int, int8, int16, int32, int64:
+		jh.String = fmt.Sprintf("%d", v)
+		jh.initType = stringType
+	case uint, uint8, uint16, uint32, uint64:
+		jh.String = fmt.Sprintf("%d", v)
+		jh.initType = stringType
+	case float32, float64:
+		jh.String = fmt.Sprintf("%f", v)
+		jh.initType = stringType
+	case bool:
+		jh.String = fmt.Sprintf("%t", v)
+		jh.initType = stringType
+	case []interface{}:
+		jsonBytes, err := json.Marshal(v)
+		if err != nil {
+			jh.errors = append(jh.errors, err)
+			jh.initType = unknownType
+		} else {
+			jh.String = string(jsonBytes)
+			jh.initType = stringType
+		}
+	case time.Time:
+		jh.String = v.Format(time.RFC3339)
+		jh.initType = stringType
+	case map[interface{}]interface{}:
+		convertedMap := make(map[string]interface{})
+		for key, value := range v {
+			convertedMap[fmt.Sprintf("%v", key)] = value
+		}
+		jh.Map = convertedMap
+		jh.initType = mapType
+	case nil:
+		jh.String = "null"
+		jh.initType = stringType
+	default:
+		val := reflect.ValueOf(input)
+		switch val.Kind() {
+		case reflect.Ptr, reflect.Struct:
+			jh.Struct = input
+			jh.initType = structType
+		case reflect.Slice, reflect.Array:
+			jsonBytes, err := json.Marshal(input)
+			if err != nil {
+				jh.errors = append(jh.errors, err)
+				jh.initType = unknownType
+			} else {
+				jh.String = string(jsonBytes)
+				jh.initType = stringType
+			}
+		case reflect.Map:
+			convertedMap := make(map[string]interface{})
+			for _, key := range val.MapKeys() {
+				convertedMap[fmt.Sprintf("%v", key.Interface())] = val.MapIndex(key).Interface()
+			}
+			jh.Map = convertedMap
+			jh.initType = mapType
+		default:
+			jh.errors = append(jh.errors, errors.New("不支持的输入类型"))
+			jh.initType = unknownType
+		}
+	}
+	return jh
 }
 
 // JsonFile 根据传入的文件路径读取JSON文件并实例化JsonHelper
@@ -53,45 +125,6 @@ func JsonFile(path string) *JsonHelper {
 	return jh
 }
 
-// JsonString 根据传入的JSON字符串实例化JsonHelper
-func JsonString(jsonString string) *JsonHelper {
-	return &JsonHelper{String: jsonString, initType: stringType}
-}
-
-// JsonMap 根据传入的Map实例化JsonHelper
-func JsonMap(jsonMap map[string]interface{}) *JsonHelper {
-	return &JsonHelper{Map: jsonMap, initType: mapType}
-}
-
-// JsonAny 根据传入的未知类型实例化JsonHelper
-func JsonAny(input interface{}) *JsonHelper {
-	jh := &JsonHelper{}
-	switch v := input.(type) {
-	case string:
-		jh.String = v
-		jh.initType = stringType
-	case map[string]interface{}:
-		jh.Map = v
-		jh.initType = mapType
-	case []byte:
-		jh.String = string(v)
-		jh.initType = stringType
-	default:
-		if reflect.ValueOf(input).Kind() == reflect.Ptr {
-			jh.Struct = input
-			jh.initType = structType
-		} else {
-			jh.errors = append(jh.errors, errors.New("不支持的输入类型"))
-			jh.initType = unknownType
-		}
-	}
-	return jh
-}
-
-// ----- 实例化，End ----- /
-
-// ----- 参数配置，Begin ----- /
-
 // MakeFile 设置是否生成JSON文件及其路径
 func (jh *JsonHelper) MakeFile(filepath string) *JsonHelper {
 	if filepath == "" {
@@ -105,10 +138,6 @@ func (jh *JsonHelper) MakeFile(filepath string) *JsonHelper {
 	jh.filePath = absFilePath
 	return jh
 }
-
-// ----- 参数配置，End ----- /
-
-// ----- 转换，Begin ----- /
 
 // 将任意数据转换为JSON字符串
 func (jh *JsonHelper) toJSONString() {
@@ -215,8 +244,6 @@ func (jh *JsonHelper) ToFile() *JsonHelper {
 	return jh
 }
 
-// ----- 转换，End ----- /
-
 // HasError 判断是否有错误
 func (jh *JsonHelper) HasError() bool {
 	return len(jh.errors) > 0
@@ -225,4 +252,19 @@ func (jh *JsonHelper) HasError() bool {
 // Errors 获取错误信息列表
 func (jh *JsonHelper) Errors() []error {
 	return jh.errors
+}
+
+// Deprecated: 使用 Json 代替
+func JsonString(jsonString string) *JsonHelper {
+	return Json(jsonString)
+}
+
+// Deprecated: 使用 Json 代替
+func JsonStruct(jsonStruct interface{}) *JsonHelper {
+	return Json(jsonStruct)
+}
+
+// Deprecated: 使用 Json 代替
+func JsonMap(jsonMap map[string]interface{}) *JsonHelper {
+	return Json(jsonMap)
 }

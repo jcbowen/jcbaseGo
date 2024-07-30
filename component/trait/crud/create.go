@@ -82,7 +82,7 @@ func (t *Trait) CreateReturn(item any) bool {
 
 	switch reflect.TypeOf(item).Kind() {
 	case reflect.Struct:
-		helper.JsonStruct(item).ToMap(&mapItem)
+		helper.Json(item).ToMap(&mapItem)
 	default:
 		mapItem = item.(map[string]any)
 	}

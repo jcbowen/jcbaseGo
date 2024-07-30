@@ -60,7 +60,7 @@ func New(dbConfig jcbaseGo.DbStruct) *Instance {
 
 	// 将配置信息储存到环境变量
 	envStr := ""
-	helper.JsonStruct(dbConfig).ToString(&envStr)
+	helper.Json(dbConfig).ToString(&envStr)
 	err = os.Setenv("jc_mysql_"+dbConfig.Alias, envStr)
 	jcbaseGo.PanicIfError(err)
 

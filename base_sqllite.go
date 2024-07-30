@@ -24,7 +24,7 @@ func (b *SQLLiteBaseModel) ModelParse(modelType reflect.Type) (tableName string,
 	// ----- 获取数据表名称 ----- /
 	var dbConfig SqlLiteStruct
 	dbConfigStr := os.Getenv("jc_sql_lite_" + b.ConfigAlias())
-	helper.JsonString(dbConfigStr).ToStruct(&dbConfig)
+	helper.Json(dbConfigStr).ToStruct(&dbConfig)
 
 	// 获取表前缀
 	prefix := dbConfig.TablePrefix
