@@ -3,64 +3,96 @@ package helper
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"os"
+	"reflect"
 )
 
 type JsonHelper struct {
 	Struct   interface{}            // 结构体
-	String   string                 // json字符串
-	Map      map[string]interface{} // map
-	needFile bool                   // 是否需要输出json文件
-	filePath string                 // 输出json文件路径
-	errors   []error
-	// sort     bool                   // 是否需要排序（废弃：不再支持排序，有需求可通过map去进行排序）
+	String   string                 // JSON字符串
+	Map      map[string]interface{} // Map
+	initType jsonDataType           // 初始化时的数据类型
+	needFile bool                   // 是否需要输出JSON文件
+	filePath string                 // 输出JSON文件路径
+	errors   []error                // 错误信息列表
 }
+
+type jsonDataType int
+
+const (
+	unknownType jsonDataType = iota
+	structType
+	stringType
+	mapType
+)
 
 // ----- 实例化，Begin ----- /
 
+// JsonStruct 根据传入的结构体实例化JsonHelper
 func JsonStruct(jsonStruct interface{}) *JsonHelper {
-	return &JsonHelper{Struct: jsonStruct}
+	return &JsonHelper{Struct: jsonStruct, initType: structType}
 }
 
-// JsonFile 根据传入的文件路径自动读取文件中的json内容
-// path: json文件路径
+// JsonFile 根据传入的文件路径读取JSON文件并实例化JsonHelper
 func JsonFile(path string) *JsonHelper {
-	jsonStruct := &JsonHelper{}
-	// 获取绝对路径
+	jh := &JsonHelper{initType: stringType}
 	absPath, _ := NewFile(&File{Path: path}).GetAbsPath()
-	// 判断文件是否存在
-	if !(NewFile(&File{Path: path}).Exists()) {
-		jsonStruct.errors = append(jsonStruct.errors, errors.New("json文件不存在\n文件路径: "+absPath))
-		return jsonStruct
+
+	if !NewFile(&File{Path: path}).Exists() {
+		jh.errors = append(jh.errors, errors.New("JSON文件不存在\n文件路径: "+absPath))
+		return jh
 	}
 
-	file, fErr := os.ReadFile(absPath)
-	if fErr != nil {
-		jsonStruct.errors = append(jsonStruct.errors, fErr)
-		return jsonStruct
+	file, err := os.ReadFile(absPath)
+	if err != nil {
+		jh.errors = append(jh.errors, err)
+		return jh
 	}
-	fileDataString := string(file)
 
-	jsonStruct.String = fileDataString
-
-	return jsonStruct
+	jh.String = string(file)
+	return jh
 }
 
+// JsonString 根据传入的JSON字符串实例化JsonHelper
 func JsonString(jsonString string) *JsonHelper {
-	return &JsonHelper{String: jsonString}
+	return &JsonHelper{String: jsonString, initType: stringType}
 }
 
+// JsonMap 根据传入的Map实例化JsonHelper
 func JsonMap(jsonMap map[string]interface{}) *JsonHelper {
-	return &JsonHelper{Map: jsonMap}
+	return &JsonHelper{Map: jsonMap, initType: mapType}
+}
+
+// JsonAny 根据传入的未知类型实例化JsonHelper
+func JsonAny(input interface{}) *JsonHelper {
+	jh := &JsonHelper{}
+	switch v := input.(type) {
+	case string:
+		jh.String = v
+		jh.initType = stringType
+	case map[string]interface{}:
+		jh.Map = v
+		jh.initType = mapType
+	case []byte:
+		jh.String = string(v)
+		jh.initType = stringType
+	default:
+		if reflect.ValueOf(input).Kind() == reflect.Ptr {
+			jh.Struct = input
+			jh.initType = structType
+		} else {
+			jh.errors = append(jh.errors, errors.New("不支持的输入类型"))
+			jh.initType = unknownType
+		}
+	}
+	return jh
 }
 
 // ----- 实例化，End ----- /
 
 // ----- 参数配置，Begin ----- /
 
-// MakeFile
-// 是否生成json文件
+// MakeFile 设置是否生成JSON文件及其路径
 func (jh *JsonHelper) MakeFile(filepath string) *JsonHelper {
 	if filepath == "" {
 		filepath = "./file.json"
@@ -78,34 +110,47 @@ func (jh *JsonHelper) MakeFile(filepath string) *JsonHelper {
 
 // ----- 转换，Begin ----- /
 
+// 将任意数据转换为JSON字符串
+func (jh *JsonHelper) toJSONString() {
+	if jh.String == "" {
+		var data interface{}
+		switch jh.initType {
+		case structType:
+			data = jh.Struct
+		case mapType:
+			data = jh.Map
+		default:
+			jh.errors = append(jh.errors, errors.New("没有提供可供转换的数据"))
+			return
+		}
+
+		jsonBytes, err := json.Marshal(data)
+		if err != nil {
+			jh.errors = append(jh.errors, err)
+			return
+		}
+		jh.String = string(jsonBytes)
+	}
+}
+
+// ToStruct 将JSON数据转换为结构体
 func (jh *JsonHelper) ToStruct(newStruct interface{}) *JsonHelper {
-	if len(jh.Map) == 0 && jh.String == "" {
-		err := errors.New("没有提供可供转换的数据")
-		jh.errors = append(jh.errors, err)
+	if jh.initType == mapType {
+		jh.toJSONString()
+	}
+
+	if jh.String == "" {
+		jh.errors = append(jh.errors, errors.New("没有提供可供转换的数据"))
 		return jh
 	}
 
-	// 如果字符串为空但是map不为空，需要将map转为字符串
-	if jh.String == "" {
-		jh = jh.ToString(&jh.String)
-	}
-
-	// 如果字符串还是为空，多半转换就出现问题了
-	if jh.String == "" {
-		err := errors.New("转换出错，请检查数据格式")
-		jh.errors = append(jh.errors, err)
-		return jh
-	}
-
-	// 将字符串转为结构体
-	err := json.Unmarshal([]byte(jh.String), &newStruct)
-	if err != nil {
+	if err := json.Unmarshal([]byte(jh.String), newStruct); err != nil {
 		jh.errors = append(jh.errors, err)
 		return jh
 	}
 	jh.Struct = newStruct
+	jh.initType = structType
 
-	// 判断是否需要输出json文件
 	if jh.needFile {
 		jh.ToFile()
 	}
@@ -113,90 +158,57 @@ func (jh *JsonHelper) ToStruct(newStruct interface{}) *JsonHelper {
 	return jh
 }
 
+// ToString 将结构体或Map转换为JSON字符串
 func (jh *JsonHelper) ToString(newStr *string) *JsonHelper {
-	jsonStr := jh.String
+	jh.toJSONString()
 
-	if len(jh.Map) == 0 && jh.Struct == nil { // 如果结构体和字符串都为空，则返回错误
-		err := errors.New("没有提供可供转换的数据")
-		jh.errors = append(jh.errors, err)
+	if jh.String == "" {
 		return jh
 	}
 
-	// 判断是用结构体还是map去转
-	var oData interface{}
-	if jh.Struct != nil {
-		oData = jh.Struct
-	} else {
-		oData = jh.Map
-	}
-	jsonByte, err := json.Marshal(oData)
-	if err != nil {
-		jh.errors = append(jh.errors, err)
-		return jh
-	}
-	jsonStr = string(jsonByte)
-
-	// 判断是否需要输出json文件
 	if jh.needFile {
-		jh = jh.ToFile()
+		jh.ToFile()
 	}
 
-	// 不相同时才进行赋值
-	if *newStr != jsonStr {
-		*newStr = jsonStr
-	}
-
+	*newStr = jh.String
 	return jh
 }
 
+// ToMap 将JSON字符串或结构体转换为Map
 func (jh *JsonHelper) ToMap(newMap *map[string]interface{}) *JsonHelper {
-	if jh.String == "" {
-		jh = jh.ToString(&jh.String)
+	if jh.initType == structType {
+		jh.toJSONString()
 	}
 
 	if jh.String == "" {
-		err := errors.New("转换出错，请检查数据格式")
-		jh.errors = append(jh.errors, err)
+		jh.errors = append(jh.errors, errors.New("没有提供可供转换的数据"))
 		return jh
 	}
 
-	err := json.Unmarshal([]byte(jh.String), newMap)
-	if err != nil {
+	if err := json.Unmarshal([]byte(jh.String), newMap); err != nil {
 		jh.errors = append(jh.errors, err)
 		return jh
 	}
 	jh.Map = *newMap
+	jh.initType = mapType
+
+	if jh.needFile {
+		jh.ToFile()
+	}
 
 	return jh
 }
 
+// ToFile 将JSON字符串输出为文件
 func (jh *JsonHelper) ToFile() *JsonHelper {
-	if jh.String == "" {
-		// 避免在获取json字符串时重复执行本方法
-		if jh.needFile {
-			jh.needFile = false
-		}
+	jh.toJSONString()
 
-		jh = jh.ToString(&jh.String)
-	}
-
-	// 还是为空肯定意味着哪里出问题了
 	if jh.String == "" {
-		// 有错误的话，在上面的转换步骤就已经写入错误了，这里无需重新写入
-		if len(jh.Errors()) == 0 {
-			jh.errors = append(jh.errors, errors.New("转换出字符串类型json时出错"))
-		}
+		jh.errors = append(jh.errors, errors.New("转换出字符串类型JSON时出错"))
 		return jh
 	}
 
-	// 都走到这步了，肯定是需要输出为文件的，改变状态值以便他用
-	if !jh.needFile {
-		jh.needFile = true
-	}
-
-	// 生成json文件
-	err := NewFile(&File{Path: jh.filePath, Perm: os.ModePerm}).CreateFile([]byte(jh.String), true)
-	if err != nil {
+	if err := NewFile(&File{Path: jh.filePath, Perm: os.ModePerm}).CreateFile([]byte(jh.String), true); err != nil {
 		jh.errors = append(jh.errors, err)
 	}
 
@@ -205,68 +217,12 @@ func (jh *JsonHelper) ToFile() *JsonHelper {
 
 // ----- 转换，End ----- /
 
-// Get 支持以.分割的key获取json中的值
-// key: json的key, 例如: "a.b.c"
-//func (jh *JsonHelper) Get(key string) (interface{}, []error) {
-//
-//}
-
 // HasError 判断是否有错误
 func (jh *JsonHelper) HasError() bool {
 	return len(jh.errors) > 0
 }
 
-// Errors
-// 获取错误信息
+// Errors 获取错误信息列表
 func (jh *JsonHelper) Errors() []error {
 	return jh.errors
-}
-
-// ------------------------ 以下是弃用了的函数，将在后续版本中被移除 ------------------------ /
-
-// SetStruct
-// Deprecated: 请使用 JsonStruct
-func SetStruct(jsonStruct interface{}) *JsonHelper {
-	return JsonStruct(jsonStruct)
-}
-
-// DoSort 输出json字符串时是否根据key排序
-// Deprecated: 不再支持自动排序，有需求时通过MapHelper去排序
-func (jh *JsonHelper) DoSort() *JsonHelper {
-	return jh
-}
-
-// ToJson
-// Deprecated: 请使用 JsonHelper.ToString
-func (jh *JsonHelper) ToJson() (string, error) {
-	jsonStr := ""
-	result := jh.ToString(&jsonStr)
-	if result.HasError() {
-		return "", result.Errors()[0]
-	}
-	return jsonStr, nil
-}
-
-// JsonStrSort 根据map的key进行排序
-// Deprecated: 请使用
-func JsonStrSort(jsonStr string) string {
-	jsonMap := JsonStr2Map(jsonStr)
-	nData := NewMap(jsonMap).DoSort().GetData()
-	jsonByte, _ := json.Marshal(nData)
-	return string(jsonByte)
-}
-
-// JsonStr2Map
-// Deprecated: 请使用 JsonHelper.ToMap
-func JsonStr2Map(str string) map[string]interface{} {
-	var tempMap map[string]interface{}
-
-	jsonHelper := JsonString(str).ToMap(&tempMap)
-	if jsonHelper.HasError() {
-		for _, err := range jsonHelper.Errors() {
-			log.Panic(err)
-		}
-	}
-
-	return tempMap
 }
