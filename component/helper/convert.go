@@ -197,3 +197,21 @@ func (c Convert) ToNumber() (interface{}, bool) {
 	}
 	return int(0), false
 }
+
+// ToFloat64 将变量转为float64
+func (c Convert) ToFloat64() float64 {
+	newValue, ok := c.ToNumber()
+	if !ok {
+		return 0
+	}
+	switch v := newValue.(type) {
+	case int64:
+		return float64(v)
+	case uint64:
+		return float64(v)
+	case float64:
+		return v
+	default:
+		return 0
+	}
+}
