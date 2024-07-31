@@ -18,6 +18,8 @@ type Controller struct {
 // Success 返回成功的响应
 // 这个方法用于简化成功响应的构建，接收可变参数，
 // 并根据参数数量确定响应的data、additionalParams和message字段的值。
+// 传递2个以内参数时，第一个参数为data，第二个参数为message。
+// 传递3个参数时，第一个参数为data，第二个参数为additionalParams，第三个参数为message
 func (c Controller) Success(args ...any) {
 	var (
 		message          = "success"
@@ -40,6 +42,10 @@ func (c Controller) Success(args ...any) {
 
 // Failure 返回失败的响应
 // 这个方法用于简化失败响应的构建，接收可变参数
+// 参数：
+//   - msg string: 返回的消息内容
+//   - data any: 返回的数据
+//   - code int: 错误码
 func (c Controller) Failure(args ...any) {
 	var (
 		code             = errcode.BadRequest
@@ -49,14 +55,14 @@ func (c Controller) Failure(args ...any) {
 	)
 	switch len(args) {
 	case 1:
-		data = args[0]
+		message = args[0].(string)
 	case 2:
-		data = args[0]
-		message = args[1].(string)
+		message = args[0].(string)
+		data = args[1]
 	case 3:
-		data = args[0]
-		message = args[2].(string)
-		code = args[3].(int)
+		message = args[0].(string)
+		data = args[1]
+		code = args[2].(int)
 	}
 	c.Result(code, message, data, additionalParams)
 }
