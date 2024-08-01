@@ -13,7 +13,7 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 	t.checkInit(c)
 
 	// 获取表单数据
-	callResults := t.callCustomMethod("GetUpdateFormData")
+	callResults := t.callCustomMethod("UpdateFormData")
 	modelValue := callResults[0]
 	mapData := callResults[1].(map[string]any)
 	if callResults[2] != nil {
@@ -35,8 +35,8 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 		return
 	}
 
-	// 调用自定义的BeforeUpdate方法进行前置处理
-	callResults = t.callCustomMethod("BeforeUpdate", modelValue, mapData)
+	// 调用自定义的UpdateBefore方法进行前置处理
+	callResults = t.callCustomMethod("UpdateBefore", modelValue, mapData)
 	modelValue = callResults[0]
 	mapData = callResults[1].(map[string]any)
 	if callResults[2] != nil {
@@ -86,8 +86,8 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 		return
 	}
 
-	// 调用自定义的AfterUpdate方法进行后置处理
-	callErr := t.callCustomMethod("AfterUpdate", modelValue)[0]
+	// 调用自定义的UpdateAfter方法进行后置处理
+	callErr := t.callCustomMethod("UpdateAfter", modelValue)[0]
 	if callErr != nil {
 		err, ok := callErr.(error)
 		if ok && err != nil {
@@ -107,16 +107,16 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 	t.callCustomMethod("UpdateReturn", modelValue)
 }
 
-func (t *Trait) GetUpdateFormData() (modelValue interface{}, mapData map[string]any, err error) {
-	return t.GetSaveFormData()
+func (t *Trait) UpdateFormData() (modelValue interface{}, mapData map[string]any, err error) {
+	return t.SaveFormData()
 }
 
-func (t *Trait) BeforeUpdate(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
+func (t *Trait) UpdateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
 	// 可以在此处添加一些前置处理逻辑
-	return t.BeforeSave(modelValue, mapData)
+	return t.SaveBefore(modelValue, mapData)
 }
 
-func (t *Trait) AfterUpdate(modelValue interface{}) error {
+func (t *Trait) UpdateAfter(modelValue interface{}) error {
 	// 可以在此处添加一些后置处理逻辑
 	return t.AfterSave(modelValue)
 }

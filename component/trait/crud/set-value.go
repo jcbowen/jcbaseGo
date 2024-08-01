@@ -13,7 +13,7 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 	t.checkInit(c)
 
 	// 获取表单数据
-	callResults := t.callCustomMethod("GetSetValueFormData")
+	callResults := t.callCustomMethod("SetValueFormData")
 	mapData := callResults[1].(map[string]any)
 	if callResults[2] != nil {
 		err := callResults[2].(error)
@@ -112,8 +112,8 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 		return
 	}
 
-	// 调用自定义的AfterSetValue方法进行后置处理
-	callResults = t.callCustomMethod("AfterSetValue", id, field, value)
+	// 调用自定义的SetValueAfter方法进行后置处理
+	callResults = t.callCustomMethod("SetValueAfter", id, field, value)
 	if callResults[0] != nil {
 		err, ok := callResults[0].(error)
 		if ok && err != nil {
@@ -133,8 +133,8 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 	t.callCustomMethod("SetValueReturn", value, field, id)
 }
 
-func (t *Trait) GetSetValueFormData() (modelValue interface{}, mapData map[string]any, err error) {
-	return t.GetSaveFormData()
+func (t *Trait) SetValueFormData() (modelValue interface{}, mapData map[string]any, err error) {
+	return t.SaveFormData()
 }
 
 func (t *Trait) SetValueCheckField(field string) (interface{}, error) {
@@ -145,12 +145,12 @@ func (t *Trait) SetValueCheckField(field string) (interface{}, error) {
 	return true, nil
 }
 
-func (t *Trait) BeforeSetValue(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
+func (t *Trait) SetValueBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
 	// 可以在此处添加一些前置处理逻辑
-	return t.BeforeSave(modelValue, mapData)
+	return t.SaveBefore(modelValue, mapData)
 }
 
-func (t *Trait) AfterSetValue(modelValue interface{}) error {
+func (t *Trait) SetValueAfter(modelValue interface{}) error {
 	// 可以在此处添加一些后置处理逻辑
 	return t.AfterSave(modelValue)
 }

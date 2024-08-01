@@ -58,7 +58,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	}
 
 	// 设置删除数据的select字段
-	fields := t.callCustomMethod("GetDeleteFields")[0].([]string)
+	fields := t.callCustomMethod("DeleteFields")[0].([]string)
 	t.checkFieldExistInSelect(fields, t.PkId, "设置删除数据的")
 
 	// 查询要删除的数据
@@ -105,7 +105,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	// 执行删除
 	if helper.InArray("deleted_at", t.ModelFields) {
 		// 软删除（更新deleted_at字段）
-		condition := t.callCustomMethod("GetDeleteCondition", delArr)[0].(map[string]interface{})
+		condition := t.callCustomMethod("DeleteCondition", delArr)[0].(map[string]interface{})
 		deleteQuery = tx.Model(t.Model)
 		deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
 		err = deleteQuery.Updates(condition).Error
@@ -147,7 +147,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	t.callCustomMethod("DeleteReturn", delIds, delArr)
 }
 
-func (t *Trait) GetDeleteFields() []string {
+func (t *Trait) DeleteFields() []string {
 	return []string{t.PkId}
 }
 
@@ -160,7 +160,7 @@ func (t *Trait) DeleteBefore(delArr []map[string]interface{}, delIds []interface
 	return delIds, nil
 }
 
-func (t *Trait) GetDeleteCondition(delArr []map[string]interface{}) map[string]interface{} {
+func (t *Trait) DeleteCondition(delArr []map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"deleted_at": time.Now().Format("2006-01-02 15:04:05"),
 	}

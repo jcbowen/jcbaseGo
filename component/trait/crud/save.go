@@ -19,8 +19,8 @@ func (t *Trait) ActionSave(c *gin.Context) {
 	}
 }
 
-// GetSaveFormData 获取表单数据
-func (t *Trait) GetSaveFormData() (modelValue interface{}, mapData map[string]any, err error) {
+// SaveFormData 获取表单数据
+func (t *Trait) SaveFormData() (modelValue interface{}, mapData map[string]any, err error) {
 	gpcInterface, GPCExists := t.GinContext.Get("GPC")
 	if !GPCExists {
 		return
@@ -53,8 +53,8 @@ func (t *Trait) GetSaveFormData() (modelValue interface{}, mapData map[string]an
 	return modelValue, mapData, nil
 }
 
-// BeforeSave 保存前
-func (t *Trait) BeforeSave(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
+// SaveBefore 保存前
+func (t *Trait) SaveBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
 	// 可以在此处添加一些前置处理逻辑
 	return modelValue, mapData, nil
 }

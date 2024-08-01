@@ -8,22 +8,34 @@ import (
 )
 
 func (t *Trait) ActionCreate(c *gin.Context) {
+
 	t.checkInit(c)
 
+	var err error
+
 	// 获取表单数据
-	callResults := t.callCustomMethod("GetCreateFormData")
+	callResults := t.callCustomMethod("CreateFormData")
 	modelValue := callResults[0]
 	mapData := callResults[1].(map[string]any)
 	if callResults[2] != nil {
-		err := callResults[2].(error)
+		err = callResults[2].(error)
 		if err != nil {
 			t.Result(errcode.ParamError, err.Error())
 			return
 		}
 	}
 
-	// 调用自定义的BeforeCreate方法进行前置处理
-	modelValue = t.callCustomMethod("BeforeCreate", modelValue, mapData)[0]
+	// 调用自定义的CreateBefore方法进行前置处理
+	callResults = t.callCustomMethod("CreateBefore", modelValue, mapData)
+	modelValue = callResults[0]
+	mapData = callResults[1].(map[string]any)
+	if callResults[2] != nil {
+		err = callResults[2].(error)
+		if err != nil {
+			t.Result(errcode.ParamError, err.Error())
+			return
+		}
+	}
 
 	// 开启事务
 	tx := t.MysqlMain.GetDb().Begin()
@@ -35,8 +47,8 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 		return
 	}
 
-	// 调用自定义的AfterCreate方法进行后置处理
-	callErr := t.callCustomMethod("AfterCreate", modelValue)[0]
+	// 调用自定义的CreateAfter方法进行后置处理
+	callErr := t.callCustomMethod("CreateAfter", modelValue)[0]
 	if callErr != nil {
 		err, ok := callErr.(error)
 		if ok && err != nil {
@@ -56,16 +68,16 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	t.callCustomMethod("CreateReturn", modelValue)
 }
 
-func (t *Trait) GetCreateFormData() (modelValue interface{}, mapData map[string]any, err error) {
-	return t.GetSaveFormData()
+func (t *Trait) CreateFormData() (modelValue interface{}, mapData map[string]any, err error) {
+	return t.SaveFormData()
 }
 
-func (t *Trait) BeforeCreate(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
+func (t *Trait) CreateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
 	// 可以在此处添加一些前置处理逻辑
-	return t.BeforeSave(modelValue, mapData)
+	return t.SaveBefore(modelValue, mapData)
 }
 
-func (t *Trait) AfterCreate(modelValue interface{}) error {
+func (t *Trait) CreateAfter(modelValue interface{}) error {
 	// 可以在此处添加一些后置处理逻辑
 	return t.AfterSave(modelValue)
 }
