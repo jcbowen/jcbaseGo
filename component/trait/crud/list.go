@@ -58,6 +58,10 @@ func (t *Trait) ActionList(c *gin.Context) {
 		return
 	}
 
+	// Select不能在Count前，否则会报错
+	// 为了方便，直接传query进去拼接就好
+	query = t.callCustomMethod("ListSelect", query)[0].(*gorm.DB)
+
 	// 动态创建模型实例
 	modelType := reflect.TypeOf(t.Model).Elem()
 	sliceType := reflect.SliceOf(modelType)
@@ -90,6 +94,11 @@ func (t *Trait) ActionList(c *gin.Context) {
 		Page:     page,
 		PageSize: pageSize,
 	})
+}
+
+func (t *Trait) ListSelect(query *gorm.DB) *gorm.DB {
+	// 默认就是查询*，所以这里就没必要单独写query.Select("*")了
+	return query
 }
 
 func (t *Trait) ListQuery(query *gorm.DB) (*gorm.DB, error) {
