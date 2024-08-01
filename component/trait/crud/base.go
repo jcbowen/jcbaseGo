@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/orm/mysql"
+	"github.com/jcbowen/jcbaseGo/component/security"
 	"log"
 	"reflect"
 	"strconv"
@@ -204,4 +205,28 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 	}
 
 	return nil
+}
+
+// GetSafeMapGPC 安全获取map类型GPC
+func (t *Trait) GetSafeMapGPC(key ...string) (mapData map[string]any) {
+	mapKey := "all"
+	if len(key) > 0 {
+		mapKey = key[0]
+	}
+
+	gpcInterface, GPCExists := t.GinContext.Get("GPC")
+	if !GPCExists {
+		return
+	}
+	formDataMap := gpcInterface.(map[string]map[string]any)[mapKey]
+
+	// 安全过滤
+	sanitizedMapData := security.Input{Value: formDataMap}.Sanitize().(map[interface{}]interface{})
+	// 格式转换
+	mapData = make(map[string]any)
+	for key, value := range sanitizedMapData {
+		strKey := key.(string)
+		mapData[strKey] = value
+	}
+	return
 }

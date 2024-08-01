@@ -3,7 +3,6 @@ package crud
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
-	"github.com/jcbowen/jcbaseGo/component/security"
 	"log"
 	"reflect"
 )
@@ -21,20 +20,7 @@ func (t *Trait) ActionSave(c *gin.Context) {
 
 // SaveFormData 获取表单数据
 func (t *Trait) SaveFormData() (modelValue interface{}, mapData map[string]any, err error) {
-	gpcInterface, GPCExists := t.GinContext.Get("GPC")
-	if !GPCExists {
-		return
-	}
-	formDataMap := gpcInterface.(map[string]map[string]any)["all"]
-
-	// 安全过滤
-	sanitizedMapData := security.Input{Value: formDataMap}.Sanitize().(map[interface{}]interface{})
-	// 格式转换
-	mapData = make(map[string]interface{})
-	for key, value := range sanitizedMapData {
-		strKey := key.(string)
-		mapData[strKey] = value
-	}
+	mapData = t.GetSafeMapGPC("all")
 
 	// 动态创建模型实例
 	modelType := reflect.TypeOf(t.Model).Elem()

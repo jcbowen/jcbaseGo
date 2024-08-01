@@ -3,7 +3,6 @@ package crud
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
-	"github.com/jcbowen/jcbaseGo/component/security"
 	"github.com/jcbowen/jcbaseGo/errcode"
 	"gorm.io/gorm"
 	"log"
@@ -13,22 +12,8 @@ import (
 func (t *Trait) ActionDelete(c *gin.Context) {
 	t.checkInit(c)
 
-	// 获取GPC参数
-	gpcInterface, GPCExists := t.GinContext.Get("GPC")
-	if !GPCExists {
-		t.Result(errcode.ParamError, "未接收到有效参数，请重试")
-		return
-	}
-	formDataMap := gpcInterface.(map[string]map[string]any)["all"]
-
-	// 安全过滤
-	sanitizedMapData := security.Input{Value: formDataMap}.Sanitize().(map[interface{}]interface{})
 	// 格式转换
-	mapData := make(map[string]interface{})
-	for key, value := range sanitizedMapData {
-		strKey := key.(string)
-		mapData[strKey] = value
-	}
+	mapData := t.GetSafeMapGPC("all")
 
 	// 获取ids参数
 	idsInterface, exists := mapData[t.PkId+"s"]
