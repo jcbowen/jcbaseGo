@@ -30,7 +30,7 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 	query := t.MysqlMain.GetDb().Table(t.ModelTableName + tableAlias)
 
 	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
-		query = query.Where(t.tableAlias + "deleted_at IS NULL")
+		query = query.Where(t.TableAlias + "deleted_at IS NULL")
 	}
 
 	query = t.callCustomMethod("DetailQuery", query)[0].(*gorm.DB)
@@ -39,7 +39,7 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 	modelType := reflect.TypeOf(t.Model).Elem()
 	result := reflect.New(modelType).Interface()
 
-	err := query.Where(t.tableAlias+t.PkId+" = ?", id).First(result).Error
+	err := query.Where(t.TableAlias+t.PkId+" = ?", id).First(result).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			t.Result(errcode.NotExist, "数据不存在或已被删除")

@@ -24,7 +24,7 @@ func (t *Trait) ActionAll(c *gin.Context) {
 	query := t.MysqlMain.GetDb().Table(t.ModelTableName + tableAlias)
 
 	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
-		query = query.Where(t.tableAlias + "deleted_at IS NULL")
+		query = query.Where(t.TableAlias + "deleted_at IS NULL")
 	}
 
 	query = t.callCustomMethod("AllQuery", query)[0].(*gorm.DB)
@@ -70,7 +70,7 @@ func (t *Trait) AllQuery(query *gorm.DB) *gorm.DB {
 }
 
 func (t *Trait) AllOrder() interface{} {
-	return t.tableAlias + t.PkId + " DESC"
+	return t.TableAlias + t.PkId + " DESC"
 }
 
 func (t *Trait) AllEach(item interface{}) interface{} {

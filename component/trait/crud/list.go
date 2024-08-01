@@ -35,7 +35,7 @@ func (t *Trait) ActionList(c *gin.Context) {
 	query := t.MysqlMain.GetDb().Table(t.ModelTableName + tableAlias)
 
 	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
-		query = query.Where(t.tableAlias + "deleted_at IS NULL")
+		query = query.Where(t.TableAlias + "deleted_at IS NULL")
 	}
 
 	callResults := t.callCustomMethod("ListQuery", query)
@@ -51,7 +51,7 @@ func (t *Trait) ActionList(c *gin.Context) {
 	// 获取总数
 	total := int64(0)
 	err := query.
-		//Model(reflect.New(reflect.TypeOf(t.Model).Elem()).Interface()).
+		Model(reflect.New(reflect.TypeOf(t.Model).Elem()).Interface()).
 		Count(&total).Error
 	if err != nil {
 		t.Result(http.StatusInternalServerError, err.Error())
@@ -97,7 +97,7 @@ func (t *Trait) ListQuery(query *gorm.DB) (*gorm.DB, error) {
 }
 
 func (t *Trait) ListOrder() (order interface{}) {
-	return t.tableAlias + t.PkId + " DESC"
+	return t.TableAlias + t.PkId + " DESC"
 }
 
 func (t *Trait) ListEach(item interface{}) interface{} {
