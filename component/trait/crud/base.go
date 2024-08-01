@@ -233,5 +233,10 @@ func (t *Trait) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 		strKey := key.(string)
 		mapData[strKey] = value
 	}
+
+	if t.Debug {
+		log.Printf("mapData: %v\n", mapData)
+	}
+
 	return
 }
