@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/helper"
+	"github.com/jcbowen/jcbaseGo/errcode"
 	"gorm.io/gorm"
 	"net/http"
 	"reflect"
@@ -37,7 +38,15 @@ func (t *Trait) ActionList(c *gin.Context) {
 		query = query.Where(t.tableAlias + "deleted_at IS NULL")
 	}
 
-	query = t.callCustomMethod("ListQuery", query)[0].(*gorm.DB)
+	callResults := t.callCustomMethod("ListQuery", query)
+	query = callResults[0].(*gorm.DB)
+	if callResults[1] != nil {
+		err := callResults[1].(error)
+		if err != nil {
+			t.Result(errcode.ParamError, err.Error())
+			return
+		}
+	}
 
 	// 获取总数
 	total := int64(0)
@@ -83,8 +92,8 @@ func (t *Trait) ActionList(c *gin.Context) {
 	})
 }
 
-func (t *Trait) ListQuery(query *gorm.DB) *gorm.DB {
-	return query
+func (t *Trait) ListQuery(query *gorm.DB) (*gorm.DB, error) {
+	return query, nil
 }
 
 func (t *Trait) ListOrder() (order interface{}) {
