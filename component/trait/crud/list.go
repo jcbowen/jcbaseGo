@@ -63,8 +63,23 @@ func (t *Trait) ActionList(c *gin.Context) {
 	query = t.callCustomMethod("ListSelect", query)[0].(*gorm.DB)
 
 	// 动态创建模型实例
-	modelType := reflect.TypeOf(t.Model).Elem()
-	sliceType := reflect.SliceOf(modelType)
+	if t.ListResultStruct == nil {
+		t.ListResultStruct = t.Model
+	}
+
+	resultStructType := reflect.TypeOf(t.ListResultStruct)
+	if resultStructType.Kind() == reflect.Ptr {
+		resultStructType = resultStructType.Elem()
+	}
+
+	if resultStructType.Kind() != reflect.Struct {
+		t.ListResultStruct = t.Model
+		resultStructType = reflect.TypeOf(t.ListResultStruct)
+		if resultStructType.Kind() == reflect.Ptr {
+			resultStructType = resultStructType.Elem()
+		}
+	}
+	sliceType := reflect.SliceOf(resultStructType)
 	results := reflect.New(sliceType).Interface()
 
 	err = query.Order(t.callCustomMethod("ListOrder")[0]).

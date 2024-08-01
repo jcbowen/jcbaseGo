@@ -36,7 +36,28 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 	query = t.callCustomMethod("DetailQuery", query)[0].(*gorm.DB)
 
 	// 动态创建模型实例
-	modelType := reflect.TypeOf(t.Model).Elem()
+	if t.DetailResultStruct == nil {
+		t.DetailResultStruct = t.Model
+	}
+
+	resultStructType := reflect.TypeOf(t.DetailResultStruct)
+	if resultStructType.Kind() == reflect.Ptr {
+		resultStructType = resultStructType.Elem()
+	}
+
+	if resultStructType.Kind() != reflect.Struct {
+		t.DetailResultStruct = t.Model
+		resultStructType = reflect.TypeOf(t.DetailResultStruct)
+		if resultStructType.Kind() == reflect.Ptr {
+			resultStructType = resultStructType.Elem()
+		}
+	}
+
+	modelType := resultStructType
+	if modelType.Kind() == reflect.Ptr {
+		modelType = modelType.Elem()
+	}
+
 	result := reflect.New(modelType).Interface()
 
 	err := query.Where(t.TableAlias+t.PkId+" = ?", id).First(result).Error
