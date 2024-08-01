@@ -19,6 +19,7 @@ type Trait struct {
 	ModelTableAlias string          // 模型表别名
 	MysqlMain       *mysql.Instance // 数据库实例
 	Controller      interface{}     // 控制器
+	Debug           bool            // 调试模式
 
 	// ----- 初始化时生成 ----- /
 	GinContext     *gin.Context // 请求上下文
@@ -179,25 +180,29 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 	case reflect.String:
 		strVal, ok := val.(string)
 		if !ok {
-			return errors.New("cannot convert to string")
+			// return errors.New("cannot convert to string")
+			strVal = ""
 		}
 		fieldVal.SetString(strVal)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		intVal, err := strconv.ParseInt(val.(string), 10, 64)
 		if err != nil {
-			return err
+			// return err
+			intVal = 0
 		}
 		fieldVal.SetInt(intVal)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		uintVal, err := strconv.ParseUint(val.(string), 10, 64)
 		if err != nil {
-			return err
+			// return err
+			uintVal = 0
 		}
 		fieldVal.SetUint(uintVal)
 	case reflect.Float32, reflect.Float64:
 		floatVal, err := strconv.ParseFloat(val.(string), 64)
 		if err != nil {
-			return err
+			// return err
+			floatVal = 0.00
 		}
 		fieldVal.SetFloat(floatVal)
 	default:
