@@ -229,8 +229,8 @@ func (t *Trait) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 	sanitizedMapData := security.Input{Value: formDataMap}.Sanitize().(map[interface{}]interface{})
 	// 格式转换
 	mapData = make(map[string]any)
-	for key, value := range sanitizedMapData {
-		strKey := key.(string)
+	for k, value := range sanitizedMapData {
+		strKey := k.(string)
 		mapData[strKey] = value
 	}
 
