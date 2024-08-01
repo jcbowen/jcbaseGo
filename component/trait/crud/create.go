@@ -41,7 +41,7 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	tx := t.MysqlMain.GetDb().Begin()
 
 	// 插入数据
-	if err := tx.Create(modelValue).Error; err != nil {
+	if err = tx.Create(modelValue).Error; err != nil {
 		tx.Rollback()
 		t.Result(errcode.DatabaseError, "ok")
 		return
@@ -88,17 +88,22 @@ func (t *Trait) CreateReturn(item any) bool {
 		pkId    uint
 	)
 
+	// 判断是否为指针
 	if reflect.TypeOf(item).Kind() == reflect.Ptr {
-		item = reflect.ValueOf(item).Elem()
+		item = reflect.ValueOf(item).Elem().Interface()
 	}
 
+	// 将 item 转换为 map，方便取值
 	switch reflect.TypeOf(item).Kind() {
 	case reflect.Struct:
 		helper.Json(item).ToMap(&mapItem)
 	default:
 		mapItem = item.(map[string]any)
 	}
-	pkId = helper.Convert{Value: mapItem[t.PkId]}.ToUint()
+
+	// 获取主键
+	pkIdAny, _ := mapItem[t.PkId]
+	pkId = helper.Convert{Value: pkIdAny}.ToUint()
 
 	t.Result(errcode.Success, "ok", gin.H{
 		t.PkId: pkId,
