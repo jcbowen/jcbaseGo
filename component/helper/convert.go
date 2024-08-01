@@ -181,19 +181,27 @@ func (c Convert) ToUint() uint {
 
 // ToNumber 将字符串变量转为数字类型
 func (c Convert) ToNumber() (interface{}, bool) {
-	s, ok := c.Value.(string)
-	if !ok {
+	if c.Value == nil {
 		return int(0), false
 	}
 
-	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return i, true
-	}
-	if u, err := strconv.ParseUint(s, 10, 64); err == nil {
-		return u, true
-	}
-	if f, err := strconv.ParseFloat(s, 64); err == nil {
-		return f, true
+	switch v := c.Value.(type) {
+	case string:
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return i, true
+		}
+		if u, err := strconv.ParseUint(v, 10, 64); err == nil {
+			return u, true
+		}
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f, true
+		}
+	case int, int8, int16, int32, int64:
+		return reflect.ValueOf(v).Int(), true
+	case uint, uint8, uint16, uint32, uint64:
+		return reflect.ValueOf(v).Uint(), true
+	case float32, float64:
+		return reflect.ValueOf(v).Float(), true
 	}
 	return int(0), false
 }
