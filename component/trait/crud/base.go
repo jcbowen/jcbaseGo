@@ -66,11 +66,11 @@ func (t *Trait) checkInit(c *gin.Context) {
 	t.OperateTime = time.Now().Format("2006-01-02 15:04:05")
 
 	// 存放表别名到上下文，方便查询时调用
-	t.TableAlias = ""
+	t.TableAlias = t.ModelTableName
 	if t.ModelTableAlias != "" {
 		t.TableAlias = t.ModelTableAlias
-		t.TableAlias += "."
 	}
+	t.TableAlias += "."
 }
 
 // 调用自定义方法，如果方法不存在则调用默认方法
