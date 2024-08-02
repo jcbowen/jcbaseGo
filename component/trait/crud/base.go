@@ -28,7 +28,7 @@ type Trait struct {
 	ModelTableName string       // 模型表名
 	ModelFields    []string     // 模型所有字段
 	OperateTime    string       // 操作时间
-	TableAlias     string       // 表别名（仅用于拼接查询语句）
+	TableAlias     string       // 表别名（仅用于拼接查询语句，配置别名请用ModelTableAlias）
 }
 
 // 初始化crud，仅当初始化完成才可以使用
