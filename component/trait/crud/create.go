@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/errcode"
+	"gorm.io/gorm"
 	"reflect"
 )
 
@@ -48,10 +49,10 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	}
 
 	// 调用自定义的CreateAfter方法进行后置处理
-	callErr := t.callCustomMethod("CreateAfter", modelValue)[0]
+	callErr := t.callCustomMethod("CreateAfter", tx, modelValue)[0]
 	if callErr != nil {
-		err, ok := callErr.(error)
-		if ok && err != nil {
+		err = callErr.(error)
+		if err != nil {
 			tx.Rollback()
 			t.Result(errcode.Unknown, err.Error())
 			return
@@ -77,9 +78,9 @@ func (t *Trait) CreateBefore(modelValue interface{}, mapData map[string]any) (in
 	return t.SaveBefore(modelValue, mapData)
 }
 
-func (t *Trait) CreateAfter(modelValue interface{}) error {
+func (t *Trait) CreateAfter(tx *gorm.DB, modelValue interface{}) error {
 	// 可以在此处添加一些后置处理逻辑
-	return t.AfterSave(modelValue)
+	return t.AfterSave(tx, modelValue)
 }
 
 func (t *Trait) CreateReturn(item any) bool {

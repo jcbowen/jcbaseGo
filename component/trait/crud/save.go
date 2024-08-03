@@ -3,6 +3,7 @@ package crud
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
+	"gorm.io/gorm"
 	"log"
 	"reflect"
 )
@@ -46,7 +47,7 @@ func (t *Trait) SaveBefore(modelValue interface{}, mapData map[string]any) (inte
 }
 
 // AfterSave 保存后
-func (t *Trait) AfterSave(modelValue interface{}) error {
+func (t *Trait) AfterSave(tx *gorm.DB, modelValue interface{}) error {
 	// 可以在此处添加一些后置处理逻辑
 	return nil
 }
