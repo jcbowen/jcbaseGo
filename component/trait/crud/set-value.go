@@ -56,8 +56,11 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 	// 检查字段名的有效性
 	callResults = t.callCustomMethod("SetValueCheckField", field)
 	if callResults[0] != nil {
-		t.Result(errcode.ParamError, callResults[0].(string))
-		return
+		err := callResults[0].(error)
+		if err != nil {
+			t.Result(errcode.ParamError, err.Error())
+			return
+		}
 	}
 
 	// 根据字段值的类型，对字段值进行格式化
@@ -106,7 +109,7 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 
 	// 更新数据
 	updateData := map[string]interface{}{field: value}
-	if err := tx.Table(t.ModelTableName).Where(t.PkId+" = ?", id).Updates(updateData).Error; err != nil {
+	if err = tx.Table(t.ModelTableName).Where(t.PkId+" = ?", id).Updates(updateData).Error; err != nil {
 		tx.Rollback()
 		t.Result(errcode.DatabaseError, err.Error())
 		return
@@ -137,12 +140,12 @@ func (t *Trait) SetValueFormData() (modelValue interface{}, mapData map[string]a
 	return t.SaveFormData()
 }
 
-func (t *Trait) SetValueCheckField(field string) (interface{}, error) {
-	// 验证是否传入了字段名，且字段名是否有效
+// SetValueCheckField 验证传入的字段名是否有效
+func (t *Trait) SetValueCheckField(field string) error {
 	if !helper.InArray(field, t.ModelFields) {
-		return nil, errors.New("参数错误，请传入有效的字段名")
+		return errors.New("参数错误，请传入有效的字段名")
 	}
-	return true, nil
+	return nil
 }
 
 func (t *Trait) SetValueBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
@@ -150,13 +153,14 @@ func (t *Trait) SetValueBefore(modelValue interface{}, mapData map[string]any) (
 	return t.SaveBefore(modelValue, mapData)
 }
 
-func (t *Trait) SetValueAfter(modelValue interface{}) error {
-	// 可以在此处添加一些后置处理逻辑
-	return t.AfterSave(modelValue)
+func (t *Trait) SetValueAfter(id uint, field string, value any) error {
+	return nil
 }
 
 func (t *Trait) SetValueReturn(value interface{}, field string, id uint) bool {
 	t.Result(errcode.Success, "设置成功", gin.H{
+		"id":    id,
+		"field": field,
 		"value": value,
 	})
 	return true
