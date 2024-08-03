@@ -20,6 +20,7 @@ type Instance struct {
 	Dsn    string
 	Conf   jcbaseGo.DbStruct
 	Db     *gorm.DB
+	debug  bool // 是否开启debug
 	Errors []error
 }
 
@@ -67,22 +68,10 @@ func New(dbConfig jcbaseGo.DbStruct) *Instance {
 	return context
 }
 
-func (c *Instance) AddError(err error) {
-	if err != nil {
-		c.Errors = append(c.Errors, err)
-	}
-}
-
-func (c *Instance) Error() []error {
-	// 过滤掉c.Errors中的nil
-	var errs []error
-	for _, err := range c.Errors {
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	return errs
+// Debug 设置调试模式
+func (c *Instance) Debug() *Instance {
+	c.debug = true
+	return c
 }
 
 // GetDb 获取db
@@ -91,7 +80,11 @@ func (c *Instance) GetDb() *gorm.DB {
 		log.Println("Database connection is nil")
 		return nil
 	}
-	return c.Db
+	db := c.Db
+	if c.debug {
+		db = db.Debug()
+	}
+	return db
 }
 
 // GetAllTableName 获取所有表名
@@ -127,6 +120,24 @@ func (c *Instance) TableName(tableName *string, quotes ...bool) *Instance {
 	}
 
 	return c
+}
+
+func (c *Instance) AddError(err error) {
+	if err != nil {
+		c.Errors = append(c.Errors, err)
+	}
+}
+
+func (c *Instance) Error() []error {
+	// 过滤掉c.Errors中的nil
+	var errs []error
+	for _, err := range c.Errors {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errs
 }
 
 // ----- 弃用 ----- /

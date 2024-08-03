@@ -16,6 +16,7 @@ import (
 type Instance struct {
 	Conf   jcbaseGo.SqlLiteStruct
 	Db     *gorm.DB
+	debug  bool // 是否开启调试模式
 	Errors []error
 }
 
@@ -61,24 +62,10 @@ func New(Conf jcbaseGo.SqlLiteStruct) (i *Instance) {
 	return
 }
 
-// AddError 添加错误到上下文
-func (c *Instance) AddError(err error) {
-	if err != nil {
-		c.Errors = append(c.Errors, err)
-	}
-}
-
-// Error 获取错误
-func (c *Instance) Error() []error {
-	// 过滤掉c.Errors中的nil
-	var errs []error
-	for _, err := range c.Errors {
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	return errs
+// Debug 设置调试模式
+func (c *Instance) Debug() *Instance {
+	c.debug = true
+	return c
 }
 
 // GetDb 获取db
@@ -119,4 +106,24 @@ func (c *Instance) TableName(tableName *string, quotes ...bool) *Instance {
 	}
 
 	return c
+}
+
+// AddError 添加错误到上下文
+func (c *Instance) AddError(err error) {
+	if err != nil {
+		c.Errors = append(c.Errors, err)
+	}
+}
+
+// Error 获取错误
+func (c *Instance) Error() []error {
+	// 过滤掉c.Errors中的nil
+	var errs []error
+	for _, err := range c.Errors {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errs
 }
