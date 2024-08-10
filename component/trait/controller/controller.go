@@ -1,16 +1,19 @@
-package helper
+package controller
 
 import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo/component/helper"
+	"github.com/jcbowen/jcbaseGo/component/security"
 	"github.com/jcbowen/jcbaseGo/errcode"
 	"log"
 	"net/http"
 	"reflect"
 )
 
-type Controller struct {
+type Base struct {
 	GinContext *gin.Context // 请求上下文
+	Debug      bool         // 调试模式
 }
 
 // ----- 公共方法 ----- /
@@ -20,7 +23,7 @@ type Controller struct {
 // 并根据参数数量确定响应的data、additionalParams和message字段的值。
 // 传递2个以内参数时，第一个参数为data，第二个参数为message。
 // 传递3个参数时，第一个参数为data，第二个参数为additionalParams，第三个参数为message
-func (c Controller) Success(args ...any) {
+func (c Base) Success(args ...any) {
 	var (
 		message          = "success"
 		data             any
@@ -46,7 +49,7 @@ func (c Controller) Success(args ...any) {
 //   - msg string: 返回的消息内容
 //   - data any: 返回的数据
 //   - code int: 错误码
-func (c Controller) Failure(args ...any) {
+func (c Base) Failure(args ...any) {
 	var (
 		code             = errcode.BadRequest
 		message          = "failure"
@@ -75,12 +78,12 @@ func (c Controller) Failure(args ...any) {
 //   - msg string: 返回的消息内容。
 //   - data any 选填，主要数据内容，可以是结构体、map、string或slice。
 //   - additionalParams map[string]any 选填，附加参数
-func (c Controller) Result(code int, msg string, args ...any) {
+func (c Base) Result(code int, msg string, args ...any) {
 	// 虽然定义的是any，但是约定只能为map/string/[]any
 	var resultData any
 	resultMapData := make(map[string]any)
 
-	if len(args) > 0 && !IsEmptyValue(args[0]) {
+	if len(args) > 0 && !helper.IsEmptyValue(args[0]) {
 		data := args[0]
 		val := reflect.ValueOf(data)
 
@@ -134,7 +137,7 @@ func (c Controller) Result(code int, msg string, args ...any) {
 	}
 
 	// 合并附加参数
-	if len(args) > 1 && !IsEmptyValue(args[1]) {
+	if len(args) > 1 && !helper.IsEmptyValue(args[1]) {
 		additionalParams, ok := args[1].(map[string]any)
 		if ok {
 			for k, v := range additionalParams {
@@ -180,7 +183,7 @@ func (c Controller) Result(code int, msg string, args ...any) {
 }
 
 // convertToInterfaceSlice 将特定类型的切片转换为通用的 interface{} 切片
-func (c Controller) convertToInterfaceSlice(slice interface{}) []interface{} {
+func (c Base) convertToInterfaceSlice(slice interface{}) []interface{} {
 	v := reflect.ValueOf(slice)
 	if v.Kind() != reflect.Slice {
 		panic("convertToInterfaceSlice: not a slice")
@@ -192,4 +195,33 @@ func (c Controller) convertToInterfaceSlice(slice interface{}) []interface{} {
 	}
 
 	return interfaceSlice
+}
+
+// GetSafeMapGPC 安全获取map类型GPC
+func (c Base) GetSafeMapGPC(key ...string) (mapData map[string]any) {
+	mapKey := "all"
+	if len(key) > 0 {
+		mapKey = key[0]
+	}
+
+	gpcInterface, GPCExists := c.GinContext.Get("GPC")
+	if !GPCExists {
+		return
+	}
+	formDataMap := gpcInterface.(map[string]map[string]any)[mapKey]
+
+	// 安全过滤
+	sanitizedMapData := security.Input{Value: formDataMap}.Sanitize().(map[interface{}]interface{})
+	// 格式转换
+	mapData = make(map[string]any)
+	for k, value := range sanitizedMapData {
+		strKey := k.(string)
+		mapData[strKey] = value
+	}
+
+	if c.Debug {
+		log.Printf("mapData: %v\n", mapData)
+	}
+
+	return
 }

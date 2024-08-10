@@ -5,7 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/orm/mysql"
-	"github.com/jcbowen/jcbaseGo/component/security"
+	"github.com/jcbowen/jcbaseGo/component/trait/controller"
 	"log"
 	"reflect"
 	"strconv"
@@ -21,20 +21,29 @@ type Trait struct {
 	ListResultStruct   interface{}     // 列表返回结构体
 	DetailResultStruct interface{}     // 详情返回结构体
 	Controller         interface{}     // 控制器
-	Debug              bool            // 调试模式
 
 	// ----- 初始化时生成 ----- /
-	GinContext     *gin.Context // 请求上下文
-	ModelTableName string       // 模型表名
-	ModelFields    []string     // 模型所有字段
-	OperateTime    string       // 操作时间
-	TableAlias     string       // 表别名（仅用于拼接查询语句，配置别名请用ModelTableAlias）
+	ModelTableName string   // 模型表名
+	ModelFields    []string // 模型所有字段
+	OperateTime    string   // 操作时间
+	TableAlias     string   // 表别名（仅用于拼接查询语句，配置别名请用ModelTableAlias）
+
+	// ----- 非基础配置 ----- /
+	BaseControllerTrait controller.Base
 }
 
 // 初始化crud，仅当初始化完成才可以使用
 func (t *Trait) checkInit(c *gin.Context) {
 	_ = helper.CheckAndSetDefault(t)
-	t.GinContext = c
+	t.BaseControllerTrait.GinContext = c
+
+	// 如果控制器中有CheckInit方法，就调用
+	method := reflect.ValueOf(t.Controller).MethodByName("CheckInit")
+	if method.IsValid() {
+		in := make([]reflect.Value, 1)
+		in[0] = reflect.ValueOf(c)
+		method.Call(in)
+	}
 
 	// 判断模型是否为空
 	if t.Model == nil {
@@ -121,7 +130,7 @@ func (t *Trait) callCustomMethod(methodName string, args ...interface{}) (result
 
 // ExtractPkId 方法从不同类型的请求中提取 PkId
 func (t *Trait) ExtractPkId() (pkValue uint, err error) {
-	gpcInterface, GPCExists := t.GinContext.Get("GPC")
+	gpcInterface, GPCExists := t.BaseControllerTrait.GinContext.Get("GPC")
 	if !GPCExists {
 		return 0, err
 	}
@@ -136,9 +145,18 @@ func (t *Trait) ExtractPkId() (pkValue uint, err error) {
 	return
 }
 
+// Failure 整理错误输出
+func (t *Trait) Failure(args ...any) {
+	t.BaseControllerTrait.Failure(args...)
+}
+
+func (t *Trait) Success(args ...any) {
+	t.BaseControllerTrait.Success(args...)
+}
+
 // Result 整理结果输出
 func (t *Trait) Result(code int, msg string, args ...any) {
-	helper.Controller{GinContext: t.GinContext}.Result(code, msg, args...)
+	t.BaseControllerTrait.Result(code, msg, args...)
 }
 
 // BindMapToStruct 将 map 数据绑定到 struct，并处理类型转换
@@ -216,29 +234,5 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 
 // GetSafeMapGPC 安全获取map类型GPC
 func (t *Trait) GetSafeMapGPC(key ...string) (mapData map[string]any) {
-	mapKey := "all"
-	if len(key) > 0 {
-		mapKey = key[0]
-	}
-
-	gpcInterface, GPCExists := t.GinContext.Get("GPC")
-	if !GPCExists {
-		return
-	}
-	formDataMap := gpcInterface.(map[string]map[string]any)[mapKey]
-
-	// 安全过滤
-	sanitizedMapData := security.Input{Value: formDataMap}.Sanitize().(map[interface{}]interface{})
-	// 格式转换
-	mapData = make(map[string]any)
-	for k, value := range sanitizedMapData {
-		strKey := k.(string)
-		mapData[strKey] = value
-	}
-
-	if t.Debug {
-		log.Printf("mapData: %v\n", mapData)
-	}
-
-	return
+	return t.BaseControllerTrait.GetSafeMapGPC(key...)
 }
