@@ -153,14 +153,14 @@ func (i *Instance) GetString(key string, args ...string) (string, error) {
 	return value, err
 }
 
-// GetStruct 根据键值获取自定义结构体类型。
+// GetStruct 根据键值获取自定义结构体类型或 map 类型。
 // args 参数列表，支持以下格式：
-//  1. 提供 key 和 value（指向目标结构体的指针）：GetStruct(key, &value)
+//  1. 提供 key 和 value（指向目标结构体的指针或 map 的指针）：GetStruct(key, &value)
 //  2. 提供 key, value 和 defaultValue（默认值的任意类型）：GetStruct(key, &value, defaultValue)
 //
 // 参数:
 //   - key (必需): 用于查找数据的字符串键值。
-//   - value (必需): 指向目标结构体的指针，用于存储获取到的数据。
+//   - value (必需): 指向目标结构体的指针或 map 的指针，用于存储获取到的数据。
 //   - defaultValue (可选): 当获取数据失败时的默认值。
 //
 // 返回值:
