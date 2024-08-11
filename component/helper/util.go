@@ -373,27 +373,40 @@ func StructMerge(dst interface{}, src ...interface{}) error {
 		return errors.New("dst must be a pointer to a struct")
 	}
 	dstVal = dstVal.Elem()
+	dstType := dstVal.Type()
+
+	// 检查所有的 src 是否都是指向与 dst 相同类型的结构体指针
+	for _, s := range src {
+		srcVal := reflect.ValueOf(s)
+		if srcVal.Kind() != reflect.Ptr || srcVal.Elem().Kind() != reflect.Struct || srcVal.Elem().Type() != dstType {
+			return errors.New("all src must be pointers to structs of the same type as dst")
+		}
+	}
 
 	// 反向遍历源结构体数组，以确保后面的覆盖前面的
 	for i := len(src) - 1; i >= 0; i-- {
-		srcVal := reflect.ValueOf(src[i])
-		if srcVal.Kind() != reflect.Ptr || srcVal.Elem().Kind() != reflect.Struct {
-			return errors.New("each src must be a pointer to a struct")
-		}
-		srcVal = srcVal.Elem()
+		srcVal := reflect.ValueOf(src[i]).Elem()
 
 		// 遍历源结构体的每个字段
 		for j := 0; j < srcVal.NumField(); j++ {
 			srcField := srcVal.Field(j)
 			dstField := dstVal.FieldByName(srcVal.Type().Field(j).Name)
 
-			// 检查目标结构体中是否有对应的字段，并且该字段可以被设置且类型相同
-			if dstField.IsValid() && dstField.CanSet() && srcField.Type() == dstField.Type() {
-				// 检查源字段是否为零值
-				zeroValue := reflect.Zero(srcField.Type()).Interface()
-				if !reflect.DeepEqual(srcField.Interface(), zeroValue) {
-					// 如果源字段不是零值，则将其设置到目标字段
-					dstField.Set(srcField)
+			// 检查目标结构体中是否有对应的字段
+			if dstField.IsValid() && dstField.CanSet() {
+				if srcField.Kind() == reflect.Struct && dstField.Kind() == reflect.Struct {
+					// 递归处理嵌套结构体
+					err := StructMerge(dstField.Addr().Interface(), srcField.Addr().Interface())
+					if err != nil {
+						return err
+					}
+				} else if srcField.Type() == dstField.Type() {
+					// 检查源字段是否为零值
+					zeroValue := reflect.Zero(srcField.Type()).Interface()
+					if !reflect.DeepEqual(srcField.Interface(), zeroValue) {
+						// 如果源字段不是零值，则将其设置到目标字段
+						dstField.Set(srcField)
+					}
 				}
 			}
 		}
