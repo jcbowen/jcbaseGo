@@ -366,7 +366,16 @@ func CopyStruct(src, dst interface{}) {
 	}
 }
 
-// StructMerge 函数将多个源结构体中的非零值合并到目标结构体中，后面的源结构体会覆盖前面的。
+// StructMerge 函数将多个源结构体中的非零值合并到目标结构体中。
+// 源结构体按照传入顺序反向合并，后面的源结构体会覆盖前面的。
+// 目标结构体 (dst) 必须是指向结构体的指针，所有源结构体 (src) 必须是与目标结构体类型相同的指针。
+//
+// 参数:
+//   - dst: 一个指向目标结构体的指针，非零值将合并到该结构体中。
+//   - src: 一个变参，包含多个指向源结构体的指针，非零值将从这些源结构体中提取。
+//
+// 返回值:
+//   - error: 如果 dst 不是指向结构体的指针，或任何 src 元素不是与 dst 类型相同的结构体指针，则返回错误。
 func StructMerge(dst interface{}, src ...interface{}) error {
 	dstVal := reflect.ValueOf(dst)
 	if dstVal.Kind() != reflect.Ptr || dstVal.Elem().Kind() != reflect.Struct {
@@ -375,7 +384,7 @@ func StructMerge(dst interface{}, src ...interface{}) error {
 	dstVal = dstVal.Elem()
 	dstType := dstVal.Type()
 
-	// 检查所有的 src 是否都是指向与 dst 相同类型的结构体指针
+	// 验证所有 src 元素是否都是指向与 dst 相同类型的结构体指针
 	for _, s := range src {
 		srcVal := reflect.ValueOf(s)
 		if srcVal.Kind() != reflect.Ptr || srcVal.Elem().Kind() != reflect.Struct || srcVal.Elem().Type() != dstType {
