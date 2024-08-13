@@ -21,8 +21,14 @@ type Base struct {
 // Success 返回成功的响应
 // 这个方法用于简化成功响应的构建，接收可变参数，
 // 并根据参数数量确定响应的data、additionalParams和message字段的值。
-// 传递2个以内参数时，第一个参数为data，第二个参数为message。
-// 传递3个参数时，第一个参数为data，第二个参数为additionalParams，第三个参数为message
+// 参数：
+//   - message string: 返回的消息内容
+//   - data any: 返回的数据
+//   - additionalParams any: 附加数据
+//
+// 传递1个参数时，如果是字符串则作为message输出，否则作为data输出；
+// 传递2个参数时，第一个参数为data，第二个参数为message；
+// 传递3个参数时，第一个参数为data，第二个参数为additionalParams，第三个参数为message；
 func (c Base) Success(args ...any) {
 	var (
 		message          = "success"
@@ -31,7 +37,12 @@ func (c Base) Success(args ...any) {
 	)
 	switch len(args) {
 	case 1:
-		data = args[0]
+		// 如果是字符串，则作为message输出
+		if msg, ok := args[0].(string); ok {
+			message = msg
+		} else {
+			data = args[0]
+		}
 	case 2:
 		data = args[0]
 		message = args[1].(string)
@@ -45,10 +56,15 @@ func (c Base) Success(args ...any) {
 
 // Failure 返回失败的响应
 // 这个方法用于简化失败响应的构建，接收可变参数
+// 并根据参数数量确定响应的data、message、code字段的值。
 // 参数：
-//   - msg string: 返回的消息内容
+//   - message string: 返回的消息内容
 //   - data any: 返回的数据
 //   - code int: 错误码
+//
+// 传递1个参数时，如果是字符串则作为message输出，否则作为data输出；
+// 传递2个参数时，第一个参数为message，第二个参数为data；
+// 传递3个参数时，第一个参数为message，第二个参数为data，第三个参数为code；
 func (c Base) Failure(args ...any) {
 	var (
 		code             = errcode.BadRequest
@@ -58,7 +74,12 @@ func (c Base) Failure(args ...any) {
 	)
 	switch len(args) {
 	case 1:
-		message = args[0].(string)
+		// 如果是字符串，则作为message输出
+		if msg, ok := args[0].(string); ok {
+			message = msg
+		} else {
+			data = args[0]
+		}
 	case 2:
 		message = args[0].(string)
 		data = args[1]

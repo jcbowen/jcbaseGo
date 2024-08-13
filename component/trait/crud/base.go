@@ -145,11 +145,32 @@ func (t *Trait) ExtractPkId() (pkValue uint, err error) {
 	return
 }
 
-// Failure 整理错误输出
+// Failure 返回失败的响应
+// 这个方法用于简化失败响应的构建，接收可变参数
+// 并根据参数数量确定响应的data、message、code字段的值。
+// 参数：
+//   - message string: 返回的消息内容
+//   - data any: 返回的数据
+//   - code int: 错误码
+//
+// 传递1个参数时，如果是字符串则作为message输出，否则作为data输出；
+// 传递2个参数时，第一个参数为message，第二个参数为data；
+// 传递3个参数时，第一个参数为message，第二个参数为data，第三个参数为code；
 func (t *Trait) Failure(args ...any) {
 	t.BaseControllerTrait.Failure(args...)
 }
 
+// Success 返回成功的响应
+// 这个方法用于简化成功响应的构建，接收可变参数，
+// 并根据参数数量确定响应的data、additionalParams和message字段的值。
+// 参数：
+//   - message string: 返回的消息内容
+//   - data any: 返回的数据
+//   - additionalParams any: 附加数据
+//
+// 传递1个参数时，如果是字符串则作为message输出，否则作为data输出；
+// 传递2个参数时，第一个参数为data，第二个参数为message；
+// 传递3个参数时，第一个参数为data，第二个参数为additionalParams，第三个参数为message；
 func (t *Trait) Success(args ...any) {
 	t.BaseControllerTrait.Success(args...)
 }
