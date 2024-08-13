@@ -10,7 +10,7 @@ import (
 
 func (t *Trait) ActionCreate(c *gin.Context) {
 
-	t.checkInit(c)
+	t.InitCrud(c)
 
 	var err error
 

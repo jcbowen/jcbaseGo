@@ -10,7 +10,7 @@ import (
 )
 
 func (t *Trait) ActionUpdate(c *gin.Context) {
-	t.checkInit(c)
+	t.InitCrud(c)
 
 	// 获取表单数据
 	callResults := t.callCustomMethod("UpdateFormData")

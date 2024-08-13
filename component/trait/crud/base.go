@@ -32,8 +32,8 @@ type Trait struct {
 	BaseControllerTrait controller.Base
 }
 
-// 初始化crud，仅当初始化完成才可以使用
-func (t *Trait) checkInit(c *gin.Context) {
+// InitCrud 初始化crud，仅当初始化完成才可以使用
+func (t *Trait) InitCrud(c *gin.Context) {
 	_ = helper.CheckAndSetDefault(t)
 	t.BaseControllerTrait.GinContext = c
 

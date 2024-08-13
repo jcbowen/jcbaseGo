@@ -9,7 +9,7 @@ import (
 )
 
 func (t *Trait) ActionAll(c *gin.Context) {
-	t.checkInit(c)
+	t.InitCrud(c)
 
 	// 获取是否显示已删除数据的参数
 	showDeletedStr := c.DefaultQuery("show_deleted", "0")

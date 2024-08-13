@@ -11,7 +11,7 @@ import (
 )
 
 func (t *Trait) ActionList(c *gin.Context) {
-	t.checkInit(c)
+	t.InitCrud(c)
 
 	// 获取分页参数
 	pageStr := c.DefaultQuery("page", "1")

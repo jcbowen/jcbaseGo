@@ -10,7 +10,7 @@ import (
 )
 
 func (t *Trait) ActionDelete(c *gin.Context) {
-	t.checkInit(c)
+	t.InitCrud(c)
 
 	// 格式转换
 	mapData := t.GetSafeMapGPC("all")

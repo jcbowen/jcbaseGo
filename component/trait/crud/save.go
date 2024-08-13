@@ -9,7 +9,7 @@ import (
 )
 
 func (t *Trait) ActionSave(c *gin.Context) {
-	t.checkInit(c)
+	t.InitCrud(c)
 	id, _ := t.ExtractPkId()
 
 	if !helper.IsEmptyValue(id) {

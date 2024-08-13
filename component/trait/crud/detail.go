@@ -10,7 +10,7 @@ import (
 )
 
 func (t *Trait) ActionDetail(c *gin.Context) {
-	t.checkInit(c)
+	t.InitCrud(c)
 
 	id, _ := t.ExtractPkId()
 	showDeletedStr := c.DefaultQuery("show_deleted", "0")
