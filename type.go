@@ -23,7 +23,7 @@ type DbStruct struct {
 	Username      string `json:"username" default:"root"`      // 用户名
 	Password      string `json:"password" default:""`          // 密码
 	Charset       string `json:"charset" default:"utf8mb4"`    // 编码
-	TablePrefix   string `json:"tablePrefix" default:"jc_"`    // 表前缀
+	TablePrefix   string `json:"tablePrefix" default:""`       // 表前缀
 	ParseTime     string `json:"parseTime" default:"False"`    // 是否开启时间解析
 	SingularTable bool   `json:"singularTable" default:"true"` // 使用单数表名
 	Alias         string `json:"alias" default:"db"`           // 配置信息别名
