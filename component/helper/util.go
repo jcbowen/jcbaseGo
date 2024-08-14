@@ -3,6 +3,8 @@ package helper
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"github.com/jcbowen/jcbaseGo/component/validator"
 	"log"
 	"math/rand"
 	"net"
@@ -442,6 +444,60 @@ func GetFieldNameByJSONTag(objType reflect.Type, jsonKey string) string {
 	return ""
 }
 
+// CalculateAge 计算年龄的多功能方法
+// 支持以下两种调用方式：
+// 1. CalculateAge(year, month, day int) (int, error)
+// 2. CalculateAge(dateString string) (int, error)
+func CalculateAge(args ...interface{}) (int, error) {
+	var year, month, day int
+
+	switch len(args) {
+	case 3:
+		// 处理 year, month, day 的情况
+		var ok bool
+		if year, ok = args[0].(int); !ok {
+			return 0, errors.New("年份参数类型必须为int")
+		}
+		if month, ok = args[1].(int); !ok {
+			return 0, errors.New("月份参数类型必须为int")
+		}
+		if day, ok = args[2].(int); !ok {
+			return 0, errors.New("日期参数类型必须为int")
+		}
+	case 1:
+		// 处理 dateString 的情况
+		dateString, ok := args[0].(string)
+		if !ok {
+			return 0, errors.New("单一参数类型必须为string")
+		}
+		// 支持多种日期格式
+		formats := []string{"2006-01-02", "2006/01/02"}
+		var date time.Time
+		var err error
+		for _, format := range formats {
+			date, err = time.Parse(format, dateString)
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			return 0, errors.New("无效的日期格式")
+		}
+		year, month, day = date.Year(), int(date.Month()), date.Day()
+	default:
+		return 0, errors.New("无效的参数数量")
+	}
+
+	// 计算年龄
+	now := time.Now()
+	age := now.Year() - year
+	if now.Month() < time.Month(month) || (now.Month() == time.Month(month) && now.Day() < day) {
+		age--
+	}
+
+	return age, nil
+}
+
 // ParseIP 解析IP地址，输出是ipv4或ipv6
 // 0: invalid ip
 // 4: ipv4
@@ -460,6 +516,48 @@ func ParseIP(s string) (net.IP, int) {
 		}
 	}
 	return nil, 0
+}
+
+// ParseChineseIDCard 解析中国大陆身份证号码，提取性别、年龄、生日、出生地等信息
+func ParseChineseIDCard(idCard string) (gender string, age int, birthDate string, regionCode string, sequenceCode string, err error) {
+	if !validator.IsChineseIDCard(idCard) {
+		return "", 0, "", "", "", fmt.Errorf("无效的居民身份证")
+	}
+
+	var year, month, day int
+	if len(idCard) == 15 {
+		year, _ = strconv.Atoi("19" + idCard[6:8])
+		month, _ = strconv.Atoi(idCard[8:10])
+		day, _ = strconv.Atoi(idCard[10:12])
+	} else if len(idCard) == 18 {
+		year, _ = strconv.Atoi(idCard[6:10])
+		month, _ = strconv.Atoi(idCard[10:12])
+		day, _ = strconv.Atoi(idCard[12:14])
+	}
+	birthDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
+
+	// 计算年龄
+	age, _ = CalculateAge(year, month, day)
+
+	// 解析性别
+	var genderCode int
+	if len(idCard) == 15 {
+		genderCode, _ = strconv.Atoi(string(idCard[14]))
+		sequenceCode = idCard[12:15]
+	} else if len(idCard) == 18 {
+		genderCode, _ = strconv.Atoi(string(idCard[16]))
+		sequenceCode = idCard[14:17]
+	}
+	if genderCode%2 == 0 {
+		gender = "女"
+	} else {
+		gender = "男"
+	}
+
+	// 提取区域码
+	regionCode = idCard[:6]
+
+	return gender, age, birthDate, regionCode, sequenceCode, nil
 }
 
 // GetHostInfo 从http.Request中获取hostInfo
