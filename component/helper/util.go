@@ -519,7 +519,7 @@ func ParseIP(s string) (net.IP, int) {
 }
 
 // ParseChineseIDCard 解析中国大陆身份证号码，提取性别、年龄、生日、出生地等信息
-func ParseChineseIDCard(idCard string) (gender string, age int, birthDate string, regionCode string, sequenceCode string, err error) {
+func ParseChineseIDCard(idCard string) (gender string, age int, birthDay string, regionCode string, sequenceCode string, err error) {
 	if !validator.IsChineseIDCard(idCard) {
 		return "", 0, "", "", "", fmt.Errorf("无效的居民身份证")
 	}
@@ -534,7 +534,7 @@ func ParseChineseIDCard(idCard string) (gender string, age int, birthDate string
 		month, _ = strconv.Atoi(idCard[10:12])
 		day, _ = strconv.Atoi(idCard[12:14])
 	}
-	birthDate = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
+	birthDay = fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 
 	// 计算年龄
 	age, _ = CalculateAge(year, month, day)
@@ -557,7 +557,7 @@ func ParseChineseIDCard(idCard string) (gender string, age int, birthDate string
 	// 提取区域码
 	regionCode = idCard[:6]
 
-	return gender, age, birthDate, regionCode, sequenceCode, nil
+	return gender, age, birthDay, regionCode, sequenceCode, nil
 }
 
 // GetHostInfo 从http.Request中获取hostInfo
