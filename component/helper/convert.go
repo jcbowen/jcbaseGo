@@ -3,6 +3,7 @@ package helper
 import (
 	"encoding/json"
 	"log"
+	"math"
 	"os"
 	"reflect"
 	"strconv"
@@ -155,6 +156,41 @@ func (c Convert) ToInt() int {
 	}
 }
 
+// ToInt64 将变量转为int64类型
+func (c Convert) ToInt64() int64 {
+	if c.Value == nil {
+		return 0
+	}
+
+	switch v := c.Value.(type) {
+	case int64:
+		return v
+	case int, int8, int16, int32:
+		return int64(reflect.ValueOf(v).Int())
+	case uint, uint8, uint16, uint32, uint64:
+		u := reflect.ValueOf(v).Uint()
+		if u > uint64(math.MaxInt64) {
+			return 0
+		}
+		return int64(u)
+	case float32, float64:
+		f := reflect.ValueOf(v).Float()
+		if f > float64(math.MaxInt64) || f < float64(math.MinInt64) {
+			return 0
+		}
+		return int64(f)
+	case string:
+		i, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			log.Println("Error parsing int64 from string:", err)
+			return 0
+		}
+		return i
+	default:
+		return 0
+	}
+}
+
 // ToUint 将变量转为uint类型
 func (c Convert) ToUint() uint {
 	newValue, ok := c.ToNumber()
@@ -174,6 +210,41 @@ func (c Convert) ToUint() uint {
 			return 0
 		}
 		return uint(v)
+	default:
+		return 0
+	}
+}
+
+// ToUint64 将变量转为uint64类型
+func (c Convert) ToUint64() uint64 {
+	if c.Value == nil {
+		return 0
+	}
+
+	switch v := c.Value.(type) {
+	case uint64:
+		return v
+	case int, int8, int16, int32, int64:
+		i := reflect.ValueOf(v).Int()
+		if i < 0 {
+			return 0
+		}
+		return uint64(i)
+	case uint, uint8, uint16, uint32:
+		return uint64(reflect.ValueOf(v).Uint())
+	case float32, float64:
+		f := reflect.ValueOf(v).Float()
+		if f < 0 {
+			return 0
+		}
+		return uint64(f)
+	case string:
+		u, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			log.Println("Error parsing uint64 from string:", err)
+			return 0
+		}
+		return u
 	default:
 		return 0
 	}
