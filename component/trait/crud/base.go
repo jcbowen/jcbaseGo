@@ -8,7 +8,6 @@ import (
 	"github.com/jcbowen/jcbaseGo/component/trait/controller"
 	"log"
 	"reflect"
-	"strconv"
 	"time"
 )
 
@@ -219,35 +218,78 @@ func (t *Trait) BindMapToStruct(mapData map[string]any, modelValue interface{}) 
 func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 	switch fieldVal.Kind() {
 	case reflect.String:
-		strVal, ok := val.(string)
-		if !ok {
-			// return errors.New("cannot convert to string")
-			strVal = ""
-		}
+		strVal := helper.Convert{Value: val}.ToString()
 		fieldVal.SetString(strVal)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		intVal, err := strconv.ParseInt(val.(string), 10, 64)
-		if err != nil {
-			// return err
-			intVal = 0
-		}
+		intVal := helper.Convert{Value: val}.ToInt64()
 		fieldVal.SetInt(intVal)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		uintVal, err := strconv.ParseUint(val.(string), 10, 64)
-		if err != nil {
-			// return err
-			uintVal = 0
-		}
+		uintVal := helper.Convert{Value: val}.ToUint64()
 		fieldVal.SetUint(uintVal)
 	case reflect.Float32, reflect.Float64:
-		floatVal, err := strconv.ParseFloat(val.(string), 64)
-		if err != nil {
-			// return err
-			floatVal = 0.00
-		}
+		floatVal := helper.Convert{Value: val}.ToFloat64()
 		fieldVal.SetFloat(floatVal)
+	case reflect.Map:
+		// 检查输入val是否为map类型
+		valReflected := reflect.ValueOf(val)
+		if valReflected.Kind() == reflect.Map {
+			valType := valReflected.Type()
+			fieldType := fieldVal.Type()
+			if valType.Key().AssignableTo(fieldType.Key()) && valType.Elem().AssignableTo(fieldType.Elem()) {
+				// 类型匹配，进行赋值
+				fieldVal.Set(valReflected)
+			} else {
+				log.Printf("Map field type mismatch: expected %s but got %s\n", fieldType, valType)
+				// 类型不匹配，设置为nil
+				fieldVal.Set(reflect.Zero(fieldType))
+			}
+		} else {
+			log.Printf("Expected map type for field, got %s\n", valReflected.Type())
+			// 不是map类型，设置为nil
+			fieldVal.Set(reflect.Zero(fieldVal.Type()))
+		}
+	case reflect.Slice:
+		// 处理slice类型
+		valReflected := reflect.ValueOf(val)
+		if valReflected.Kind() == reflect.Slice {
+			valType := valReflected.Type()
+			fieldType := fieldVal.Type()
+			if valType.Elem().AssignableTo(fieldType.Elem()) {
+				fieldVal.Set(valReflected)
+			} else {
+				log.Printf("Slice element type mismatch: expected %s elements but got %s elements\n", fieldType.Elem(), valType.Elem())
+				fieldVal.Set(reflect.Zero(fieldType))
+			}
+		} else {
+			log.Printf("Expected slice type for field, got %s\n", valReflected.Type())
+			fieldVal.Set(reflect.Zero(fieldVal.Type()))
+		}
+	case reflect.Struct:
+		valReflected := reflect.ValueOf(val)
+		if valReflected.Kind() != reflect.Struct {
+			log.Printf("Expected struct type for assignment but got %s\n", valReflected.Type())
+			fieldVal.Set(reflect.Zero(fieldVal.Type())) // 设置为零值
+			return nil                                  // 返回 nil，不中断程序
+		}
+
+		// 遍历结构体中的每个字段
+		for i := 0; i < fieldVal.NumField(); i++ {
+			field := fieldVal.Type().Field(i)
+			subFieldVal := fieldVal.Field(i)
+
+			// 检查val中是否存在此字段
+			subValField := valReflected.FieldByName(field.Name)
+			if !subValField.IsValid() {
+				continue // 或者根据需要处理不存在的字段
+			}
+
+			// 递归地为结构体字段赋值
+			if err := t.setValue(subFieldVal, subValField.Interface()); err != nil {
+				return err
+			}
+		}
 	default:
-		return errors.New("unsupported field type")
+		return errors.New("unsupported field type：" + fieldVal.Kind().String())
 	}
 
 	return nil
