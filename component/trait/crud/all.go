@@ -46,7 +46,7 @@ func (t *Trait) ActionAll(c *gin.Context) {
 		return nil
 	}).Error
 	if err != nil {
-		t.Result(errcode.DatabaseError, err.Error())
+		t.Result(errcode.DatabaseError, "FindInBatches："+err.Error())
 		return
 	}
 
