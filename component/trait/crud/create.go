@@ -74,13 +74,29 @@ func (t *Trait) CreateFormData() (modelValue interface{}, mapData map[string]any
 }
 
 func (t *Trait) CreateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
-	// 可以在此处添加一些前置处理逻辑
-	return t.SaveBefore(modelValue, mapData)
+	callResults := t.callCustomMethod("SaveBefore", modelValue, mapData)
+	modelValue = callResults[0]
+	mapData = callResults[1].(map[string]any)
+	var err error
+	if callResults[2] != nil {
+		err = callResults[2].(error)
+	} else {
+		err = nil
+	}
+
+	return modelValue, mapData, err
 }
 
 func (t *Trait) CreateAfter(tx *gorm.DB, modelValue interface{}) error {
-	// 可以在此处添加一些后置处理逻辑
-	return t.AfterSave(tx, modelValue)
+	callResults := t.callCustomMethod("SaveAfter", tx, modelValue)
+	var err error
+	if callResults[0] != nil {
+		err = callResults[0].(error)
+	} else {
+		err = nil
+	}
+
+	return err
 }
 
 func (t *Trait) CreateReturn(item any) bool {
