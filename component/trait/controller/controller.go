@@ -49,7 +49,11 @@ func (c Base) Success(args ...any) {
 	case 3:
 		data = args[0]
 		additionalParams = args[1].(map[string]any)
-		message = args[1].(string)
+		var ok bool
+		message, ok = args[2].(string)
+		if !ok {
+			message = "ok"
+		}
 	}
 	c.Result(errcode.Success, message, data, additionalParams)
 }
