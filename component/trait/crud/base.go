@@ -235,6 +235,21 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 		if valReflected.Kind() == reflect.Map {
 			valType := valReflected.Type()
 			fieldType := fieldVal.Type()
+
+			// map[interface{}]interface{} 类型需要转换为 map[string]interface{}
+			if valType.Key().Kind() == reflect.Interface && valType.Elem().Kind() == reflect.Interface {
+				// 将 map[interface{}]interface{} 转换为 map[string]interface{}
+				convertedMap := make(map[string]interface{})
+				for _, key := range valReflected.MapKeys() {
+					strKey := helper.Convert{Value: key.Interface()}.ToString() // 转换 key 为 string
+					convertedMap[strKey] = valReflected.MapIndex(key).Interface()
+				}
+				val = convertedMap
+				valReflected = reflect.ValueOf(val)
+				valType = valReflected.Type()
+			}
+
+			// 检查类型是否匹配
 			if valType.Key().AssignableTo(fieldType.Key()) && valType.Elem().AssignableTo(fieldType.Elem()) {
 				// 类型匹配，进行赋值
 				fieldVal.Set(valReflected)
@@ -254,8 +269,17 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 		if valReflected.Kind() == reflect.Slice {
 			valType := valReflected.Type()
 			fieldType := fieldVal.Type()
+
 			if valType.Elem().AssignableTo(fieldType.Elem()) {
 				fieldVal.Set(valReflected)
+			} else if valType.Elem().Kind() == reflect.Interface && fieldType.Elem().Kind() == reflect.String {
+				// 如果slice中的元素是interface{}，而目标类型是string，则进行转换
+				convertedSlice := reflect.MakeSlice(fieldType, valReflected.Len(), valReflected.Cap())
+				for i := 0; i < valReflected.Len(); i++ {
+					strVal := helper.Convert{Value: valReflected.Index(i).Interface()}.ToString()
+					convertedSlice.Index(i).SetString(strVal)
+				}
+				fieldVal.Set(convertedSlice)
 			} else {
 				log.Printf("Slice element type mismatch: expected %s elements but got %s elements\n", fieldType.Elem(), valType.Elem())
 				fieldVal.Set(reflect.Zero(fieldType))
@@ -276,6 +300,11 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 		for i := 0; i < fieldVal.NumField(); i++ {
 			field := fieldVal.Type().Field(i)
 			subFieldVal := fieldVal.Field(i)
+
+			if !subFieldVal.CanSet() {
+				log.Printf("Field %s cannot be set. \n", field.Name)
+				continue
+			}
 
 			// 检查val中是否存在此字段
 			subValField := valReflected.FieldByName(field.Name)
