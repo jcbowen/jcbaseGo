@@ -32,9 +32,7 @@ func (s Input) Belong(allow []interface{}, strict bool) interface{} {
 		return s.DefaultValue
 	}
 	for _, v := range allow {
-		if strict && v == s.Value {
-			return s.Value
-		} else if !strict && (helper.Convert{Value: v}.ToString()) == (helper.Convert{Value: s.Value}.ToString()) {
+		if (strict && v == s.Value) || (!strict && helper.Convert{Value: v}.ToString() == helper.Convert{Value: s.Value}.ToString()) {
 			return s.Value
 		}
 	}
@@ -72,19 +70,22 @@ func (s Input) Sanitize() interface{} {
 	valueType := reflect.TypeOf(s.Value)
 	valueValue := reflect.ValueOf(s.Value)
 
-	// 检查是否传入的是指针
+	// 检查是否传入的是指针，并解引用
 	if valueType.Kind() == reflect.Ptr {
+		if valueValue.IsNil() {
+			return s.DefaultValue
+		}
 		valueType = valueType.Elem()
 		valueValue = valueValue.Elem()
 	}
 
 	switch valueType.Kind() {
+	case reflect.String:
+		return s.sanitizeString(valueValue.String())
 	case reflect.Slice:
 		return s.sanitizeSlice(valueValue)
 	case reflect.Map:
 		return s.sanitizeMap(valueValue)
-	case reflect.String:
-		return s.sanitizeString(helper.Convert{Value: valueValue.Interface()}.ToString())
 	case reflect.Struct:
 		return s.sanitizeStruct(valueValue)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
