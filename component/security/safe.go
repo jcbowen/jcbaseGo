@@ -27,13 +27,26 @@ var (
 )
 
 // Belong 检查值是否属于允许列表
-func (s Input) Belong(allow []interface{}, strict bool) interface{} {
+func (s Input) Belong(allow interface{}, strict bool) interface{} {
 	if helper.IsEmptyValue(s.Value) {
 		return s.DefaultValue
 	}
-	for _, v := range allow {
-		if (strict && v == s.Value) || (!strict && helper.Convert{Value: v}.ToString() == helper.Convert{Value: s.Value}.ToString()) {
-			return s.Value
+
+	allowValue := reflect.ValueOf(allow)
+	if allowValue.Kind() != reflect.Slice {
+		return s.DefaultValue
+	}
+
+	for i := 0; i < allowValue.Len(); i++ {
+		item := allowValue.Index(i).Interface()
+		if strict {
+			if reflect.DeepEqual(item, s.Value) {
+				return s.Value
+			}
+		} else {
+			if (helper.Convert{Value: item}.ToString()) == (helper.Convert{Value: s.Value}.ToString()) {
+				return s.Value
+			}
 		}
 	}
 	return s.DefaultValue
