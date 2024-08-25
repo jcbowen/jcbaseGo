@@ -23,8 +23,97 @@ var (
 	xssTagRegex      = regexp.MustCompile(`(?i)<(?:script|style|object|embed|link|meta|img|form|base|blink|xml|applet|bgsound|ilayer|layer|marquee|frameset|frame|iframe).*?>`)
 	specialCharRegex = regexp.MustCompile(`&[a-zA-Z0-9#]{2,8};`)
 	urlPattern       = regexp.MustCompile(`(href|src)=['"](.*?)['"]`)
-	replacementStr   = ""
 )
+
+// Sanitize 自动判断类型并进行通用清理
+func (s Input) Sanitize() interface{} {
+	if helper.IsEmptyValue(s.Value) {
+		return s.DefaultValue
+	}
+
+	valueType := reflect.TypeOf(s.Value)
+	valueValue := reflect.ValueOf(s.Value)
+
+	// 检查是否传入的是指针，并解引用
+	if valueType.Kind() == reflect.Ptr {
+		if valueValue.IsNil() {
+			return s.DefaultValue
+		}
+		valueType = valueType.Elem()
+		valueValue = valueValue.Elem()
+	}
+
+	switch valueType.Kind() {
+	case reflect.String:
+		return s.SanitizeString(valueValue.String())
+	case reflect.Slice:
+		return s.sanitizeSlice(valueValue)
+	case reflect.Map:
+		return s.sanitizeMap(valueValue)
+	case reflect.Struct:
+		return s.sanitizeStruct(valueValue)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64, reflect.Bool:
+		return s.Value
+	default:
+		return s.DefaultValue
+	}
+}
+
+// SanitizeString 清理字符串以防止 SQL 注入和 XSS 攻击
+func (s Input) SanitizeString(str string, args ...any) string {
+	var (
+		defVal        string
+		sanitizeTypes []string
+		ok            bool
+	)
+
+	// 默认清理类型为 "badStr" 和 "htmlEntity"
+	if len(args) == 0 {
+		sanitizeTypes = []string{"badStr", "htmlEntity"}
+	} else {
+		// 类型安全检查，确保传入的参数是 []string
+		if sanitizeTypes, ok = args[0].([]string); !ok {
+			sanitizeTypes = []string{"badStr", "htmlEntity"}
+		}
+	}
+
+	// 如果字符串为空，直接返回默认值或空字符串
+	if str == "" {
+		if defVal, ok = s.DefaultValue.(string); ok {
+			return defVal
+		}
+		return ""
+	}
+
+	// 根据指定的清理类型进行处理
+	for _, sanitizeType := range sanitizeTypes {
+		switch sanitizeType {
+		case "badStr":
+			str = s.badStrReplace(str)
+		case "htmlEntity":
+			str = htmlEntityRegex.ReplaceAllString(str, "&$1")
+		case "sql":
+			str = sqlRegex.ReplaceAllString(str, "")
+		case "xss":
+			str = s.removeXss(str)
+		}
+	}
+
+	// 再次检查清理后的字符串是否为空
+	if str == "" {
+		if defVal, ok = s.DefaultValue.(string); ok {
+			return defVal
+		}
+		return ""
+	}
+
+	// 最后进行 HTML 转义
+	str = html.EscapeString(str)
+
+	return str
+}
 
 // Belong 检查值是否属于允许列表
 func (s Input) Belong(allow interface{}, strict bool) interface{} {
@@ -74,60 +163,9 @@ func (s Input) Html() string {
 	return val
 }
 
-// Sanitize 清理并返回值
-func (s Input) Sanitize() interface{} {
-	if helper.IsEmptyValue(s.Value) {
-		return s.DefaultValue
-	}
-
-	valueType := reflect.TypeOf(s.Value)
-	valueValue := reflect.ValueOf(s.Value)
-
-	// 检查是否传入的是指针，并解引用
-	if valueType.Kind() == reflect.Ptr {
-		if valueValue.IsNil() {
-			return s.DefaultValue
-		}
-		valueType = valueType.Elem()
-		valueValue = valueValue.Elem()
-	}
-
-	switch valueType.Kind() {
-	case reflect.String:
-		return s.sanitizeString(valueValue.String())
-	case reflect.Slice:
-		return s.sanitizeSlice(valueValue)
-	case reflect.Map:
-		return s.sanitizeMap(valueValue)
-	case reflect.Struct:
-		return s.sanitizeStruct(valueValue)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64, reflect.Bool:
-		return s.Value
-	default:
-		return s.DefaultValue
-	}
-}
-
-// sanitizeString 清理字符串以防止 SQL 注入和 XSS 攻击
-func (s Input) sanitizeString(str string) string {
-	if str == "" {
-		if defVal, ok := s.DefaultValue.(string); ok {
-			return defVal
-		}
-		return ""
-	}
-	str = s.badStrReplace(str)
-	str = htmlEntityRegex.ReplaceAllString(str, "&$1")
-	str = sqlRegex.ReplaceAllString(str, "")
-	str = html.EscapeString(str)
-	return str
-}
-
 // badStrReplace 替换潜在的有害子字符串
 func (s Input) badStrReplace(str string) string {
-	return badStrRegex.ReplaceAllString(str, replacementStr)
+	return badStrRegex.ReplaceAllString(str, "")
 }
 
 // sanitizeSlice 清理切片
