@@ -188,6 +188,11 @@ const (
 	// NetworkError 网络错误(未指定服务端还是客户端)
 	NetworkError = 9003502
 
+	// NoPreAction 未进行前置活动 9005000
+	NoPreAction = 9005000
+	// NoNextAction 未进行后置活动 9006000
+	NoNextAction = 9005001
+
 	// Other 其他错误
 	Other = 9999999
 )
