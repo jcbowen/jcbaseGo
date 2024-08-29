@@ -56,6 +56,9 @@ func (c Convert) ToBool() bool {
 	case bool:
 		return v
 	case string:
+		if v == "" {
+			return false
+		}
 		b, err := strconv.ParseBool(v)
 		if err != nil {
 			log.Println("Error parsing bool from string:", err)
