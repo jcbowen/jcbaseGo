@@ -231,16 +231,27 @@ func (c Base) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 
 	gpcInterface, GPCExists := c.GinContext.Get("GPC")
 	if !GPCExists {
+		log.Println("GPC data not found")
 		return
 	}
-	formDataMap := gpcInterface.(map[string]map[string]any)[mapKey]
+
+	formDataMap, ok := gpcInterface.(map[string]map[string]any)[mapKey]
+	if !ok {
+		log.Printf("Type assertion failed for formDataMap, expected map[string]map[string]any, got %T\n", gpcInterface)
+		return
+	}
 
 	// 安全过滤
 	sanitizedMapData := security.Input{Value: formDataMap}.Sanitize().(map[interface{}]interface{})
-	// 格式转换
+
+	// 转换为 map[string]any
 	mapData = make(map[string]any)
 	for k, value := range sanitizedMapData {
-		strKey := k.(string)
+		strKey, ok := k.(string)
+		if !ok {
+			log.Printf("Type assertion failed for key in sanitizedMapData, got %T\n", k)
+			continue
+		}
 		mapData[strKey] = value
 	}
 
