@@ -12,20 +12,35 @@ import (
 func (t *Trait) ActionDetail(c *gin.Context) {
 	t.InitCrud(c)
 
+	// 获取安全过滤后的请求参数
 	mapData := t.GetSafeMapGPC("all")
 
-	idStr, ok := mapData[t.PkId]
+	// detail参数获取回调
+	callResults := t.callCustomMethod("DetailFormData", mapData)
+	mapData = callResults[0].(map[string]any)
+	if callResults[1] != nil {
+		err := callResults[1].(error)
+		if err != nil {
+			t.Result(errcode.ParamError, err.Error())
+			return
+		}
+	}
+
+	// 获取泛类型参数参数
+	idAny, ok := mapData[t.PkId]
 	if !ok {
 		t.Result(errcode.ParamError, t.PkId+" 不能为空")
 	}
-	showDeletedStr, ok := mapData["show_deleted"]
+	showDeletedAny, ok := mapData["show_deleted"]
 	if !ok {
-		showDeletedStr = "0"
+		showDeletedAny = "0"
 	}
 
-	id := helper.Convert{Value: idStr}.ToUint()
-	showDeleted := helper.Convert{Value: showDeletedStr}.ToBool()
+	// 转换参数为正确的类型
+	id := helper.Convert{Value: idAny}.ToUint()
+	showDeleted := helper.Convert{Value: showDeletedAny}.ToBool()
 
+	// 判断必要参数是否为空
 	if helper.IsEmptyValue(id) {
 		t.Result(errcode.ParamError, t.PkId+" 不能为空")
 		return
@@ -85,6 +100,10 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 
 	// 返回结果
 	t.callCustomMethod("DetailReturn", result)
+}
+
+func (t *Trait) DetailFormData(mapData map[string]any) (map[string]any, error) {
+	return mapData, nil
 }
 
 func (t *Trait) DetailQuery(query *gorm.DB) *gorm.DB {
