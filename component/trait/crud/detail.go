@@ -12,8 +12,18 @@ import (
 func (t *Trait) ActionDetail(c *gin.Context) {
 	t.InitCrud(c)
 
-	id, _ := t.ExtractPkId()
-	showDeletedStr := c.DefaultQuery("show_deleted", "0")
+	mapData := t.GetSafeMapGPC("all")
+
+	idStr, ok := mapData[t.PkId]
+	if !ok {
+		t.Result(errcode.ParamError, t.PkId+" 不能为空")
+	}
+	showDeletedStr, ok := mapData["show_deleted"]
+	if !ok {
+		showDeletedStr = "0"
+	}
+
+	id := helper.Convert{Value: idStr}.ToUint()
 	showDeleted := helper.Convert{Value: showDeletedStr}.ToBool()
 
 	if helper.IsEmptyValue(id) {
