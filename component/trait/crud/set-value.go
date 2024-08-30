@@ -116,7 +116,7 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 	}
 
 	// 调用自定义的SetValueAfter方法进行后置处理
-	callResults = t.callCustomMethod("SetValueAfter", id, field, value)
+	callResults = t.callCustomMethod("SetValueAfter", tx, id, field, value)
 	if callResults[0] != nil {
 		err, ok := callResults[0].(error)
 		if ok && err != nil {
@@ -149,11 +149,10 @@ func (t *Trait) SetValueCheckField(field string) error {
 }
 
 func (t *Trait) SetValueBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
-	// 可以在此处添加一些前置处理逻辑
-	return t.SaveBefore(modelValue, mapData)
+	return modelValue, mapData, nil
 }
 
-func (t *Trait) SetValueAfter(id uint, field string, value any) error {
+func (t *Trait) SetValueAfter(tx *gorm.DB, id uint, field string, value any) error {
 	return nil
 }
 
