@@ -12,12 +12,9 @@ import (
 func (t *Trait) ActionDetail(c *gin.Context) {
 	t.InitCrud(c)
 
-	// 获取安全过滤后的请求参数
-	mapData := t.GetSafeMapGPC("all")
-
 	// detail参数获取回调
-	callResults := t.callCustomMethod("DetailFormData", mapData)
-	mapData = callResults[0].(map[string]any)
+	callResults := t.callCustomMethod("DetailFormData")
+	mapData := callResults[0].(map[string]any)
 	if callResults[1] != nil {
 		err := callResults[1].(error)
 		if err != nil {
@@ -58,7 +55,7 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 		query = query.Where(t.TableAlias + "deleted_at IS NULL")
 	}
 
-	query = t.callCustomMethod("DetailQuery", query)[0].(*gorm.DB)
+	query = t.callCustomMethod("DetailQuery", query, mapData)[0].(*gorm.DB)
 
 	// 动态创建模型实例
 	if t.DetailResultStruct == nil {
@@ -102,11 +99,14 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 	t.callCustomMethod("DetailReturn", result)
 }
 
-func (t *Trait) DetailFormData(mapData map[string]any) (map[string]any, error) {
+func (t *Trait) DetailFormData() (map[string]any, error) {
+	// 获取安全过滤后的请求参数
+	mapData := t.GetSafeMapGPC("all")
+
 	return mapData, nil
 }
 
-func (t *Trait) DetailQuery(query *gorm.DB) *gorm.DB {
+func (t *Trait) DetailQuery(query *gorm.DB, mapData map[string]any) *gorm.DB {
 	return query
 }
 
