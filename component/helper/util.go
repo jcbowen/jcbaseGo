@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -853,4 +854,37 @@ func Min(numbers ...interface{}) interface{} {
 		}
 	}
 	return minValue
+}
+
+// TraceCaller 打印当前函数及其调用者的信息。
+//
+// 该函数会获取当前执行的函数名称和调用该函数的位置（文件和行号）。
+// 如果无法获取当前函数或调用者的信息，将会打印错误信息并返回。
+//
+// 注意：
+// - `runtime.Caller(1)` 获取的是TraceCaller的调用者信息。
+// - `runtime.Caller(2)` 获取的是TraceCaller的调用者的调用者信息，即调用链的上一层。
+//
+// 输出格式为：
+// Function: <当前函数名称> was called from <调用者函数名称>, file: <调用者文件路径>, line: <调用者行号>
+func TraceCaller() {
+	// 获取当前方法信息
+	pcCurrent, _, _, ok := runtime.Caller(1)
+	if !ok {
+		fmt.Println("Unable to get current function info")
+		return
+	}
+
+	fnCurrent := runtime.FuncForPC(pcCurrent)
+
+	// 获取调用者的信息
+	pcCaller, file, line, ok := runtime.Caller(2)
+	if !ok {
+		fmt.Println("Unable to get caller info")
+		return
+	}
+
+	fnCaller := runtime.FuncForPC(pcCaller)
+
+	fmt.Printf("Function: %s was called from %s, file: %s, line: %d\n", fnCurrent.Name(), fnCaller.Name(), file, line)
 }
