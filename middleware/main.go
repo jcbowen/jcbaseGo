@@ -98,7 +98,7 @@ func splitIps(s string) []string {
 }
 
 // SetGPC 设置响应头
-func (b Base) SetGPC() gin.HandlerFunc {
+func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var err error
 
@@ -166,7 +166,7 @@ func (b Base) SetGPC() gin.HandlerFunc {
 				}
 			}
 		case "multipart/form-data":
-			err = c.Request.ParseMultipartForm(200 << 20) // 200MB
+			err = c.Request.ParseMultipartForm(e.MaxMultipartMemory)
 			if err == nil {
 				for key, values := range c.Request.MultipartForm.Value {
 					if len(values) > 0 {
