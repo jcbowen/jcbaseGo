@@ -3,6 +3,7 @@ package security
 import (
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"html"
+	"mime/multipart"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -194,7 +195,17 @@ func (s Input) sanitizeMap(mapValue reflect.Value) map[interface{}]interface{} {
 
 // sanitizeStruct 清理结构体
 func (s Input) sanitizeStruct(value reflect.Value) interface{} {
-	sanitizedStruct := reflect.New(value.Type()).Elem()
+	// 如果是文件头指针，不用进行特殊处理，直接返回
+	_, IsFileHeaderPointer := value.Interface().(multipart.FileHeader)
+	if IsFileHeaderPointer {
+		return value.Interface()
+	}
+
+	sanitizedStruct := reflect.New(value.Type())
+
+	if sanitizedStruct.Kind() == reflect.Pointer {
+		sanitizedStruct = sanitizedStruct.Elem()
+	}
 
 	for i := 0; i < value.NumField(); i++ {
 		field := value.Field(i)

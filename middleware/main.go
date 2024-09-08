@@ -182,6 +182,11 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 						}
 					}
 				}
+
+				// 处理文件上传字段
+				for key, _ := range c.Request.MultipartForm.File {
+					formDataMap[key], _ = c.FormFile(key)
+				}
 			}
 		default:
 			if c.ContentType() != "" {
