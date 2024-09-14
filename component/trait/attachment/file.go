@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"image"
+	_ "image/gif"  // 导入 GIF 支持
+	_ "image/jpeg" // 导入 JPEG 支持
+	_ "image/png"  // 导入 PNG 支持
 	"io"
 	"log"
 	"mime"
@@ -58,6 +61,7 @@ func (a *Attachment) initOpt(opt *Options) {
 	if opt.FileType == "" {
 		opt.FileType = "image"
 	}
+	a.FileType = opt.FileType
 
 	if opt.AttachmentDir == "" {
 		opt.AttachmentDir = "attachment"
@@ -126,12 +130,16 @@ func (a *Attachment) Save() *Attachment {
 		}
 	}(srcFile)
 
+	// 赋值文件大小
+	a.FileSize = a.FileHeader.Size
+
 	// 如果是图片，应当获取宽高
 	if a.Opt.FileType == "image" {
 		// 解码图片
 		img, _, err := image.Decode(srcFile)
 		if err != nil {
 			log.Println("解码图片失败: ", err)
+			a.addError(err)
 		} else {
 			// 获取图片尺寸
 			bounds := img.Bounds()
