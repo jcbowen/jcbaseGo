@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/jcbowen/jcbaseGo/component/helper"
+	"image"
 	"io"
 	"log"
 	"mime"
@@ -18,21 +19,30 @@ import (
 
 // Attachment 附件结构体，包含文件头信息、扩展名、保存目录和错误列表
 type Attachment struct {
-	FileHeader *multipart.FileHeader // multipart 文件头部
-	FileMD5    string                // 文件MD5
-	Opt        *Options              // 附件实例化时的参数选项
+	Opt *Options // 附件实例化时的参数选项
 
-	ext     string  // 文件扩展名
+	// 临时
+	FileHeader *multipart.FileHeader
+
+	FileType       string // 附件类型
+	FileName       string // 附件名
+	FileSize       int64  // 附件大小
+	FileAttachment string // 附件相对路径
+	FileMD5        string // 附件MD5
+	FileExt        string // 文件扩展名
+	Width          int    // 图片宽
+	Height         int    // 图片高
+
 	saveDir string  // 文件保存目录
 	errors  []error // 错误信息列表
 }
 
 // Options 附件实例化时的参数选项
 type Options struct {
-	FileData interface{} // 文件数据，支持base64字符串或*multipart.FileHeader
-	FileType string      // 文件类型
+	FileData      interface{} // 文件数据，支持base64字符串或*multipart.FileHeader
+	FileType      string      // 文件类型，默认为image
+	AttachmentDir string      // 附件目录，默认为attachment
 
-	SaveDir string // 文件保存目录
 }
 
 // New 创建一个新的附件实例，处理初始化和文件类型解析
@@ -49,10 +59,12 @@ func (a *Attachment) initOpt(opt *Options) {
 		opt.FileType = "image"
 	}
 
-	if opt.SaveDir == "" {
-		opt.SaveDir = fmt.Sprintf("./attachment/%ss/%s/", opt.FileType, time.Now().Format("2006/01"))
+	if opt.AttachmentDir == "" {
+		opt.AttachmentDir = "attachment"
 	}
-	a.saveDir, _ = filepath.Abs(opt.SaveDir)
+
+	a.saveDir = fmt.Sprintf("./%s/%ss/%s/", opt.AttachmentDir, opt.FileType, time.Now().Format("2006/01"))
+	a.saveDir, _ = filepath.Abs(a.saveDir)
 
 	a.Opt = opt
 }
@@ -114,11 +126,26 @@ func (a *Attachment) Save() *Attachment {
 		}
 	}(srcFile)
 
+	// 如果是图片，应当获取宽高
+	if a.Opt.FileType == "image" {
+		// 解码图片
+		img, _, err := image.Decode(srcFile)
+		if err != nil {
+			log.Println("解码图片失败: ", err)
+		} else {
+			// 获取图片尺寸
+			bounds := img.Bounds()
+			a.Width = bounds.Dx()
+			a.Height = bounds.Dy()
+		}
+	}
+
 	// 生成文件MD5和复制文件内容
 	hash := md5.New()
 	reader := io.TeeReader(srcFile, hash)
 
-	_, fullDstFilePath, _ := a.fileRandomName(a.saveDir)
+	var fullDstFilePath string
+	a.FileName, fullDstFilePath, _ = a.fileRandomName(a.saveDir)
 
 	// 创建目标文件之前，确保目录存在
 	err = os.MkdirAll(filepath.Dir(fullDstFilePath), os.ModePerm)
@@ -146,6 +173,15 @@ func (a *Attachment) Save() *Attachment {
 	}
 	a.FileMD5 = hex.EncodeToString(hash.Sum(nil))
 
+	// 获取附件相对路径
+	index := strings.Index(fullDstFilePath, a.Opt.AttachmentDir+"/")
+	if index == -1 {
+		log.Println("未在路径中找到" + a.Opt.AttachmentDir)
+		a.addError(fmt.Errorf("未在路径中找到%s", a.Opt.AttachmentDir))
+	} else {
+		a.FileAttachment = fullDstFilePath[index+len(a.Opt.AttachmentDir+"/"):]
+	}
+
 	return a
 }
 
@@ -160,10 +196,10 @@ func (a *Attachment) Error() error {
 
 // getExt 获取文件扩展名，若未设置则从文件名解析
 func (a *Attachment) getExt() string {
-	if a.ext == "" {
-		a.ext = strings.ToLower(filepath.Ext(a.FileHeader.Filename))
+	if a.FileExt == "" {
+		a.FileExt = strings.ToLower(filepath.Ext(a.FileHeader.Filename))
 	}
-	return a.ext
+	return a.FileExt
 }
 
 // fileRandomName 生成随机文件名，确保文件名在指定目录下是唯一的
@@ -171,7 +207,7 @@ func (a *Attachment) fileRandomName(dir string) (filename, fullDstFile string, e
 	for {
 		dateStr := time.Now().Format("02150405")
 		randomStr := helper.Random(22)
-		filename = fmt.Sprintf("%s%s%s", dateStr, randomStr, a.ext)
+		filename = fmt.Sprintf("%s%s%s", dateStr, randomStr, a.FileExt)
 		fullDstFile = filepath.Join(dir, filename)
 		if _, err = os.Stat(fullDstFile); os.IsNotExist(err) {
 			break
@@ -213,17 +249,17 @@ func (a *Attachment) parseBase64ToMultipart(base64Data string) (*os.File, error)
 	}
 
 	var ok bool
-	a.ext, ok = extMap[mediaType]
+	a.FileExt, ok = extMap[mediaType]
 	if !ok {
 		// 使用 MIME 类型解析库提供的扩展名作为后备选项
 		exts, err := mime.ExtensionsByType(mediaType)
 		if err != nil || len(exts) == 0 {
 			return nil, fmt.Errorf("no suitable extension found for MIME type: %s", mediaType)
 		}
-		a.ext = exts[0] // 使用 mime 提供的第一个扩展名
+		a.FileExt = exts[0] // 使用 mime 提供的第一个扩展名
 	}
 
-	tmpFile, err := os.CreateTemp("", "attachment-*"+a.ext)
+	tmpFile, err := os.CreateTemp("", "attachment-*"+a.FileExt)
 	if err != nil {
 		return tmpFile, err
 	}
