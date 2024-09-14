@@ -50,9 +50,10 @@ func (a *Attachment) initOpt(opt *Options) {
 	}
 
 	if opt.SaveDir == "" {
-		saveDir := fmt.Sprintf("./attachment/%ss/%s/", opt.FileType, time.Now().Format("2006/01"))
-		opt.SaveDir, _ = filepath.Abs(saveDir)
+		opt.SaveDir = fmt.Sprintf("./attachment/%ss/%s/", opt.FileType, time.Now().Format("2006/01"))
 	}
+	a.saveDir, _ = filepath.Abs(opt.SaveDir)
+
 	a.Opt = opt
 }
 
@@ -97,8 +98,6 @@ func (a *Attachment) Save() *Attachment {
 		return a
 	}
 
-	log.Println("保存文件: ", a.FileHeader.Filename)
-
 	// 打开源文件（已经是临时文件的内容）
 	srcFile, err := os.Open(a.FileHeader.Filename) // 直接打开临时文件
 	if err != nil {
@@ -119,7 +118,15 @@ func (a *Attachment) Save() *Attachment {
 	hash := md5.New()
 	reader := io.TeeReader(srcFile, hash)
 
-	fullDstFilePath, _ := a.fileRandomName(a.saveDir)
+	_, fullDstFilePath, _ := a.fileRandomName(a.saveDir)
+
+	// 创建目标文件之前，确保目录存在
+	err = os.MkdirAll(filepath.Dir(fullDstFilePath), os.ModePerm)
+	if err != nil {
+		a.addError(fmt.Errorf("创建目录失败: %v", err))
+		return a
+	}
+
 	dstFile, err := os.Create(fullDstFilePath) // 创建目标文件
 	if err != nil {
 		a.addError(err)
@@ -160,16 +167,16 @@ func (a *Attachment) getExt() string {
 }
 
 // fileRandomName 生成随机文件名，确保文件名在指定目录下是唯一的
-func (a *Attachment) fileRandomName(dir string) (filename string, err error) {
+func (a *Attachment) fileRandomName(dir string) (filename, fullDstFile string, err error) {
 	for {
 		dateStr := time.Now().Format("02150405")
 		randomStr := helper.Random(22)
 		filename = fmt.Sprintf("%s%s%s", dateStr, randomStr, a.ext)
-
-		if _, err = os.Stat(filepath.Join(dir, filename)); os.IsNotExist(err) {
+		fullDstFile = filepath.Join(dir, filename)
+		if _, err = os.Stat(fullDstFile); os.IsNotExist(err) {
 			break
 		} else if err != nil {
-			return "", err
+			return
 		}
 	}
 	return
