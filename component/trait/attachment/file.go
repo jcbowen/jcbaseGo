@@ -273,12 +273,12 @@ func (a *Attachment) parseBase64ToMultipart(base64Data string) (*os.File, error)
 	}
 
 	if _, err = tmpFile.Write(decodedData); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return nil, err
 	}
 
 	if _, err = tmpFile.Seek(0, 0); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return nil, err
 	}
 
