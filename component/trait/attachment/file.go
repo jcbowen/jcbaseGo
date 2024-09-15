@@ -45,7 +45,6 @@ type Options struct {
 	FileData      interface{} // 文件数据，支持base64字符串或*multipart.FileHeader
 	FileType      string      // 文件类型，默认为image
 	AttachmentDir string      // 附件目录，默认为attachment
-
 }
 
 // New 创建一个新的附件实例，处理初始化和文件类型解析
