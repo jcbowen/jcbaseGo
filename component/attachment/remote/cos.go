@@ -3,30 +3,34 @@ package remote
 import (
 	"bytes"
 	"context"
-	"github.com/tencentyun/cos-go-sdk-v5"
+	"io"
 	"net/http"
 	"net/url"
+	"sync"
+	"time"
+
+	"github.com/tencentyun/cos-go-sdk-v5"
 )
 
 // COSConfig 定义了腾讯云COS的配置参数。
 type COSConfig struct {
-	BucketURL string // COS存储桶URL，例如 "https://your-bucket.cos.region.myqcloud.com"
+	BucketURL string // COS存储桶URL
 	SecretID  string // 腾讯云API密钥ID
 	SecretKey string // 腾讯云API密钥Key
-	// 可添加更多配置项，例如超时等
 }
 
 // COSClient 实现了腾讯云COS存储的客户端。
+// 注意：COSClient是并发安全的。
 type COSClient struct {
-	client *cos.Client // COS客户端
+	client *cos.Client
+	mu     sync.Mutex
 }
 
 // NewCOSClient 创建一个新的COS客户端。
-// config：COS配置参数
 func NewCOSClient(config COSConfig) (*COSClient, error) {
 	u, err := url.Parse(config.BucketURL)
 	if err != nil {
-		return nil, err
+		return nil, &Error{Op: "ParseBucketURL", Err: err}
 	}
 
 	b := &cos.BaseURL{BucketURL: u}
@@ -41,39 +45,86 @@ func NewCOSClient(config COSConfig) (*COSClient, error) {
 }
 
 // Upload 实现了Client接口的Upload方法。
-// 将数据上传到指定的远程路径。
-func (c *COSClient) Upload(remotePath string, data []byte) error {
-	_, err := c.client.Object.Put(context.Background(), remotePath, bytes.NewReader(data), nil)
-	return err
+func (c *COSClient) Upload(ctx context.Context, remotePath string, data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	_, err := c.client.Object.Put(ctx, remotePath, bytes.NewReader(data), nil)
+	if err != nil {
+		return &Error{Op: "Upload", Err: err}
+	}
+	return nil
+}
+
+// Download 实现了Client接口的Download方法。
+func (c *COSClient) Download(ctx context.Context, remotePath string) ([]byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	resp, err := c.client.Object.Get(ctx, remotePath, nil)
+	if err != nil {
+		return nil, &Error{Op: "Download", Err: err}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &Error{Op: "Download", Err: err}
+	}
+	return data, nil
 }
 
 // Delete 实现了Client接口的Delete方法。
-// 删除指定的远程文件。
-func (c *COSClient) Delete(remotePath string) error {
-	_, err := c.client.Object.Delete(context.Background(), remotePath)
-	return err
+func (c *COSClient) Delete(ctx context.Context, remotePath string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	_, err := c.client.Object.Delete(ctx, remotePath)
+	if err != nil {
+		return &Error{Op: "Delete", Err: err}
+	}
+	return nil
 }
 
 // List 实现了Client接口的List方法。
-// 列举指定远程目录下的文件。
-func (c *COSClient) List(remoteDir string) ([]string, error) {
+func (c *COSClient) List(ctx context.Context, options ListOptions) (ListResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	opt := &cos.BucketGetOptions{
-		Prefix:  remoteDir,
-		MaxKeys: 1000,
+		Prefix:  options.Prefix,
+		Marker:  options.Marker,
+		MaxKeys: options.MaxKeys,
 	}
-	result, _, err := c.client.Bucket.Get(context.Background(), opt)
+	result, _, err := c.client.Bucket.Get(ctx, opt)
 	if err != nil {
-		return nil, err
+		return ListResult{}, &Error{Op: "List", Err: err}
 	}
-	var files []string
+
+	var files []FileInfo // 使用 var 声明空切片
 	for _, content := range result.Contents {
-		files = append(files, content.Key)
+		modTime, err := time.Parse(time.RFC3339, content.LastModified)
+		if err != nil {
+			return ListResult{}, &Error{Op: "List", Err: err}
+		}
+
+		files = append(files, FileInfo{
+			Name:    content.Key,
+			Size:    content.Size,
+			ModTime: modTime,
+			IsDir:   false,
+		})
 	}
-	return files, nil
+
+	return ListResult{
+		Files:       files,
+		NextMarker:  result.NextMarker,
+		IsTruncated: result.IsTruncated,
+	}, nil
 }
 
 // Close 实现了Client接口的Close方法。
-// COS客户端不需要显式关闭连接，因此该方法为空实现。
 func (c *COSClient) Close() error {
+	// COS客户端不需要显式关闭连接
 	return nil
 }

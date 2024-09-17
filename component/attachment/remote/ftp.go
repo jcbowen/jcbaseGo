@@ -2,25 +2,30 @@ package remote
 
 import (
 	"bytes"
-	"github.com/jlaffaye/ftp"
+	"context"
+	"io"
+	"sync"
 	"time"
+
+	"github.com/jlaffaye/ftp"
 )
 
 // FTPConfig 定义了FTP存储的配置参数。
 type FTPConfig struct {
-	Address  string        // FTP服务器地址，格式为 "host:port"
+	Address  string        // FTP服务器地址
 	Username string        // FTP登录用户名
 	Password string        // FTP登录密码
-	Timeout  time.Duration // 连接超时时间，可选，默认5秒
+	Timeout  time.Duration // 连接超时时间，可选
 }
 
 // FTPClient 实现了FTP存储的客户端。
+// 注意：FTPClient是并发安全的。
 type FTPClient struct {
-	conn *ftp.ServerConn // FTP服务器连接
+	conn *ftp.ServerConn
+	mu   sync.Mutex
 }
 
 // NewFTPClient 创建一个新的FTP客户端。
-// config：FTP配置参数
 func NewFTPClient(config FTPConfig) (*FTPClient, error) {
 	timeout := config.Timeout
 	if timeout == 0 {
@@ -29,45 +34,141 @@ func NewFTPClient(config FTPConfig) (*FTPClient, error) {
 
 	conn, err := ftp.Dial(config.Address, ftp.DialWithTimeout(timeout))
 	if err != nil {
-		return nil, err
+		return nil, &Error{Op: "Dial", Err: err}
 	}
 
 	err = conn.Login(config.Username, config.Password)
 	if err != nil {
-		return nil, err
+		return nil, &Error{Op: "Login", Err: err}
 	}
 
 	return &FTPClient{conn: conn}, nil
 }
 
 // Upload 实现了Client接口的Upload方法。
-// 将数据上传到指定的远程路径。
-func (c *FTPClient) Upload(remotePath string, data []byte) error {
-	return c.conn.Stor(remotePath, bytes.NewBuffer(data))
+func (c *FTPClient) Upload(ctx context.Context, remotePath string, data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return &Error{Op: "Upload", Err: ctx.Err()}
+	default:
+	}
+
+	err := c.conn.Stor(remotePath, bytes.NewReader(data))
+	if err != nil {
+		return &Error{Op: "Upload", Err: err}
+	}
+	return nil
+}
+
+// Download 实现了Client接口的Download方法。
+func (c *FTPClient) Download(ctx context.Context, remotePath string) ([]byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return nil, &Error{Op: "Download", Err: ctx.Err()}
+	default:
+	}
+
+	resp, err := c.conn.Retr(remotePath)
+	if err != nil {
+		return nil, &Error{Op: "Download", Err: err}
+	}
+	defer func() { _ = resp.Close() }()
+
+	data, err := io.ReadAll(resp)
+	if err != nil {
+		return nil, &Error{Op: "Download", Err: err}
+	}
+	return data, nil
 }
 
 // Delete 实现了Client接口的Delete方法。
-// 删除指定的远程文件。
-func (c *FTPClient) Delete(remotePath string) error {
-	return c.conn.Delete(remotePath)
+func (c *FTPClient) Delete(ctx context.Context, remotePath string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return &Error{Op: "Delete", Err: ctx.Err()}
+	default:
+	}
+
+	err := c.conn.Delete(remotePath)
+	if err != nil {
+		return &Error{Op: "Delete", Err: err}
+	}
+	return nil
 }
 
 // List 实现了Client接口的List方法。
-// 列举指定远程目录下的文件。
-func (c *FTPClient) List(remoteDir string) ([]string, error) {
-	entries, err := c.conn.List(remoteDir)
+func (c *FTPClient) List(ctx context.Context, options ListOptions) (ListResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ListResult{}, &Error{Op: "List", Err: ctx.Err()}
+	default:
+	}
+
+	entries, err := c.conn.List(options.Prefix)
 	if err != nil {
-		return nil, err
+		return ListResult{}, &Error{Op: "List", Err: err}
 	}
-	var files []string
+
+	var files []FileInfo // 使用 var 声明空切片
 	for _, entry := range entries {
-		files = append(files, entry.Name)
+		files = append(files, FileInfo{
+			Name:    entry.Name,
+			Size:    int64(entry.Size),
+			ModTime: entry.Time,
+			IsDir:   entry.Type == ftp.EntryTypeFolder,
+		})
 	}
-	return files, nil
+
+	// 模拟分页
+	start := 0
+	if options.Marker != "" {
+		for i, file := range files {
+			if file.Name == options.Marker {
+				start = i + 1
+				break
+			}
+		}
+	}
+
+	end := len(files)
+	if options.MaxKeys > 0 && start+options.MaxKeys < end {
+		end = start + options.MaxKeys
+	}
+
+	resultFiles := files[start:end]
+	isTruncated := end < len(files)
+	nextMarker := ""
+	if isTruncated {
+		nextMarker = resultFiles[len(resultFiles)-1].Name
+	}
+
+	return ListResult{
+		Files:       resultFiles,
+		NextMarker:  nextMarker,
+		IsTruncated: isTruncated,
+	}, nil
 }
 
 // Close 实现了Client接口的Close方法。
-// 关闭FTP连接。
 func (c *FTPClient) Close() error {
-	return c.conn.Quit()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	err := c.conn.Quit()
+	if err != nil {
+		return &Error{Op: "Close", Err: err}
+	}
+	return nil
 }

@@ -1,8 +1,11 @@
-// Package remote 提供了多种远程存储方式的统一接口，包括FTP、SFTP、腾讯云COS、阿里云OSS等。
+// Package remote 提供多种远程存储方式的统一接口。
 package remote
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"time"
 )
 
 // 存储类型常量定义
@@ -11,32 +14,55 @@ const (
 	TypeSFTP = "sftp" // SFTP存储类型
 	TypeCOS  = "cos"  // 腾讯云COS存储类型
 	TypeOSS  = "oss"  // 阿里云OSS存储类型
-	// 可以根据需要扩展其他类型
 )
 
+// Error 定义了统一的错误类型
+type Error struct {
+	Op  string // 操作名称，如"Upload"
+	Err error  // 实际的错误
+}
+
+func (e *Error) Error() string {
+	return fmt.Sprintf("%s operation failed: %v", e.Op, e.Err)
+}
+
+func (e *Error) Unwrap() error {
+	return e.Err
+}
+
+// ListOptions 定义了分页和过滤选项
+type ListOptions struct {
+	Prefix  string // 文件名前缀过滤，可选
+	Marker  string // 分页标记，可选
+	MaxKeys int    // 每次返回的最大文件数量，可选
+}
+
+// FileInfo 定义了文件的元数据信息
+type FileInfo struct {
+	Name    string    // 文件名
+	Size    int64     // 文件大小（字节）
+	ModTime time.Time // 修改时间
+	IsDir   bool      // 是否为目录
+}
+
+// ListResult 定义了List方法的返回结果
+type ListResult struct {
+	Files       []FileInfo // 文件信息列表
+	NextMarker  string     // 下一个分页标记
+	IsTruncated bool       // 是否还有更多数据
+}
+
 // Client 定义了远程存储的统一接口。
-// 无论使用何种存储类型，都可以通过该接口进行文件的上传、删除和列举操作。
+// 注意：所有方法都应是并发安全的。
 type Client interface {
-	// Upload 上传文件到远程存储。
-	// remotePath：远程存储的文件路径
-	// data：要上传的文件数据
-	Upload(remotePath string, data []byte) error
-
-	// Delete 从远程存储中删除文件。
-	// remotePath：要删除的远程文件路径
-	Delete(remotePath string) error
-
-	// List 列举远程存储中指定目录下的文件列表。
-	// remoteDir：要列举的远程目录路径
-	List(remoteDir string) ([]string, error)
-
-	// Close 关闭与远程存储的连接。
+	Upload(ctx context.Context, remotePath string, data []byte) error
+	Download(ctx context.Context, remotePath string) ([]byte, error)
+	Delete(ctx context.Context, remotePath string) error
+	List(ctx context.Context, options ListOptions) (ListResult, error)
 	Close() error
 }
 
 // NewClient 创建一个新的远程存储客户端。
-// storageType：存储类型，例如 "ftp"、"sftp"、"cos"、"oss"
-// config：对应存储类型的配置结构体
 func NewClient(storageType string, config interface{}) (Client, error) {
 	switch storageType {
 	case TypeFTP:
