@@ -61,32 +61,32 @@ type typeInfo struct {
 var Types = map[string]*typeInfo{
 	"image": {
 		TypeName: "图片",
-		AllowExt: []string{"gif", "jpg", "jpeg", "bmp", "png", "ico"},
+		AllowExt: []string{".gif", ".jpg", ".jpeg", ".bmp", ".png", ".ico"},
 		MaxSize:  5 * 1024 * 1024, // 5MB
 	},
 	"voice": {
 		TypeName: "音频",
-		AllowExt: []string{"mp3", "wma", "wav", "amr"},
+		AllowExt: []string{".mp3", ".wma", ".wav", ".amr"},
 		MaxSize:  50 * 1024 * 1024, // 50MB
 	},
 	"video": {
 		TypeName: "视频",
-		AllowExt: []string{"rm", "rmvb", "wmv", "avi", "mpg", "mpeg", "mp4"},
+		AllowExt: []string{".rm", ".rmvb", ".wmv", ".avi", ".mpg", ".mpeg", ".mp4"},
 		MaxSize:  300 * 1024 * 1024, // 300MB
 	},
 	"office": {
 		TypeName: "办公文件",
 		AllowExt: []string{
-			"wps", "wpt", "doc", "dot", "docx", "docm", "dotm",
-			"et", "ett", "xls", "xlt", "xlsx", "xlsm", "xltx", "xltm", "xlsb",
-			"dps", "dpt", "ppt", "pps", "pot", "pptx", "ppsx", "potx",
-			"txt", "csv", "prn", "pdf", "xml",
+			".wps", ".wpt", ".doc", ".dot", ".docx", ".docm", ".dotm",
+			".et", ".ett", ".xls", ".xlt", ".xlsx", ".xlsm", ".xltx", ".xltm", ".xlsb",
+			".dps", ".dpt", ".ppt", ".pps", ".pot", ".pptx", ".ppsx", ".potx",
+			".txt", ".csv", ".prn", ".pdf", ".xml",
 		},
 		MaxSize: 50 * 1024 * 1024, // 50MB
 	},
 	"zip": {
 		TypeName: "压缩文件",
-		AllowExt: []string{"zip", "rar"},
+		AllowExt: []string{".zip", ".rar"},
 		MaxSize:  500 * 1024 * 1024, // 500MB
 	},
 }
@@ -384,7 +384,7 @@ func (a *Attachment) addError(err error) {
 
 // HasError 是否有错误
 func (a *Attachment) HasError() bool {
-	return a.HasError()
+	return len(a.errors) > 0
 }
 
 // Error 返回第一个捕获的错误
