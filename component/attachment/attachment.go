@@ -1,6 +1,7 @@
 package attachment
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
@@ -25,9 +26,6 @@ import (
 type Attachment struct {
 	Opt *Options // 附件实例化时的参数选项
 
-	// 临时
-	TmpFileHeader *multipart.FileHeader
-
 	FileType       string // 附件类型
 	FileName       string // 附件名
 	FileSize       int64  // 附件大小
@@ -43,9 +41,9 @@ type Attachment struct {
 
 // Options 附件实例化时的参数选项
 type Options struct {
-	FileData      interface{} // 文件数据，支持base64字符串或*multipart.FileHeader
-	FileType      string      // 文件类型，默认为image
-	AttachmentDir string      // 附件目录，默认为attachment
+	FileData      interface{} // 文件数据，支持 base64 字符串、*multipart.FileHeader、[]byte
+	FileType      string      // 文件类型，默认为 image
+	AttachmentDir string      // 附件目录，默认为 attachment
 	MaxSize       int64       // 最大文件大小
 	AllowExt      []string    // 允许的文件扩展名
 }
@@ -95,7 +93,6 @@ var Types = map[string]*typeInfo{
 func New(opt *Options) *Attachment {
 	a := &Attachment{}
 	a.initOpt(opt) // 初始化选项，设置默认值
-
 	return a
 }
 
@@ -133,85 +130,97 @@ func (a *Attachment) Save() *Attachment {
 		return a
 	}
 
-	switch v := a.Opt.FileData.(type) {
-	case *multipart.FileHeader: // 处理multipart文件头
-		if v.Size == 0 {
-			a.errors = append(a.errors, fmt.Errorf("无效的参数，文件为空"))
-			return a
-		} else {
-			a.TmpFileHeader = v
-		}
-	case string:
-		// 处理base64编码的文件数据
-		tmpFile, err := a.parseBase64ToMultipart(v)
-		if tmpFile != nil {
-			// 处理 Seek 的错误
-			if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-				a.errors = append(a.errors, fmt.Errorf("无法重置临时文件的指针: %v", err))
-				return a
-			}
+	var srcFile io.ReadSeeker
+	var err error
 
-			// 确保在操作完成后删除临时文件
-			defer func(name string) {
-				err := os.Remove(name)
-				if err != nil {
-					log.Println("删除临时文件失败:", err)
-				}
-			}(tmpFile.Name())
+	switch v := a.Opt.FileData.(type) {
+	case *multipart.FileHeader:
+		// 处理 *multipart.FileHeader 类型
+		if v.Size == 0 {
+			a.addError(fmt.Errorf("无效的参数，文件为空"))
+			return a
 		}
+		a.FileSize = v.Size
+		a.FileExt = strings.ToLower(filepath.Ext(v.Filename))
+		srcFile, err = v.Open()
 		if err != nil {
-			a.errors = append(a.errors, err)
+			a.addError(err)
+			return a
+		}
+		defer func() {
+			if c, ok := srcFile.(io.Closer); ok {
+				c.Close()
+			}
+		}()
+	case multipart.FileHeader:
+		// 处理 multipart.FileHeader 值类型
+		if v.Size == 0 {
+			a.addError(fmt.Errorf("无效的参数，文件为空"))
+			return a
+		}
+		a.FileSize = v.Size
+		a.FileExt = strings.ToLower(filepath.Ext(v.Filename))
+		srcFile, err = v.Open()
+		if err != nil {
+			a.addError(err)
+			return a
+		}
+		defer func() {
+			if c, ok := srcFile.(io.Closer); ok {
+				c.Close()
+			}
+		}()
+	case string:
+		// 处理 Base64 编码的文件数据
+		decodedData, err := a.parseBase64Data(v)
+		if err != nil {
+			a.addError(err)
+			return a
+		}
+		srcFile = bytes.NewReader(decodedData)
+		a.FileSize = int64(len(decodedData))
+		// FileExt 已在 parseBase64Data 中获取
+	case []byte:
+		// 处理 []byte 数据
+		srcFile = bytes.NewReader(v)
+		a.FileSize = int64(len(v))
+		// 需要确定文件扩展名
+		if len(a.Opt.AllowExt) == 1 {
+			a.FileExt = a.Opt.AllowExt[0]
+		} else {
+			a.addError(fmt.Errorf("无法确定文件扩展名，请在 Options 中指定 AllowExt"))
 			return a
 		}
 	default:
-		a.errors = append(a.errors, fmt.Errorf("不支持的文件数据类型: %T", v))
+		a.addError(fmt.Errorf("不支持的文件数据类型: %T", v))
 		return a
 	}
 
-	a.getExt()
+	// 校验文件扩展名
 	if len(a.Opt.AllowExt) > 0 && !helper.InArray(a.FileExt, a.Opt.AllowExt) {
-		a.errors = append(a.errors, fmt.Errorf("不支持的文件【%s】", a.FileExt))
+		a.addError(fmt.Errorf("不支持的文件【%s】", a.FileExt))
 		return a
 	}
-
-	// 赋值文件大小
-	a.FileSize = a.TmpFileHeader.Size
 
 	// 判断文件大小是否超出限制
 	if a.Opt.MaxSize > 0 && a.FileSize > a.Opt.MaxSize {
-		a.errors = append(a.errors, fmt.Errorf("文件大小不能超出[%s]", a.formatFileSize(a.Opt.MaxSize)))
+		a.addError(fmt.Errorf("文件大小不能超出[%s]", a.formatFileSize(a.Opt.MaxSize)))
 		return a
 	}
-
-	// 打开源文件（已经是临时文件的内容）
-	srcFile, err := os.Open(a.TmpFileHeader.Filename) // 直接打开临时文件
-	if err != nil {
-		log.Println("打开文件失败: ", err)
-		a.addError(err)
-		return a
-	}
-
-	// 确保源文件被正确关闭
-	defer func(srcFile *os.File) {
-		err = srcFile.Close()
-		if err != nil {
-			log.Println(err)
-		}
-	}(srcFile)
 
 	// 如果是图片，应当获取宽高
-	if a.Opt.FileType == "image" {
+	if a.FileType == "image" {
 		// 解码图片
 		img, _, err := image.Decode(srcFile)
 		if err != nil {
 			log.Println("解码图片失败: ", err)
 			a.addError(err)
-		} else {
-			// 获取图片尺寸
-			bounds := img.Bounds()
-			a.Width = bounds.Dx()
-			a.Height = bounds.Dy()
+			return a
 		}
+		// 获取图片尺寸
+		bounds := img.Bounds()
+		a.Width = bounds.Dx()
+		a.Height = bounds.Dy()
 		// 重置文件指针到文件开头
 		if _, err = srcFile.Seek(0, io.SeekStart); err != nil {
 			a.addError(fmt.Errorf("无法重置文件指针: %v", err))
@@ -219,12 +228,16 @@ func (a *Attachment) Save() *Attachment {
 		}
 	}
 
-	// 生成文件MD5和复制文件内容
+	// 生成文件 MD5 并复制文件内容
 	hash := md5.New()
 	reader := io.TeeReader(srcFile, hash)
 
 	var fullDstFilePath string
-	a.FileName, fullDstFilePath, _ = a.fileRandomName(a.saveDir)
+	a.FileName, fullDstFilePath, err = a.fileRandomName(a.saveDir)
+	if err != nil {
+		a.addError(err)
+		return a
+	}
 
 	// 创建目标文件之前，确保目录存在
 	err = os.MkdirAll(filepath.Dir(fullDstFilePath), os.ModePerm)
@@ -238,12 +251,11 @@ func (a *Attachment) Save() *Attachment {
 		a.addError(err)
 		return a
 	}
-	defer func(dstFile *os.File) {
-		err = dstFile.Close()
-		if err != nil {
-			log.Println(err)
+	defer func() {
+		if err = dstFile.Close(); err != nil {
+			log.Println("关闭文件失败: ", err)
 		}
-	}(dstFile)
+	}()
 
 	// 复制文件内容并生成 MD5
 	if _, err = io.Copy(dstFile, reader); err != nil {
@@ -264,32 +276,8 @@ func (a *Attachment) Save() *Attachment {
 	return a
 }
 
-// getExt 获取文件扩展名，若未设置则从文件名解析
-func (a *Attachment) getExt() string {
-	if a.FileExt == "" {
-		a.FileExt = strings.ToLower(filepath.Ext(a.TmpFileHeader.Filename))
-	}
-	return a.FileExt
-}
-
-// fileRandomName 生成随机文件名，确保文件名在指定目录下是唯一的
-func (a *Attachment) fileRandomName(dir string) (filename, fullDstFile string, err error) {
-	for {
-		dateStr := time.Now().Format("02150405")
-		randomStr := helper.Random(22)
-		filename = fmt.Sprintf("%s%s%s", dateStr, randomStr, a.getExt())
-		fullDstFile = filepath.Join(dir, filename)
-		if _, err = os.Stat(fullDstFile); os.IsNotExist(err) {
-			break
-		} else if err != nil {
-			return
-		}
-	}
-	return
-}
-
-// parseBase64ToMultipart 解析base64字符串到multipart.TmpFileHeader
-func (a *Attachment) parseBase64ToMultipart(base64Data string) (*os.File, error) {
+// parseBase64Data 解析 Base64 字符串，返回解码后的数据，并设置文件扩展名
+func (a *Attachment) parseBase64Data(base64Data string) ([]byte, error) {
 	parts := strings.SplitN(base64Data, ",", 2)
 	if len(parts) != 2 || !strings.HasPrefix(parts[0], "data:") {
 		return nil, fmt.Errorf("invalid base64 data")
@@ -303,7 +291,7 @@ func (a *Attachment) parseBase64ToMultipart(base64Data string) (*os.File, error)
 		return nil, err
 	}
 
-	// 自定义MIME类型到文件扩展的映射表
+	// 自定义 MIME 类型到文件扩展名的映射表
 	var extMap = map[string]string{
 		"application/x-jpg": ".jpg",
 		"image/jpg":         ".jpg",
@@ -324,36 +312,31 @@ func (a *Attachment) parseBase64ToMultipart(base64Data string) (*os.File, error)
 		// 使用 MIME 类型解析库提供的扩展名作为后备选项
 		exts, err := mime.ExtensionsByType(mediaType)
 		if err != nil || len(exts) == 0 {
-			return nil, fmt.Errorf("no suitable extension found for MIME type: %s", mediaType)
+			return nil, fmt.Errorf("无法获取 MIME 类型的扩展名: %s", mediaType)
 		}
 		a.FileExt = exts[0] // 使用 mime 提供的第一个扩展名
 	}
 
-	tmpFile, err := os.CreateTemp("", "attachment-*"+a.getExt())
-	if err != nil {
-		return tmpFile, err
-	}
-
-	if _, err = tmpFile.Write(decodedData); err != nil {
-		_ = tmpFile.Close()
-		return nil, err
-	}
-
-	if _, err = tmpFile.Seek(0, 0); err != nil {
-		_ = tmpFile.Close()
-		return nil, err
-	}
-
-	// 这里手动设置 Filename 为临时文件的路径，确保 TmpFileHeader 可以正确打开文件
-	a.TmpFileHeader = &multipart.FileHeader{
-		Filename: tmpFile.Name(), // 设置 Filename 为 tmpFile.Name()
-		Size:     int64(len(decodedData)),
-	}
-
-	return tmpFile, nil
+	return decodedData, nil
 }
 
-// formatFileSize 格式化文件大小，将字节单位转换为适当的单位（KB, MB, GB等）并保留两位小数。
+// fileRandomName 生成随机文件名，确保文件名在指定目录下是唯一的
+func (a *Attachment) fileRandomName(dir string) (filename, fullDstFile string, err error) {
+	for {
+		dateStr := time.Now().Format("02150405")
+		randomStr := helper.Random(22)
+		filename = fmt.Sprintf("%s%s%s", dateStr, randomStr, a.FileExt)
+		fullDstFile = filepath.Join(dir, filename)
+		if _, err = os.Stat(fullDstFile); os.IsNotExist(err) {
+			break
+		} else if err != nil {
+			return
+		}
+	}
+	return
+}
+
+// formatFileSize 格式化文件大小，将字节单位转换为适当的单位（KB, MB, GB 等）并保留两位小数
 func (a *Attachment) formatFileSize(size int64) string {
 	const (
 		KB = 1024
