@@ -212,6 +212,11 @@ func (a *Attachment) Save() *Attachment {
 			a.Width = bounds.Dx()
 			a.Height = bounds.Dy()
 		}
+		// 重置文件指针到文件开头
+		if _, err = srcFile.Seek(0, io.SeekStart); err != nil {
+			a.addError(fmt.Errorf("无法重置文件指针: %v", err))
+			return a
+		}
 	}
 
 	// 生成文件MD5和复制文件内容
