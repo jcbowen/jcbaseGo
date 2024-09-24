@@ -144,12 +144,12 @@ func (a *Attachment) Save() *Attachment {
 		a.FileExt = strings.ToLower(filepath.Ext(v.Filename))
 		srcFile, err = v.Open()
 		if err != nil {
-			a.addError(err)
+			a.addError(fmt.Errorf("打开源文件失败: %v", err))
 			return a
 		}
 		defer func() {
 			if c, ok := srcFile.(io.Closer); ok {
-				c.Close()
+				_ = c.Close()
 			}
 		}()
 	case multipart.FileHeader:
@@ -162,19 +162,19 @@ func (a *Attachment) Save() *Attachment {
 		a.FileExt = strings.ToLower(filepath.Ext(v.Filename))
 		srcFile, err = v.Open()
 		if err != nil {
-			a.addError(err)
+			a.addError(fmt.Errorf("打开源文件失败: %v", err))
 			return a
 		}
 		defer func() {
 			if c, ok := srcFile.(io.Closer); ok {
-				c.Close()
+				_ = c.Close()
 			}
 		}()
 	case string:
 		// 处理 Base64 编码的文件数据
 		decodedData, err := a.parseBase64Data(v)
 		if err != nil {
-			a.addError(err)
+			a.addError(fmt.Errorf("解析 Base64 失败：%v", err))
 			return a
 		}
 		srcFile = bytes.NewReader(decodedData)
@@ -232,23 +232,25 @@ func (a *Attachment) Save() *Attachment {
 	hash := md5.New()
 	reader := io.TeeReader(srcFile, hash)
 
+	// 提前创建文件目录，避免后续操作报错
+	err = os.MkdirAll(a.saveDir, os.ModePerm)
+	if err != nil {
+		a.addError(fmt.Errorf("创建目录失败：%v", err))
+		return a
+	}
+
+	// 生成随机文件名，如果目录不存在将会自动创建目录
 	var fullDstFilePath string
 	a.FileName, fullDstFilePath, err = a.fileRandomName(a.saveDir)
 	if err != nil {
-		a.addError(err)
+		a.addError(fmt.Errorf("生成随机文件名失败：%v", err))
 		return a
 	}
 
-	// 创建目标文件之前，确保目录存在
-	err = os.MkdirAll(filepath.Dir(fullDstFilePath), os.ModePerm)
-	if err != nil {
-		a.addError(fmt.Errorf("创建目录失败: %v", err))
-		return a
-	}
-
+	// 创建目标文件
 	dstFile, err := os.Create(fullDstFilePath) // 创建目标文件
 	if err != nil {
-		a.addError(err)
+		a.addError(fmt.Errorf("创建目标文件失败：%v", err))
 		return a
 	}
 	defer func() {
@@ -259,7 +261,7 @@ func (a *Attachment) Save() *Attachment {
 
 	// 复制文件内容并生成 MD5
 	if _, err = io.Copy(dstFile, reader); err != nil {
-		a.addError(err)
+		a.addError(fmt.Errorf("拷贝文件内容失败：%v", err))
 		return a
 	}
 	a.FileMD5 = hex.EncodeToString(hash.Sum(nil))
@@ -321,19 +323,27 @@ func (a *Attachment) parseBase64Data(base64Data string) ([]byte, error) {
 }
 
 // fileRandomName 生成随机文件名，确保文件名在指定目录下是唯一的
-func (a *Attachment) fileRandomName(dir string) (filename, fullDstFile string, err error) {
+func (a *Attachment) fileRandomName(dir string) (string, string, error) {
+	var filename, fullDstFile string
 	for {
 		dateStr := time.Now().Format("02150405")
 		randomStr := helper.Random(22)
 		filename = fmt.Sprintf("%s%s%s", dateStr, randomStr, a.FileExt)
 		fullDstFile = filepath.Join(dir, filename)
-		if _, err = os.Stat(fullDstFile); os.IsNotExist(err) {
+		_, err := os.Stat(fullDstFile)
+		if err == nil {
+			// 文件已存在，继续生成新的文件名
+			continue
+		}
+		if os.IsNotExist(err) {
+			// 文件不存在，可以使用该文件名
 			break
-		} else if err != nil {
-			return
+		} else {
+			// 其他错误，返回错误信息
+			return "", "", fmt.Errorf("检查文件状态时出错: %v", err)
 		}
 	}
-	return
+	return filename, fullDstFile, nil
 }
 
 // formatFileSize 格式化文件大小，将字节单位转换为适当的单位（KB, MB, GB 等）并保留两位小数
