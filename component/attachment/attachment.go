@@ -228,7 +228,6 @@ func (a *Attachment) Save() *Attachment {
 		}
 	}
 
-	// 生成文件 MD5 并复制文件内容
 	hash := md5.New()
 	reader := io.TeeReader(srcFile, hash)
 
@@ -259,11 +258,12 @@ func (a *Attachment) Save() *Attachment {
 		}
 	}()
 
-	// 复制文件内容并生成 MD5
+	// 复制文件内容
 	if _, err = io.Copy(dstFile, reader); err != nil {
 		a.addError(fmt.Errorf("拷贝文件内容失败：%v", err))
 		return a
 	}
+	// 计算文件 MD5
 	a.FileMD5 = hex.EncodeToString(hash.Sum(nil))
 
 	// 获取附件相对路径
