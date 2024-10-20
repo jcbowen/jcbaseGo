@@ -35,8 +35,9 @@ type Attachment struct {
 	Width          int    // 图片宽
 	Height         int    // 图片高
 
-	saveDir string  // 文件保存目录
-	errors  []error // 错误信息列表
+	saveDir    string                   // 文件保存目录
+	errors     []error                  // 错误信息列表
+	beforeSave func(a *Attachment) bool // 保存前的回调函数，可选
 }
 
 // Options 附件实例化时的参数选项
@@ -124,6 +125,12 @@ func (a *Attachment) initOpt(opt *Options) {
 	}
 }
 
+// SetBeforeSave 设置保存文件前的回调函数
+func (a *Attachment) SetBeforeSave(fn func(a *Attachment) bool) *Attachment {
+	a.beforeSave = fn
+	return a
+}
+
 // Save 保存文件到指定的附件目录
 func (a *Attachment) Save() *Attachment {
 	if a.HasError() {
@@ -196,6 +203,32 @@ func (a *Attachment) Save() *Attachment {
 		return a
 	}
 
+	// 计算文件 MD5
+	if _, err := srcFile.Seek(0, io.SeekStart); err != nil {
+		a.addError(fmt.Errorf("无法重置文件指针: %v", err))
+		return a
+	}
+	hash := md5.New()
+	if _, err := io.Copy(hash, srcFile); err != nil {
+		a.addError(fmt.Errorf("计算文件 MD5 失败：%v", err))
+		return a
+	}
+	a.FileMD5 = hex.EncodeToString(hash.Sum(nil))
+
+	// 重置文件指针到文件开头
+	if _, err = srcFile.Seek(0, io.SeekStart); err != nil {
+		a.addError(fmt.Errorf("无法重置文件指针: %v", err))
+		return a
+	}
+
+	// 如果设置了 beforeSave 回调函数，调用它
+	if a.beforeSave != nil {
+		if !a.beforeSave(a) {
+			// 回调函数返回 false，不继续保存
+			return a
+		}
+	}
+
 	// 校验文件扩展名
 	if len(a.Opt.AllowExt) > 0 && !helper.InArray(a.FileExt, a.Opt.AllowExt) {
 		a.addError(fmt.Errorf("不支持的文件【%s】", a.FileExt))
@@ -210,7 +243,6 @@ func (a *Attachment) Save() *Attachment {
 
 	// 如果是图片，应当获取宽高
 	if a.FileType == "image" {
-		// 解码图片
 		img, _, err := image.Decode(srcFile)
 		if err != nil {
 			log.Println("解码图片失败: ", err)
@@ -228,9 +260,6 @@ func (a *Attachment) Save() *Attachment {
 		}
 	}
 
-	hash := md5.New()
-	reader := io.TeeReader(srcFile, hash)
-
 	// 提前创建文件目录，避免后续操作报错
 	err = os.MkdirAll(a.saveDir, os.ModePerm)
 	if err != nil {
@@ -247,7 +276,7 @@ func (a *Attachment) Save() *Attachment {
 	}
 
 	// 创建目标文件
-	dstFile, err := os.Create(fullDstFilePath) // 创建目标文件
+	dstFile, err := os.Create(fullDstFilePath)
 	if err != nil {
 		a.addError(fmt.Errorf("创建目标文件失败：%v", err))
 		return a
@@ -259,12 +288,10 @@ func (a *Attachment) Save() *Attachment {
 	}()
 
 	// 复制文件内容
-	if _, err = io.Copy(dstFile, reader); err != nil {
+	if _, err = io.Copy(dstFile, srcFile); err != nil {
 		a.addError(fmt.Errorf("拷贝文件内容失败：%v", err))
 		return a
 	}
-	// 计算文件 MD5
-	a.FileMD5 = hex.EncodeToString(hash.Sum(nil))
 
 	// 获取附件相对路径
 	index := strings.Index(fullDstFilePath, a.Opt.AttachmentDir+"/")
