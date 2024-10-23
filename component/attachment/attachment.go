@@ -126,6 +126,7 @@ func (a *Attachment) initOpt(opt *Options) {
 }
 
 // SetBeforeSave 设置保存文件前的回调函数
+// - 回调函数返回 true 则继续保存，回调函数返回 false 则跳过
 func (a *Attachment) SetBeforeSave(fn func(a *Attachment) bool) *Attachment {
 	a.beforeSave = fn
 	return a
