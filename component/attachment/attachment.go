@@ -42,11 +42,12 @@ type Attachment struct {
 
 // Options 附件实例化时的参数选项
 type Options struct {
-	FileData      interface{} // 文件数据，支持 base64 字符串、*multipart.FileHeader、[]byte
-	FileType      string      // 文件类型，默认为 image
-	AttachmentDir string      // 附件目录，默认为 attachment
-	MaxSize       int64       // 最大文件大小
-	AllowExt      []string    // 允许的文件扩展名
+	FileData        interface{} // 文件数据，支持 base64 字符串、*multipart.FileHeader、[]byte
+	FileType        string      // 文件类型，默认为 image
+	AttachmentDir   string      // 附件目录，默认为 attachment
+	AttachmentGroup string      // 附件组，默认不分组（分组会在附件目录结构中多一级分组目录接着再是文件类型）
+	MaxSize         int64       // 最大文件大小
+	AllowExt        []string    // 允许的文件扩展名
 }
 
 // typeInfo 附件类型信息
@@ -110,7 +111,11 @@ func (a *Attachment) initOpt(opt *Options) {
 		a.Opt.AttachmentDir = "attachment"
 	}
 
+	// 整理存储目录
 	a.saveDir = fmt.Sprintf("./%s/%ss/%s/", a.Opt.AttachmentDir, a.Opt.FileType, time.Now().Format("2006/01"))
+	if a.Opt.AttachmentGroup != "" {
+		a.saveDir = fmt.Sprintf("./%s/%s/%ss/%s/", a.Opt.AttachmentDir, a.Opt.AttachmentGroup, a.Opt.FileType, time.Now().Format("2006/01"))
+	}
 	a.saveDir, _ = filepath.Abs(a.saveDir)
 
 	// 判断是否为文件限制补充默认配置
