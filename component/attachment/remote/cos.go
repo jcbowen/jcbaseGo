@@ -3,6 +3,7 @@ package remote
 import (
 	"bytes"
 	"context"
+	"github.com/jcbowen/jcbaseGo"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,11 +14,7 @@ import (
 )
 
 // COSConfig 定义了腾讯云COS的配置参数。
-type COSConfig struct {
-	BucketURL string // COS存储桶URL
-	SecretID  string // 腾讯云API密钥ID
-	SecretKey string // 腾讯云API密钥Key
-}
+type COSConfig jcbaseGo.COSStruct
 
 // COSClient 实现了腾讯云COS存储的客户端。
 // 注意：COSClient是并发安全的。
@@ -28,7 +25,7 @@ type COSClient struct {
 
 // NewCOSClient 创建一个新的COS客户端。
 func NewCOSClient(config COSConfig) (*COSClient, error) {
-	u, err := url.Parse(config.BucketURL)
+	u, err := url.Parse(config.Url)
 	if err != nil {
 		return nil, &Error{Op: "ParseBucketURL", Err: err}
 	}
@@ -36,7 +33,7 @@ func NewCOSClient(config COSConfig) (*COSClient, error) {
 	b := &cos.BaseURL{BucketURL: u}
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
-			SecretID:  config.SecretID,
+			SecretID:  config.SecretId,
 			SecretKey: config.SecretKey,
 		},
 	})

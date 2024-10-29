@@ -3,6 +3,7 @@ package remote
 import (
 	"context"
 	"errors"
+	"github.com/jcbowen/jcbaseGo"
 	"io"
 	"sync"
 	"time"
@@ -12,14 +13,7 @@ import (
 )
 
 // SFTPConfig 定义了SFTP存储的配置参数。
-type SFTPConfig struct {
-	Address         string              // SFTP服务器地址
-	Username        string              // SFTP登录用户名
-	Password        string              // SFTP登录密码
-	PrivateKey      []byte              // SFTP登录私钥
-	HostKeyCallback ssh.HostKeyCallback // 主机密钥回调，可选
-	Timeout         time.Duration       // 连接超时时间，可选
-}
+type SFTPConfig jcbaseGo.SFTPStruct
 
 // SFTPClient 实现了SFTP存储的客户端。
 // 注意：SFTPClient是并发安全的。

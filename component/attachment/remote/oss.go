@@ -4,18 +4,14 @@ import (
 	"bytes"
 	"context"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/jcbowen/jcbaseGo"
 	"io"
 	"net/http"
 	"sync"
 )
 
 // OSSConfig 定义了阿里云OSS的配置参数。
-type OSSConfig struct {
-	Endpoint        string // OSS服务的Endpoint
-	AccessKeyID     string // 阿里云访问密钥ID
-	AccessKeySecret string // 阿里云访问密钥Secret
-	BucketName      string // OSS存储桶名称
-}
+type OSSConfig jcbaseGo.OSSStruct
 
 // OSSClient 实现了阿里云OSS存储的客户端。
 // 注意：OSSClient是并发安全的。
@@ -31,7 +27,7 @@ func NewOSSClient(config OSSConfig) (*OSSClient, error) {
 		Transport: &http.Transport{},
 	}
 
-	client, err := oss.New(config.Endpoint, config.AccessKeyID, config.AccessKeySecret, oss.HTTPClient(httpClient))
+	client, err := oss.New(config.Endpoint, config.AccessKeyId, config.AccessKeySecret, oss.HTTPClient(httpClient))
 	if err != nil {
 		return nil, &Error{Op: "NewOSSClient", Err: err}
 	}

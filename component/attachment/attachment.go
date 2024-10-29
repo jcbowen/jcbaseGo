@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"image"
 	_ "image/gif"  // 导入 GIF 支持
@@ -26,6 +28,9 @@ import (
 type Attachment struct {
 	Opt *Options // 附件实例化时的参数选项
 
+	Config     *jcbaseGo.AttachmentStruct // 附件配置信息
+	GinContext *gin.Context               // gin上下文
+
 	FileType       string // 附件类型
 	FileName       string // 附件名
 	FileSize       int64  // 附件大小
@@ -42,12 +47,12 @@ type Attachment struct {
 
 // Options 附件实例化时的参数选项
 type Options struct {
-	FileData        interface{} // 文件数据，支持 base64 字符串、*multipart.FileHeader、[]byte
-	FileType        string      // 文件类型，默认为 image
-	AttachmentDir   string      // 附件目录，默认为 attachment
-	AttachmentGroup string      // 附件组，默认不分组（分组会在附件目录结构中多一级分组目录接着再是文件类型）
-	MaxSize         int64       // 最大文件大小
-	AllowExt        []string    // 允许的文件扩展名
+	Group string // 附件组，默认不分组（分组会文件类型目录前多一级分组目录）
+
+	FileData interface{} // 文件数据，支持 base64 字符串、*multipart.FileHeader、[]byte
+	FileType string      // 文件类型，默认为 image
+	MaxSize  int64       // 最大文件大小
+	AllowExt []string    // 允许的文件扩展名
 }
 
 // typeInfo 附件类型信息
@@ -91,15 +96,86 @@ var Types = map[string]*typeInfo{
 	},
 }
 
-// New 创建一个新的附件实例，处理初始化和文件类型解析
-func New(opt *Options) *Attachment {
+// New 创建一个新的附件实例
+// args:
+//   - *gin.Context
+//   - *jcbaseGo.AttachmentStruct
+func New(args ...interface{}) *Attachment {
+
 	a := &Attachment{}
-	a.initOpt(opt) // 初始化选项，设置默认值
+
+	// 第一个参数为 gin 上下文
+	if len(args) > 0 {
+		a.GinContext, _ = args[0].(*gin.Context)
+	}
+
+	// 第二个参数为附件配置
+	if len(args) > 1 {
+		a.Config, _ = args[1].(*jcbaseGo.AttachmentStruct)
+	} else {
+		a.Config = &jcbaseGo.AttachmentStruct{}
+	}
+	_ = helper.CheckAndSetDefault(a.Config)
+
 	return a
 }
 
-// initOpt 初始化选项，提供默认值设置
-func (a *Attachment) initOpt(opt *Options) {
+func (a *Attachment) initConfig() {
+	// 自定义访问域名情况下不进行处理
+	if a.Config.VisitDomain != "/" && a.Config.VisitDomain != "" {
+		return
+	}
+
+	if a.GinContext != nil {
+		a.Config.LocalVisitDomain = helper.GetHostInfo(a.GinContext.Request)
+	} else {
+		log.Println("gin上下文为空，无法获取域名信息")
+	}
+
+	switch a.Config.StorageType {
+	case "local":
+		if a.GinContext == nil {
+			return
+		}
+		// 从gin上下文中获取域名信息
+		a.Config.VisitDomain = a.Config.LocalVisitDomain
+	case "cos":
+		remoteConf, ok := a.Config.Remote.(jcbaseGo.COSStruct)
+		if !ok || remoteConf.SecretId == "" {
+			log.Println("cos配置错误")
+			return
+		}
+		a.Config.VisitDomain = remoteConf.CustomizeVisitDomain
+	case "oss":
+		remoteConf, ok := a.Config.Remote.(jcbaseGo.OSSStruct)
+		if !ok || remoteConf.AccessKeyId == "" {
+			log.Println("oss配置错误")
+			return
+		}
+		if remoteConf.CustomizeVisitDomain != "" {
+			a.Config.VisitDomain = remoteConf.CustomizeVisitDomain
+		} else {
+			a.Config.VisitDomain = fmt.Sprintf("https://%s.%s/", remoteConf.BucketName, remoteConf.Endpoint)
+		}
+	case "sftp":
+		remoteConf, ok := a.Config.Remote.(jcbaseGo.SFTPStruct)
+		if !ok || remoteConf.Address == "" {
+			log.Println("sftp配置错误")
+			return
+		}
+		a.Config.VisitDomain = remoteConf.CustomizeVisitDomain
+	case "ftp":
+		remoteConf, ok := a.Config.Remote.(jcbaseGo.FTPStruct)
+		if !ok || remoteConf.Address == "" {
+			log.Println("ftp配置错误")
+			return
+		}
+		a.Config.VisitDomain = remoteConf.CustomizeVisitDomain
+	}
+}
+
+// Upload 初始化文件上传参数
+func (a *Attachment) Upload(opt *Options) *Attachment {
 	a.Opt = opt
 
 	if a.Opt.FileType == "" {
@@ -107,14 +183,10 @@ func (a *Attachment) initOpt(opt *Options) {
 	}
 	a.FileType = a.Opt.FileType
 
-	if a.Opt.AttachmentDir == "" {
-		a.Opt.AttachmentDir = "attachment"
-	}
-
 	// 整理存储目录
-	a.saveDir = fmt.Sprintf("./%s/%ss/%s/", a.Opt.AttachmentDir, a.Opt.FileType, time.Now().Format("2006/01"))
-	if a.Opt.AttachmentGroup != "" {
-		a.saveDir = fmt.Sprintf("./%s/%s/%ss/%s/", a.Opt.AttachmentDir, a.Opt.AttachmentGroup, a.Opt.FileType, time.Now().Format("2006/01"))
+	a.saveDir = fmt.Sprintf("./%s/%ss/%s/", a.Config.LocalDir, a.Opt.FileType, time.Now().Format("2006/01"))
+	if a.Opt.Group != "" {
+		a.saveDir = fmt.Sprintf("./%s/%s/%ss/%s/", a.Config.LocalDir, a.Opt.Group, a.Opt.FileType, time.Now().Format("2006/01"))
 	}
 	a.saveDir, _ = filepath.Abs(a.saveDir)
 
@@ -128,6 +200,8 @@ func (a *Attachment) initOpt(opt *Options) {
 			a.Opt.AllowExt = typeDefaultInfo.AllowExt
 		}
 	}
+
+	return a
 }
 
 // SetBeforeSave 设置保存文件前的回调函数
@@ -140,6 +214,12 @@ func (a *Attachment) SetBeforeSave(fn func(a *Attachment) bool) *Attachment {
 // Save 保存文件到指定的附件目录
 func (a *Attachment) Save() *Attachment {
 	if a.HasError() {
+		return a
+	}
+
+	// 如果没有初始化opt参数，应当返回错误
+	if a.Opt == nil {
+		a.addError(fmt.Errorf("无效的参数，opt 不能为空"))
 		return a
 	}
 
@@ -300,12 +380,12 @@ func (a *Attachment) Save() *Attachment {
 	}
 
 	// 获取附件相对路径
-	index := strings.Index(fullDstFilePath, a.Opt.AttachmentDir+"/")
+	index := strings.Index(fullDstFilePath, a.Config.LocalDir+"/")
 	if index == -1 {
-		log.Println("未在路径中找到" + a.Opt.AttachmentDir)
-		a.addError(fmt.Errorf("未在路径中找到%s", a.Opt.AttachmentDir))
+		log.Println("未在路径中找到" + a.Config.LocalDir)
+		a.addError(fmt.Errorf("未在路径中找到%s", a.Config.LocalDir))
 	} else {
-		a.FileAttachment = fullDstFilePath[index+len(a.Opt.AttachmentDir+"/"):]
+		a.FileAttachment = fullDstFilePath[index+len(a.Config.LocalDir+"/"):]
 	}
 
 	return a

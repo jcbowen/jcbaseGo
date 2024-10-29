@@ -1,5 +1,10 @@
 package jcbaseGo
 
+import (
+	"golang.org/x/crypto/ssh"
+	"time"
+)
+
 // Option jcbaseGo配置选项
 type Option struct {
 	ConfigFile  string      `json:"config_file" default:"./config/main.json"` // 配置文件路径
@@ -60,25 +65,63 @@ type MailerStruct struct {
 
 // AttachmentStruct 附件配置
 type AttachmentStruct struct {
-	Dir        string `json:"dir" default:"attachment"`   // 附件存储目录
-	RemoteType string `json:"remoteType" default:"local"` // 附件存储类型 local 本地存储 oss 阿里云存储 cos 腾讯云存储
+	StorageType string      `json:"storage_type" default:"local"`   // 存储类型 local/ftp/sftp/cos/oss
+	LocalDir    string      `json:"local_dir" default:"attachment"` // 本地附件目录，默认为 attachment
+	Remote      interface{} `json:"remote,omitempty"`               // 远程存储配置
+
+	// 附件访问域名
+	// 配置后以配置为准，不配置则初始化中自动赋值，一定以“/”结尾
+	// 如果配置了远程附件，则此处为远程附件访问域名，否则为本地附件访问域名
+	VisitDomain string `json:"visit_domain" default:"/"`
+	// 本地附件访问域名，不管是否配置远程附件
+	// 配置后以配置为准，不配置则初始化中自动赋值，一定以“/”结尾
+	LocalVisitDomain string `json:"local_visit_domain" default:"/"`
 }
 
-// OssStruct oss配置
-type OssStruct struct {
-	AccessKeyId     string `json:"AccessKeyId" default:""`     // 阿里云AccessKeyId
-	AccessKeySecret string `json:"AccessKeySecret" default:""` // 阿里云AccessKeySecret
-	Endpoint        string `json:"endpoint" default:""`        // 阿里云Oss endpoint
-	Bucket          string `json:"bucket" default:""`          // 阿里云Oss bucket
+// OSSStruct oss配置
+type OSSStruct struct {
+	AccessKeyId     string `json:"AccessKeyId" default:""`     // 阿里云访问密钥ID
+	AccessKeySecret string `json:"AccessKeySecret" default:""` // 阿里云访问密钥Secret
+	Endpoint        string `json:"endpoint" default:""`        // 阿里云OSS的Endpoint
+	BucketName      string `json:"bucketName" default:""`      // 阿里云OSS存储桶名称
+
+	// 自定义附件访问域名(非平台配置，供程序调用，非必填，一定以“/”结尾)
+	CustomizeVisitDomain string `json:"customize_visit_domain" default:""`
 }
 
-// CosStruct cos配置
-type CosStruct struct {
+// COSStruct cos配置
+type COSStruct struct {
 	SecretId  string `json:"secretId" default:""`  // 腾讯云Cos SecretId
 	SecretKey string `json:"secretKey" default:""` // 腾讯云Cos SecretKey
 	Bucket    string `json:"bucket" default:""`    // 腾讯云Cos Bucket
 	Region    string `json:"region" default:""`    // 腾讯云Cos Region
 	Url       string `json:"url" default:""`       // 腾讯云Cos Url
+
+	// 自定义附件访问域名(非平台配置，供程序调用，非必填，一定以“/”结尾)
+	CustomizeVisitDomain string `json:"customize_visit_domain" default:""`
+}
+
+type FTPStruct struct {
+	Address  string        `json:"address" default:""`           // FTP服务器地址
+	Username string        `json:"username" default:""`          // FTP登录用户名
+	Password string        `json:"password" default:""`          // FTP登录密码
+	Timeout  time.Duration `json:"timeout,omitempty" default:""` // 连接超时时间，可选
+
+	// 自定义附件访问域名(非平台配置，供程序调用，非必填，一定以“/”结尾)
+	CustomizeVisitDomain string `json:"customize_visit_domain" default:""`
+}
+
+// SFTPStruct sftp配置
+type SFTPStruct struct {
+	Address         string              `json:"address" default:""`           // SFTP服务器地址
+	Username        string              `json:"username" default:""`          // SFTP登录用户名
+	Password        string              `json:"password" default:""`          // SFTP登录密码
+	PrivateKey      []byte              `json:"private_key" default:""`       // SFTP登录私钥
+	Timeout         time.Duration       `json:"timeout,omitempty" default:""` // 连接超时时间，可选
+	HostKeyCallback ssh.HostKeyCallback // 主机密钥回调，可选
+
+	// 自定义附件访问域名(非平台配置，供程序调用，非必填，一定以“/”结尾)
+	CustomizeVisitDomain string `json:"customize_visit_domain" default:""`
 }
 
 // ProjectStruct 项目配置
@@ -100,8 +143,8 @@ type DefaultConfigStruct struct {
 	Db         DbStruct         `json:"db"`         // 数据库配置信息
 	Redis      RedisStruct      `json:"redis"`      // redis配置信息
 	Attachment AttachmentStruct `json:"attachment"` // 附件配置信息
-	Oss        OssStruct        `json:"oss"`        // oss配置信息
-	Cos        CosStruct        `json:"cos"`        // cos配置信息
+	Oss        OSSStruct        `json:"oss"`        // oss配置信息
+	Cos        COSStruct        `json:"cos"`        // cos配置信息
 	Project    ProjectStruct    `json:"project"`    // 项目配置信息
 	Repository RepositoryStruct `json:"repository"` // 仓库配置信息
 }
