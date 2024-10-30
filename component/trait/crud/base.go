@@ -152,9 +152,8 @@ func (t *Trait) ExtractPkId() (pkValue uint, err error) {
 //   - data any: 返回的数据
 //   - code int: 错误码
 //
-// 传递1个参数时，如果是字符串则作为message输出，否则作为data输出；
-// 传递2个参数时，第一个参数为message，第二个参数为data；
-// 传递3个参数时，第一个参数为message，第二个参数为data，第三个参数为code；
+// 仅1个参数时，如果是字符串则作为message输出，否则作为data输出；
+// 更多参数时，第一个参数为message，第二个参数为data，第三个参数为code；
 func (t *Trait) Failure(args ...any) {
 	t.BaseControllerTrait.Failure(args...)
 }
@@ -167,14 +166,20 @@ func (t *Trait) Failure(args ...any) {
 //   - data any: 返回的数据
 //   - additionalParams any: 附加数据
 //
-// 传递1个参数时，如果是字符串则作为message输出，否则作为data输出；
-// 传递2个参数时，第一个参数为data，第二个参数为message；
-// 传递3个参数时，第一个参数为data，第二个参数为additionalParams，第三个参数为message；
+// 仅1个参数时，如果是字符串则作为message输出，否则作为data输出；
+// 更多参数时，第一个参数为data，第二个参数为message，第三个参数为additionalParams；
 func (t *Trait) Success(args ...any) {
 	t.BaseControllerTrait.Success(args...)
 }
 
 // Result 整理结果输出
+// 这个方法用于统一返回API响应结果。接收状态码、消息以及可选的额外参数，
+// 并根据传入的数据类型对结果进行格式化和处理，最终返回JSON格式的响应。
+// 参数：
+//   - code int: 状态码，通常为HTTP状态码。
+//   - msg string: 返回的消息内容。
+//   - data any 选填，主要数据内容，可以是结构体、map、string或slice。
+//   - additionalParams map[string]any 选填，附加参数
 func (t *Trait) Result(code int, msg string, args ...any) {
 	t.BaseControllerTrait.Result(code, msg, args...)
 }

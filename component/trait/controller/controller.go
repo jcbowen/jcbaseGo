@@ -26,9 +26,8 @@ type Base struct {
 //   - data any: 返回的数据
 //   - additionalParams any: 附加数据
 //
-// 传递1个参数时，如果是字符串则作为message输出，否则作为data输出；
-// 传递2个参数时，第一个参数为data，第二个参数为message；
-// 传递3个参数时，第一个参数为data，第二个参数为additionalParams，第三个参数为message；
+// 仅1个参数时，如果是字符串则作为message输出，否则作为data输出；
+// 更多参数时，第一个参数为data，第二个参数为message，第三个参数为additionalParams；
 func (c Base) Success(args ...any) {
 	var (
 		message          = "success"
@@ -48,9 +47,9 @@ func (c Base) Success(args ...any) {
 		message = args[1].(string)
 	case 3:
 		data = args[0]
-		additionalParams = args[1].(map[string]any)
+		additionalParams = args[2].(map[string]any)
 		var ok bool
-		message, ok = args[2].(string)
+		message, ok = args[1].(string)
 		if !ok {
 			message = "ok"
 		}
@@ -66,9 +65,8 @@ func (c Base) Success(args ...any) {
 //   - data any: 返回的数据
 //   - code int: 错误码
 //
-// 传递1个参数时，如果是字符串则作为message输出，否则作为data输出；
-// 传递2个参数时，第一个参数为message，第二个参数为data；
-// 传递3个参数时，第一个参数为message，第二个参数为data，第三个参数为code；
+// 仅1个参数时，如果是字符串则作为message输出，否则作为data输出；
+// 更多参数时，第一个参数为message，第二个参数为data，第三个参数为code；
 func (c Base) Failure(args ...any) {
 	var (
 		code             = errcode.BadRequest
@@ -166,7 +164,16 @@ func (c Base) Result(code int, msg string, args ...any) {
 		additionalParams, ok := args[1].(map[string]any)
 		if ok {
 			for k, v := range additionalParams {
-				result[k] = v
+				if k == "data" {
+					if resultData2, exist := result["data"].(map[string]any); exist {
+						for k2, v2 := range v.(map[string]any) {
+							resultData2[k2] = v2
+						}
+						result["data"] = resultData2
+					}
+				} else {
+					result[k] = v
+				}
 			}
 		}
 	}
