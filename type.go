@@ -1,7 +1,6 @@
 package jcbaseGo
 
 import (
-	"golang.org/x/crypto/ssh"
 	"time"
 )
 
@@ -112,12 +111,11 @@ type FTPStruct struct {
 
 // SFTPStruct sftp配置
 type SFTPStruct struct {
-	Address         string              `json:"address" default:""`           // SFTP服务器地址
-	Username        string              `json:"username" default:""`          // SFTP登录用户名
-	Password        string              `json:"password" default:""`          // SFTP登录密码
-	PrivateKey      []byte              `json:"private_key" default:""`       // SFTP登录私钥
-	Timeout         time.Duration       `json:"timeout,omitempty" default:""` // 连接超时时间，可选
-	HostKeyCallback ssh.HostKeyCallback // 主机密钥回调，可选
+	Address    string        `json:"address" default:""`           // SFTP服务器地址
+	Username   string        `json:"username" default:""`          // SFTP登录用户名
+	Password   string        `json:"password" default:""`          // SFTP登录密码
+	PrivateKey []byte        `json:"private_key" default:""`       // SFTP登录私钥
+	Timeout    time.Duration `json:"timeout,omitempty" default:""` // 连接超时时间，可选
 
 	// 自定义附件访问域名(非平台配置，供程序调用，非必填，一定以“/”结尾)
 	CustomizeVisitDomain string `json:"customize_visit_domain" default:""`

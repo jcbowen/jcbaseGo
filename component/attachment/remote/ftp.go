@@ -3,6 +3,7 @@ package remote
 import (
 	"bytes"
 	"context"
+	"github.com/jcbowen/jcbaseGo"
 	"io"
 	"sync"
 	"time"
@@ -11,12 +12,7 @@ import (
 )
 
 // FTPConfig 定义了FTP存储的配置参数。
-type FTPConfig struct {
-	Address  string        // FTP服务器地址
-	Username string        // FTP登录用户名
-	Password string        // FTP登录密码
-	Timeout  time.Duration // 连接超时时间，可选
-}
+type FTPConfig jcbaseGo.FTPStruct
 
 // FTPClient 实现了FTP存储的客户端。
 // 注意：FTPClient是并发安全的。

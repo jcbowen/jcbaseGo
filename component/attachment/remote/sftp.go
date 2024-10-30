@@ -23,7 +23,12 @@ type SFTPClient struct {
 }
 
 // NewSFTPClient 创建一个新的SFTP客户端。
-func NewSFTPClient(config SFTPConfig) (*SFTPClient, error) {
+func NewSFTPClient(config SFTPConfig, args ...ssh.HostKeyCallback) (*SFTPClient, error) {
+	var hostKeyCallback ssh.HostKeyCallback
+	if len(args) > 0 {
+		hostKeyCallback = args[0]
+	}
+
 	var authMethods []ssh.AuthMethod
 	if config.Password != "" {
 		authMethods = append(authMethods, ssh.Password(config.Password))
@@ -40,7 +45,6 @@ func NewSFTPClient(config SFTPConfig) (*SFTPClient, error) {
 		return nil, &Error{Op: "NewSFTPClient", Err: errors.New("no authentication method provided")}
 	}
 
-	hostKeyCallback := config.HostKeyCallback
 	if hostKeyCallback == nil {
 		hostKeyCallback = ssh.InsecureIgnoreHostKey()
 	}

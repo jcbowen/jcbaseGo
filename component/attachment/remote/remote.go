@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"golang.org/x/crypto/ssh"
 	"time"
 )
 
@@ -63,7 +64,16 @@ type Client interface {
 }
 
 // NewClient 创建一个新的远程存储客户端。
-func NewClient(storageType string, config interface{}) (Client, error) {
+// - storageType 远程附件类型
+// - config 远程附件连接配置
+// - hostKeyCallback 主机密钥回调，选填，仅sftp有效
+func NewClient(storageType string, config interface{}, args ...ssh.HostKeyCallback) (Client, error) {
+	// 仅sftp需要
+	var hostKeyCallback ssh.HostKeyCallback
+	if storageType == TypeSFTP && len(args) > 0 {
+		hostKeyCallback = args[0]
+	}
+
 	switch storageType {
 	case TypeFTP:
 		ftpConfig, ok := config.(FTPConfig)
@@ -76,7 +86,7 @@ func NewClient(storageType string, config interface{}) (Client, error) {
 		if !ok {
 			return nil, errors.New("invalid config for SFTP")
 		}
-		return NewSFTPClient(sftpConfig)
+		return NewSFTPClient(sftpConfig, hostKeyCallback)
 	case TypeCOS:
 		cosConfig, ok := config.(COSConfig)
 		if !ok {
