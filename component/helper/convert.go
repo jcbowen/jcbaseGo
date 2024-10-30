@@ -26,8 +26,14 @@ func (c Convert) ToString() string {
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	case float32:
 		return strconv.FormatFloat(float64(v), 'f', -1, 64)
-	case int, int8, int16, int32, uint, uint8, uint16, uint32:
+	case int:
+		return strconv.Itoa(v)
+	case int8, int16, int32:
 		return strconv.Itoa(int(reflect.ValueOf(v).Int()))
+	case uint:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint8, uint16, uint32:
+		return strconv.FormatUint(reflect.ValueOf(v).Uint(), 10)
 	case int64:
 		return strconv.FormatInt(v, 10)
 	case uint64:
@@ -37,6 +43,7 @@ func (c Convert) ToString() string {
 	case []byte:
 		return string(v)
 	default:
+		// 将值序列化为 JSON
 		newValue, err := json.Marshal(c.Value)
 		if err != nil {
 			log.Println("Error marshaling value to JSON:", err)
