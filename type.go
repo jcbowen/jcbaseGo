@@ -65,9 +65,8 @@ type MailerStruct struct {
 
 // AttachmentStruct 附件配置
 type AttachmentStruct struct {
-	StorageType string      `json:"storage_type" default:"local"`   // 存储类型 local/ftp/sftp/cos/oss
-	LocalDir    string      `json:"local_dir" default:"attachment"` // 本地附件目录，默认为 attachment
-	Remote      interface{} `json:"remote,omitempty"`               // 远程存储配置
+	StorageType string `json:"storage_type" default:"local"`   // 存储类型 local/ftp/sftp/cos/oss
+	LocalDir    string `json:"local_dir" default:"attachment"` // 本地附件目录，默认为 attachment
 
 	// 附件访问域名
 	// 配置后以配置为准，不配置则初始化中自动赋值，一定以“/”结尾

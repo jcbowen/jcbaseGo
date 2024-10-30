@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func (a *Attachment) toMedia(src string, args ...interface{}) string {
+func (a *Attachment) ToMedia(src string, args ...interface{}) string {
 	isLocal := false // 是否为本地附件
 	isCache := true  // 是否在尾部添加时间戳
 
@@ -31,10 +31,10 @@ func (a *Attachment) toMedia(src string, args ...interface{}) string {
 
 	src = strings.TrimPrefix(src, "/")
 
-	if isLocal || a.Config.StorageType == "local" {
-		src = a.Config.LocalVisitDomain + a.Config.LocalDir + "/" + src
+	if isLocal || a.BaseConfig.StorageType == "local" {
+		src = a.BaseConfig.LocalVisitDomain + a.BaseConfig.LocalDir + "/" + src
 	} else {
-		src = a.Config.VisitDomain + src
+		src = a.BaseConfig.VisitDomain + src
 	}
 
 	return src
