@@ -7,6 +7,7 @@ import (
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -47,14 +48,32 @@ func (opt *Option) checkConfig() {
 
 	// 初始化默认配置
 	opt.initializeConfigWithDefaults()
-	// 获取配置文件绝对路径
-	fileNameFull := opt.getConfigFilePath()
-	// 如果配置文件不存在，则创建
-	opt.createConfigFileIfNotExists(fileNameFull)
-	// 从文件中读取配置
-	opt.readConfigFile(fileNameFull)
-	// 配置结构体是有可能更新升级的，所以每次运行之后，应当更新一下配置文件
-	opt.updateConfigFile(fileNameFull, true)
+
+	switch opt.ConfigType {
+	case ConfigTypeFile: // json文件
+		// 获取配置文件绝对路径
+		fileNameFull := opt.getConfigFilePath()
+		// 如果配置文件不存在，则创建
+		opt.createConfigFileIfNotExists(fileNameFull)
+		// 从文件中读取配置
+		opt.readConfigFile(fileNameFull)
+		// 配置结构体是有可能更新升级的，所以每次运行之后，应当更新一下配置文件
+		opt.updateConfigFile(fileNameFull, true)
+	case ConfigTypeCommand: // 命令行json
+		// 执行脚本并获取JSON输出
+		cmd := exec.Command(opt.ConfigSource)
+		output, err := cmd.Output()
+		if err != nil {
+			log.Fatalf("执行PHP脚本错误: %v", err)
+			return
+		}
+		if err = json.Unmarshal(output, &opt.ConfigData); err != nil {
+			log.Fatalf("JSON解析错误: %v", err)
+			return
+		}
+	default:
+		log.Panic("错误的配置类型")
+	}
 
 	// 将配置信息写入全局变量
 	Config = opt.ConfigData
@@ -92,7 +111,7 @@ func (opt *Option) initializeConfigWithDefaults() {
 }
 
 func (opt *Option) getConfigFilePath() string {
-	fileNameFull, err := filepath.Abs(opt.ConfigFile)
+	fileNameFull, err := filepath.Abs(opt.ConfigSource)
 	if err != nil {
 		log.Fatalf("获取配置文件路径错误: %v", err)
 	}

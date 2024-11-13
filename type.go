@@ -4,11 +4,17 @@ import (
 	"time"
 )
 
+const (
+	ConfigTypeFile    = "file"    // 文件(文件内容必须为合法json)
+	ConfigTypeCommand = "command" // 命令行(输出结果必须为合法json)
+)
+
 // Option jcbaseGo配置选项
 type Option struct {
-	ConfigFile  string      `json:"config_file" default:"./config/main.json"` // 配置文件路径
-	ConfigData  interface{} `json:"config_data"`                              // 配置信息
-	RuntimePath string      `json:"runtime_path" default:"/runtime/"`         // 运行缓存目录
+	ConfigType   string      `json:"config_type" default:"file"`
+	ConfigSource string      `json:"config_source" default:"./config/main.json"` // 配置源（json文件/命令行）
+	ConfigData   interface{} `json:"config_data"`                                // 配置信息
+	RuntimePath  string      `json:"runtime_path" default:"/runtime/"`           // 运行缓存目录
 }
 
 // SSLStruct ssl配置

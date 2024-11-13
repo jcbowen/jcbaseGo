@@ -16,7 +16,7 @@ func New(opt jcbaseGo.Option) *ConfigStruct {
 	if opt.RuntimePath != "" {
 		funcFilePath = helper.NewFile(&helper.File{Path: opt.RuntimePath}).DirName() + funcFilePath
 	} else {
-		funcFilePath = helper.NewFile(&helper.File{Path: opt.ConfigFile}).DirName() + funcFilePath
+		funcFilePath = helper.NewFile(&helper.File{Path: opt.ConfigSource}).DirName() + funcFilePath
 	}
 
 	conf := &ConfigStruct{
