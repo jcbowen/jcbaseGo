@@ -61,7 +61,7 @@ func (opt *Option) checkConfig() {
 		opt.updateConfigFile(fileNameFull, true)
 	case ConfigTypeCommand: // 命令行json
 		// 执行脚本并获取JSON输出
-		cmd := exec.Command(opt.ConfigSource)
+		cmd := exec.Command("sh", "-c", opt.ConfigSource)
 		output, err := cmd.Output()
 		if err != nil {
 			log.Fatalf("执行PHP脚本错误: %v", err)
