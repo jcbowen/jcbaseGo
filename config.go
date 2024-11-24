@@ -1,6 +1,7 @@
 package jcbaseGo
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"github.com/go-redis/redis/v8"
@@ -62,13 +63,32 @@ func (opt *Option) checkConfig() {
 	case ConfigTypeCommand: // 命令行json
 		// 执行脚本并获取JSON输出
 		cmd := exec.Command("sh", "-c", opt.ConfigSource)
-		output, err := cmd.Output()
+
+		// 获取标准输出和错误输出
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		err := cmd.Run()
 		if err != nil {
-			log.Fatalf("执行PHP脚本错误: %v", err)
+			log.Fatalf("执行脚本错误: %v\n错误输出: %s", err, stderr.String())
 			return
 		}
-		if err = json.Unmarshal(output, &opt.ConfigData); err != nil {
-			log.Fatalf("JSON解析错误: %v", err)
+
+		output := stdout.Bytes()
+		//log.Println("标准输出:", string(output))
+		//log.Println("错误输出:", stderr.String())
+
+		jsonStartIndex := bytes.Index(output, []byte("{"))
+		if jsonStartIndex == -1 {
+			log.Fatalf("输出中未找到JSON数据: %s", string(output))
+			return
+		}
+
+		// 截取可能的JSON部分
+		pureJSON := output[jsonStartIndex:]
+		if err = json.Unmarshal(pureJSON, &opt.ConfigData); err != nil {
+			log.Fatalf("JSON解析错误: %v\n原始数据: %s", err, pureJSON)
 			return
 		}
 	default:
