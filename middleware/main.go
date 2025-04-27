@@ -2,10 +2,11 @@ package middleware
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Base struct {
@@ -37,6 +38,9 @@ func (b Base) Cors() gin.HandlerFunc {
 			c.Header("Access-Control-Max-Age", "172800")                                                                                                                                                           // 缓存请求信息 单位为秒
 			c.Header("Access-Control-Allow-Credentials", "false")                                                                                                                                                  // 跨域请求是否需要带cookie信息 默认设置为true
 			c.Set("Content-type", "application/json;charset=utf-8")                                                                                                                                                // 设置返回格式是json
+
+			// 添加 CSP 头部
+			// c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';")
 		}
 
 		//放行所有OPTIONS方法
