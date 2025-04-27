@@ -7,6 +7,7 @@ toolchain go1.23.4
 require (
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
 	github.com/gin-gonic/gin v1.10.0
+	github.com/go-ini/ini v1.67.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/pkg/sftp v1.13.6

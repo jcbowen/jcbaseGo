@@ -5,22 +5,31 @@ import (
 )
 
 const (
-	ConfigTypeFile    = "file"    // 文件(文件内容必须为合法json)
-	ConfigTypeCommand = "command" // 命令行(输出结果必须为合法json)
+	ConfigTypeJSON    = "json"    // 配置类型：json文件
+	ConfigTypeINI     = "ini"     // 配置类型：ini文件
+	ConfigTypeCommand = "command" // 配置类型：通过命令行传递的字符串json
+
+	// ConfigTypeFile 是ConfigTypeJSON的别名，用于兼容旧版写法
+	ConfigTypeFile = "file"
 )
 
 // Option jcbaseGo配置选项
 type Option struct {
-	ConfigType   string      `json:"config_type" default:"file"`
-	ConfigSource string      `json:"config_source" default:"./config/main.json"` // 配置源（json文件/命令行）
-	ConfigData   interface{} `json:"config_data"`                                // 配置信息
-	RuntimePath  string      `json:"runtime_path" default:"/runtime/"`           // 运行缓存目录
+	ConfigType   string      `json:"config_type" default:"ini"`                 // 配置类型，仅支持：json、ini、command
+	ConfigSource string      `json:"config_source" default:"./config/main.ini"` // 配置源（json文件/命令行）
+	ConfigData   interface{} `json:"config_data"`                               // 配置信息
+	RuntimePath  string      `json:"runtime_path" default:"/runtime/"`          // 运行缓存目录
 }
 
 // SSLStruct ssl配置
-type SSLStruct struct {
-	CertPath string `json:"cert_path" default:""`
-	KeyPath  string `json:"key_path" default:""`
+type SSLStruct = WebServer
+
+// WebServer web服务配置
+type WebServer struct {
+	Port      int    `json:"port" ini:"port" default:"8080"`              // web服务端口号
+	EnableSSL bool   `json:"enable_ssl" ini:"enable_SSL" default:"false"` // 是否启用ssl
+	CertPath  string `json:"cert_path" ini:"cert_path" default:""`        // ssl证书路径
+	KeyPath   string `json:"key_path" ini:"key_path" default:""`          // ssl密钥路径
 }
 
 // DbStruct 数据库配置
