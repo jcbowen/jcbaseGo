@@ -297,7 +297,12 @@ func (opt *Option) updateConfigFile(fileNameFull string, overwrite bool) {
 				}
 			}
 		}
-		err = cfg.SaveTo(fileNameFull)
+		// 使用 helper.NewFile 创建文件
+		var buf bytes.Buffer
+		if _, err = cfg.WriteTo(&buf); err != nil {
+			log.Fatalf("写入INI缓冲区错误: %v", err)
+		}
+		err = helper.NewFile(&helper.File{Path: fileNameFull}).CreateFile(buf.Bytes(), overwrite)
 	case ConfigTypeJSON, ConfigTypeFile:
 		fileData, err = json.MarshalIndent(opt.ConfigData, "", " ")
 		if err != nil {
