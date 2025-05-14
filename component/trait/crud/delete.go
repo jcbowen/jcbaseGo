@@ -1,12 +1,13 @@
 package crud
 
 import (
+	"log"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/errcode"
 	"gorm.io/gorm"
-	"log"
-	"time"
 )
 
 func (t *Trait) ActionDelete(c *gin.Context) {
@@ -48,7 +49,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 
 	// 查询要删除的数据
 	var delArr []map[string]interface{}
-	deleteQuery := t.MysqlMain.GetDb().Table(t.ModelTableName).
+	deleteQuery := t.Db.GetDb().Table(t.ModelTableName).
 		Select(fields)
 	if helper.InArray("deleted_at", t.ModelFields) {
 		deleteQuery = deleteQuery.Where("deleted_at IS NULL")
@@ -85,7 +86,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	delIds = callResults[0].([]interface{})
 
 	// 开启事务
-	tx := t.MysqlMain.GetDb().Begin()
+	tx := t.Db.GetDb().Begin()
 
 	// 执行删除
 	if helper.InArray("deleted_at", t.ModelFields) {

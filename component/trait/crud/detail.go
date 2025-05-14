@@ -2,11 +2,12 @@ package crud
 
 import (
 	"errors"
+	"reflect"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/errcode"
 	"gorm.io/gorm"
-	"reflect"
 )
 
 func (t *Trait) ActionDetail(c *gin.Context) {
@@ -49,7 +50,7 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 	}
 
 	// 构建查询
-	query := t.MysqlMain.GetDb().Table(t.ModelTableName + tableAlias)
+	query := t.Db.GetDb().Table(t.ModelTableName + tableAlias)
 
 	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
 		query = query.Where(t.TableAlias + "deleted_at IS NULL")

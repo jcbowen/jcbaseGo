@@ -3,13 +3,14 @@ package mysql
 import (
 	"errors"
 	"fmt"
-	"github.com/jcbowen/jcbaseGo"
-	"github.com/jcbowen/jcbaseGo/component/helper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 	"log"
 	"os"
+
+	"github.com/jcbowen/jcbaseGo"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 type AllTableName struct {

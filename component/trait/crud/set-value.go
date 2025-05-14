@@ -2,11 +2,12 @@ package crud
 
 import (
 	"errors"
+	"reflect"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/errcode"
 	"gorm.io/gorm"
-	"reflect"
 )
 
 func (t *Trait) ActionSetValue(c *gin.Context) {
@@ -82,8 +83,8 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 		}
 	}
 
-	// 开启事务
-	tx := t.MysqlMain.GetDb().Begin()
+	// 开始事务
+	tx := t.Db.GetDb().Begin()
 
 	// 查询数据
 	modelType := reflect.TypeOf(t.Model).Elem()

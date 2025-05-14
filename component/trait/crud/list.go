@@ -1,13 +1,14 @@
 package crud
 
 import (
+	"net/http"
+	"reflect"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/errcode"
 	"gorm.io/gorm"
-	"net/http"
-	"reflect"
 )
 
 func (t *Trait) ActionList(c *gin.Context) {
@@ -32,7 +33,7 @@ func (t *Trait) ActionList(c *gin.Context) {
 	}
 
 	// 构建查询
-	query := t.MysqlMain.GetDb().Table(t.ModelTableName + tableAlias)
+	query := t.Db.GetDb().Table(t.ModelTableName + tableAlias)
 
 	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
 		query = query.Where(t.TableAlias + "deleted_at IS NULL")

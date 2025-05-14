@@ -1,15 +1,15 @@
 package crud
 
 import (
+	"reflect"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/errcode"
 	"gorm.io/gorm"
-	"reflect"
 )
 
 func (t *Trait) ActionCreate(c *gin.Context) {
-
 	t.InitCrud(c)
 
 	var err error
@@ -38,8 +38,8 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 		}
 	}
 
-	// 开启事务
-	tx := t.MysqlMain.GetDb().Begin()
+	// 开始事务
+	tx := t.Db.GetDb().Begin()
 
 	// 插入数据
 	if err = tx.Create(modelValue).Error; err != nil {
