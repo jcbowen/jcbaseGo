@@ -22,7 +22,7 @@ func (t *Trait) ActionAll(c *gin.Context) {
 	}
 
 	// 构建查询
-	query := t.Db.GetDb().Table(t.ModelTableName + tableAlias)
+	query := t.DBI.GetDb().Table(t.ModelTableName + tableAlias)
 
 	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
 		query = query.Where(t.TableAlias + "deleted_at IS NULL")

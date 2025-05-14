@@ -49,7 +49,7 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 	}
 
 	// 开始事务
-	tx := t.Db.GetDb().Begin()
+	tx := t.DBI.GetDb().Begin()
 
 	// 动态创建模型实例
 	modelType := reflect.TypeOf(t.Model).Elem()

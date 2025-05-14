@@ -84,7 +84,7 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 	}
 
 	// 开始事务
-	tx := t.Db.GetDb().Begin()
+	tx := t.DBI.GetDb().Begin()
 
 	// 查询数据
 	modelType := reflect.TypeOf(t.Model).Elem()

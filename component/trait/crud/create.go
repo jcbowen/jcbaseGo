@@ -39,7 +39,7 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	}
 
 	// 开始事务
-	tx := t.Db.GetDb().Begin()
+	tx := t.DBI.GetDb().Begin()
 
 	// 插入数据
 	if err = tx.Create(modelValue).Error; err != nil {

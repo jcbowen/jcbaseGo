@@ -49,7 +49,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 
 	// 查询要删除的数据
 	var delArr []map[string]interface{}
-	deleteQuery := t.Db.GetDb().Table(t.ModelTableName).
+	deleteQuery := t.DBI.GetDb().Table(t.ModelTableName).
 		Select(fields)
 	if helper.InArray("deleted_at", t.ModelFields) {
 		deleteQuery = deleteQuery.Where("deleted_at IS NULL")
@@ -86,7 +86,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	delIds = callResults[0].([]interface{})
 
 	// 开启事务
-	tx := t.Db.GetDb().Begin()
+	tx := t.DBI.GetDb().Begin()
 
 	// 执行删除
 	if helper.InArray("deleted_at", t.ModelFields) {
