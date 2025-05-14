@@ -14,13 +14,13 @@ import (
 
 type Trait struct {
 	// ----- 基础配置 ----- /
-	PkId               string                `default:"id"` // 数据表主键
-	Model              any                   // 模型指针
-	ModelTableAlias    string                // 模型表别名
-	DBI                *orm.DatabaseInstance // 数据库实例
-	ListResultStruct   interface{}           // 列表返回结构体
-	DetailResultStruct interface{}           // 详情返回结构体
-	Controller         interface{}           // 控制器
+	PkId               string       `default:"id"` // 数据表主键
+	Model              any          // 模型指针
+	ModelTableAlias    string       // 模型表别名
+	DBI                orm.Instance // 数据库实例
+	ListResultStruct   interface{}  // 列表返回结构体
+	DetailResultStruct interface{}  // 详情返回结构体
+	Controller         interface{}  // 控制器
 
 	// ----- 初始化时生成 ----- /
 	ModelTableName string   // 模型表名

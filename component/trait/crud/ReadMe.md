@@ -25,7 +25,7 @@ func New() *Index {
 	index := &Index{
 		Trait: &crud.Trait{
 			Model: &userModel.Account{},
-			Db:    orm.NewDatabaseInstance(library.Mysql),
+			DBI:    library.Mysql,
 		},
 	}
 	
@@ -40,7 +40,7 @@ func New() *Index {
 	index := &Index{
 		Trait: &crud.Trait{
 			Model: &userModel.Account{},
-			Db:    orm.NewDatabaseInstance(sqliteDb),
+			DBI:    sqliteDb,
 		},
 	}
 	*/
