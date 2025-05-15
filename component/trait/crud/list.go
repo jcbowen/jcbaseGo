@@ -94,18 +94,28 @@ func (t *Trait) ActionList(c *gin.Context) {
 
 	// 遍历结果到ListEach中
 	resultsValue := reflect.ValueOf(results).Elem()
+	// 创建新的切片来存储修改后的结果
+	modifiedResults := make([]interface{}, resultsValue.Len())
 	for i := 0; i < resultsValue.Len(); i++ {
 		item := resultsValue.Index(i).Addr().Interface()
 		eachResult := t.callCustomMethod("ListEach", item)[0]
-		if reflect.TypeOf(eachResult).Kind() == reflect.Ptr {
-			eachResult = reflect.ValueOf(eachResult).Elem().Interface()
+
+		// 处理返回结果
+		if reflect.TypeOf(eachResult).Kind() == reflect.Map {
+			// 如果是 map 类型，直接使用
+			modifiedResults[i] = eachResult
+		} else if reflect.TypeOf(eachResult).Kind() == reflect.Ptr {
+			// 如果是指针类型，获取其值
+			modifiedResults[i] = reflect.ValueOf(eachResult).Elem().Interface()
+		} else {
+			// 其他类型直接使用
+			modifiedResults[i] = eachResult
 		}
-		resultsValue.Index(i).Set(reflect.ValueOf(eachResult))
 	}
 
 	// 返回结果
 	t.callCustomMethod("ListReturn", jcbaseGo.ListData{
-		List:     results,
+		List:     modifiedResults, // 使用新的切片
 		Total:    int(total),
 		Page:     page,
 		PageSize: pageSize,
