@@ -71,7 +71,15 @@ func (c *Instance) Debug() *Instance {
 
 // GetDb 获取db
 func (c *Instance) GetDb() *gorm.DB {
-	return c.Db
+	if c.Db == nil {
+		log.Println("Database connection is nil")
+		return nil
+	}
+	db := c.Db
+	if c.debug {
+		db = db.Debug()
+	}
+	return db
 }
 
 // GetAllTableName 获取所有表名

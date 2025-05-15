@@ -140,7 +140,3 @@ func (c *Instance) Error() []error {
 
 	return errs
 }
-
-// ----- 弃用 ----- /
-
-type Context = Instance
