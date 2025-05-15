@@ -52,6 +52,9 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 	// 构建查询
 	query := t.DBI.GetDb().Table(t.ModelTableName + tableAlias)
 
+	// 为了方便，直接传query进去拼接就好
+	query = t.callCustomMethod("DetailSelect", query)[0].(*gorm.DB)
+
 	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
 		query = query.Where(t.TableAlias + "deleted_at IS NULL")
 	}
@@ -105,6 +108,11 @@ func (t *Trait) DetailFormData() (map[string]any, error) {
 	mapData := t.GetSafeMapGPC("all")
 
 	return mapData, nil
+}
+
+func (t *Trait) DetailSelect(query *gorm.DB) *gorm.DB {
+	// 默认就是查询*，所以这里就没必要单独写query.Select("*")了
+	return query
 }
 
 func (t *Trait) DetailQuery(query *gorm.DB, mapData map[string]any) *gorm.DB {
