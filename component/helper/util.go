@@ -888,3 +888,30 @@ func TraceCaller() {
 
 	fmt.Printf("Function: %s was called from %s, file: %s, line: %d\n", fnCurrent.Name(), fnCaller.Name(), file, line)
 }
+
+// FindAvailablePort 查找可用端口
+// 从指定端口开始，如果端口被占用则递增端口号，直到找到可用端口
+// 未指定端口的情况下默认使用8080
+func FindAvailablePort(startPort string) string {
+	port, err := strconv.Atoi(startPort)
+	if err != nil {
+		log.Printf("无效的端口[:%s]，使用默认端口[:8080]", startPort)
+		port = 8080
+	}
+
+	for {
+		// 尝试监听端口
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err == nil {
+			// 端口可用，关闭监听器并返回端口号
+			listener.Close()
+			strPort := strconv.Itoa(port)
+			log.Printf("确认端口[:%s]可用\n", strPort)
+			return strPort
+		}
+
+		// 端口被占用，递增端口号
+		log.Printf("端口 %d 已被占用，尝试端口 %d", port, port+1)
+		port++
+	}
+}
