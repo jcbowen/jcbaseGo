@@ -28,7 +28,7 @@ type SSLStruct = WebServer
 // WebServer web服务配置
 type WebServer struct {
 	Port      int    `json:"port" ini:"port" default:"8080"`              // web服务端口号
-	EnableSSL bool   `json:"enable_ssl" ini:"enable_SSL" default:"false"` // 是否启用ssl
+	EnableSSL bool   `json:"enable_ssl" ini:"enable_ssl" default:"false"` // 是否启用ssl
 	CertPath  string `json:"cert_path" ini:"cert_path" default:""`        // ssl证书路径
 	KeyPath   string `json:"key_path" ini:"key_path" default:""`          // ssl密钥路径
 }
