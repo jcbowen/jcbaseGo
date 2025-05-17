@@ -9,16 +9,17 @@ const (
 	ConfigTypeINI     = "ini"     // 配置类型：ini文件
 	ConfigTypeCommand = "command" // 配置类型：通过命令行传递的字符串json
 
-	// ConfigTypeFile 是ConfigTypeJSON的别名，用于兼容旧版写法
+	// ConfigTypeFile 文件类型，根据文件后缀自动识别是json还是ini文件
+	// Deprecated: 推荐使用ConfigTypeJSON或者ConfigTypeINI，保留仅为了兼容旧版
 	ConfigTypeFile = "file"
 )
 
 // Option jcbaseGo配置选项
 type Option struct {
-	ConfigType   string      `json:"config_type" default:"ini"`                 // 配置类型，仅支持：json、ini、command
-	ConfigSource string      `json:"config_source" default:"./config/main.ini"` // 配置源（json文件/命令行）
-	ConfigData   interface{} `json:"config_data"`                               // 配置信息
-	RuntimePath  string      `json:"runtime_path" default:"/runtime/"`          // 运行缓存目录
+	ConfigType   string      `json:"config_type" default:"file"`              // 配置类型，仅支持：json、ini、file、command
+	ConfigSource string      `json:"config_source" default:"./data/conf.ini"` // 配置源（json文件/ini文件/命令行）
+	ConfigData   interface{} `json:"config_data"`                             // 配置信息
+	RuntimePath  string      `json:"runtime_path" default:"/runtime/"`        // 运行缓存目录
 }
 
 // SSLStruct ssl配置

@@ -54,6 +54,19 @@ func (opt *Option) checkConfig() {
 	// 初始化默认配置
 	opt.initializeConfigWithDefaults()
 
+	// 如果是文件类型配置，根据文件后缀名判断配置类型
+	if opt.ConfigType == ConfigTypeFile {
+		ext := filepath.Ext(opt.ConfigSource)
+		switch strings.ToLower(ext) {
+		case ".json":
+			opt.ConfigType = ConfigTypeJSON
+		case ".ini":
+			opt.ConfigType = ConfigTypeINI
+		default:
+			log.Fatalf("不支持的配置文件类型: %s", ext)
+		}
+	}
+
 	switch opt.ConfigType {
 	case ConfigTypeJSON, ConfigTypeINI, ConfigTypeFile:
 		// 获取配置文件绝对路径
@@ -254,7 +267,7 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 				}
 			}
 		}
-	case ConfigTypeJSON, ConfigTypeFile:
+	case ConfigTypeJSON:
 		err = json.Unmarshal(file, &opt.ConfigData)
 		if err != nil {
 			log.Fatalf("解析JSON配置文件错误: %v", err)
@@ -303,7 +316,7 @@ func (opt *Option) updateConfigFile(fileNameFull string, overwrite bool) {
 			log.Fatalf("写入INI缓冲区错误: %v", err)
 		}
 		err = helper.NewFile(&helper.File{Path: fileNameFull}).CreateFile(buf.Bytes(), overwrite)
-	case ConfigTypeJSON, ConfigTypeFile:
+	case ConfigTypeJSON:
 		fileData, err = json.MarshalIndent(opt.ConfigData, "", " ")
 		if err != nil {
 			log.Fatalf("转换JSON错误: %v", err)
