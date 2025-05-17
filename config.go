@@ -162,7 +162,12 @@ func (opt *Option) createConfigFileIfNotExists(fileNameFull string) {
 	}
 }
 
+// readConfigFile 读取配置文件并解析到结构体中
+// 支持 INI 和 JSON 两种格式
+// INI 格式支持多级嵌套，使用点号(.)分隔，第一级为节名，后续为字段名
+// 例如：[Database] db.name = test 会被解析到 Database 结构体的 DB 字段的 Name 属性
 func (opt *Option) readConfigFile(fileNameFull string) {
+	// 读取配置文件内容
 	file, err := os.ReadFile(fileNameFull)
 	if err != nil {
 		log.Fatalf("读取配置文件错误: %v", err)
@@ -170,41 +175,70 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 
 	switch opt.ConfigType {
 	case ConfigTypeINI:
+		// 加载 INI 配置文件
 		cfg, err := ini.Load(fileNameFull)
 		if err != nil {
 			log.Fatalf("解析INI配置文件错误: %v", err)
 		}
-		// 将INI配置转换为map
+		// 遍历所有节（第一级标题）
 		for _, section := range cfg.Sections() {
-			for _, key := range section.Keys() {
-				// 获取结构体字段的类型信息
-				val := reflect.ValueOf(opt.ConfigData)
-				if val.Kind() == reflect.Ptr {
-					val = val.Elem()
-				}
+			// 获取配置结构体的反射值
+			val := reflect.ValueOf(opt.ConfigData)
+			if val.Kind() == reflect.Ptr {
+				val = val.Elem()
+			}
 
-				// 处理嵌套结构体
+			// 查找与节名匹配的字段（第一级结构体字段）
+			var sectionField reflect.StructField
+			var found bool
+			for i := 0; i < val.NumField(); i++ {
+				field := val.Type().Field(i)
+				jsonTag := field.Tag.Get("json")
+				iniTag := field.Tag.Get("ini")
+				if jsonTag == section.Name() || iniTag == section.Name() {
+					sectionField = field
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				continue
+			}
+
+			// 获取节对应的字段值（第一级结构体实例）
+			sectionVal := val.FieldByName(sectionField.Name)
+			if sectionVal.Kind() == reflect.Ptr {
+				if sectionVal.IsNil() {
+					sectionVal.Set(reflect.New(sectionVal.Type().Elem()))
+				}
+				sectionVal = sectionVal.Elem()
+			}
+
+			// 处理节内的每个键值对
+			for _, key := range section.Keys() {
+				// 将键名按点号分割，处理嵌套结构
 				fieldNames := strings.Split(key.Name(), ".")
-				var currentVal reflect.Value = val
+				var currentVal reflect.Value = sectionVal
 				var currentField reflect.StructField
 				var found bool
 
-				// 构建完整的字段路径
-				var fullPath []string
-				for _, fieldName := range fieldNames {
+				// 遍历字段路径，处理嵌套结构体
+				for i := 0; i < len(fieldNames); i++ {
+					// 如果当前值不是结构体，则退出循环
 					if currentVal.Kind() != reflect.Struct {
 						break
 					}
 
-					// 查找字段
-					currentField, found = currentVal.Type().FieldByName(fieldName)
+					// 尝试通过字段名查找
+					currentField, found = currentVal.Type().FieldByName(fieldNames[i])
 					if !found {
-						// 尝试通过json或ini标签查找
+						// 如果通过字段名没找到，尝试通过标签查找
 						for j := 0; j < currentVal.NumField(); j++ {
 							field := currentVal.Type().Field(j)
 							jsonTag := field.Tag.Get("json")
 							iniTag := field.Tag.Get("ini")
-							if jsonTag == fieldName || iniTag == fieldName {
+							if jsonTag == fieldNames[i] || iniTag == fieldNames[i] {
 								currentField = field
 								found = true
 								break
@@ -216,22 +250,23 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 						break
 					}
 
-					fullPath = append(fullPath, currentField.Name)
-
+					// 处理指针类型的字段
 					if currentVal.Kind() == reflect.Ptr {
 						if currentVal.IsNil() {
 							currentVal.Set(reflect.New(currentVal.Type().Elem()))
 						}
 						currentVal = currentVal.Elem()
 					}
+					// 获取下一个层级的字段值
 					currentVal = currentVal.FieldByName(currentField.Name)
 				}
 
+				// 如果找到了对应的字段，设置其值
 				if found {
-					// 根据字段类型进行转换
+					// 根据字段类型进行相应的类型转换
 					switch currentField.Type.Kind() {
 					case reflect.Bool:
-						// 尝试将字符串转换为bool
+						// 布尔类型转换
 						if key.Value() == "true" || key.Value() == "1" {
 							currentVal.SetBool(true)
 						} else if key.Value() == "false" || key.Value() == "0" {
@@ -240,34 +275,35 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 							currentVal.SetBool(false)
 						}
 					case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-						// 尝试将字符串转换为整数
+						// 整数类型转换
 						if i, err := strconv.ParseInt(key.Value(), 10, 64); err == nil {
 							currentVal.SetInt(i)
 						} else {
 							currentVal.SetInt(0)
 						}
 					case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-						// 尝试将字符串转换为无符号整数
+						// 无符号整数类型转换
 						if i, err := strconv.ParseUint(key.Value(), 10, 64); err == nil {
 							currentVal.SetUint(i)
 						} else {
 							currentVal.SetUint(0)
 						}
 					case reflect.Float32, reflect.Float64:
-						// 尝试将字符串转换为浮点数
+						// 浮点数类型转换
 						if f, err := strconv.ParseFloat(key.Value(), 64); err == nil {
 							currentVal.SetFloat(f)
 						} else {
 							currentVal.SetFloat(0.0)
 						}
 					default:
-						// 其他类型保持为字符串
+						// 其他类型（如字符串）直接设置
 						currentVal.SetString(key.Value())
 					}
 				}
 			}
 		}
 	case ConfigTypeJSON:
+		// JSON 格式直接解析到结构体
 		err = json.Unmarshal(file, &opt.ConfigData)
 		if err != nil {
 			log.Fatalf("解析JSON配置文件错误: %v", err)
