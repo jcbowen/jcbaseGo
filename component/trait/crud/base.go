@@ -37,6 +37,9 @@ func (t *Trait) InitCrud(c *gin.Context) {
 	_ = helper.CheckAndSetDefault(t)
 	t.BaseControllerTrait.GinContext = c
 
+	// 设置json响应头
+	c.Set("Content-type", "application/json;charset=utf-8")
+
 	// 如果控制器中有CheckInit方法，就调用
 	method := reflect.ValueOf(t.Controller).MethodByName("CheckInit")
 	if method.IsValid() {
