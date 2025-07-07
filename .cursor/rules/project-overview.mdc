@@ -1,0 +1,38 @@
+---
+alwaysApply: true
+description: jcbaseGo 项目总体架构和组件介绍
+---
+
+# jcbaseGo 项目架构指南
+
+这是一个 Go 语言的基础工具包，提供了多个可复用的组件。
+
+## 核心组件结构
+
+### 主要目录说明
+- `component/` - 核心组件目录
+  - `attachment/` - 附件管理（支持本地、FTP、SFTP、OSS、COS等）
+  - `helper/` - 工具函数集合，包含类型转换、字符串处理、结构体操作等
+  - `mailer/` - 邮件发送组件
+  - `orm/` - 数据库 ORM 抽象层，支持 MySQL 和 SQLite
+  - `redis/` - Redis 缓存组件
+  - `security/` - 安全相关功能（AES加密、密码处理等）
+  - `trait/` - trait 模式实现，主要包含 CRUD 和控制器基础功能
+  - `validator/` - 数据验证组件
+
+### 关键文件
+- [config.go](mdc:config.go) - 配置管理，支持 JSON、INI、命令行等多种配置源
+- [type.go](mdc:type.go) - 全局类型定义
+- [errcode/errcode.go](mdc:errcode/errcode.go) - 错误码定义
+
+## 设计模式
+- **组件化设计**：每个功能模块都是独立的组件
+- **接口抽象**：使用接口定义规范，便于扩展和测试
+- **Trait 模式**：通过 trait 提供可复用的行为
+- **配置驱动**：支持多种配置源，便于不同环境部署
+
+## 开发规范
+- 使用简体中文注释
+- 代码结构清晰，避免多重嵌套
+- 完善的错误处理机制
+- 统一的接口设计风格

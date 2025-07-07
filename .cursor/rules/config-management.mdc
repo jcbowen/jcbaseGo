@@ -1,0 +1,71 @@
+---
+globs: config.go,**/config/**/*.go
+description: 配置管理和环境配置规范
+---
+
+# 配置管理规范
+
+## 配置系统架构
+项目使用 [config.go](mdc:config.go) 作为核心配置管理模块，支持多种配置源：
+
+### 支持的配置类型
+- **ConfigTypeJSON**: JSON 格式配置文件
+- **ConfigTypeINI**: INI 格式配置文件
+- **ConfigTypeFile**: 根据文件扩展名自动识别
+- **ConfigTypeCommand**: 通过命令行脚本获取配置
+
+### 配置结构体设计规范
+```go
+// DatabaseConfig 数据库配置结构体
+// 包含数据库连接所需的所有参数
+type DatabaseConfig struct {
+    Host     string `json:"host" ini:"host" default:"localhost"`         // 数据库主机地址
+    Port     int    `json:"port" ini:"port" default:"3306"`              // 数据库端口
+    Username string `json:"username" ini:"username" default:"root"`      // 用户名
+    Password string `json:"password" ini:"password" default:""`          // 密码
+    Database string `json:"database" ini:"database" default:"test"`      // 数据库名
+}
+```
+
+### 配置初始化流程
+1. **默认值设置**: 使用 `default` tag 设置字段默认值
+2. **配置文件读取**: 根据配置类型读取对应格式的文件
+3. **配置验证**: 验证必需字段和配置有效性
+4. **配置更新**: 自动更新配置文件（如有结构变更）
+
+### 环境相关配置
+- 开发环境：使用 `config.dev.json` 或 `config.dev.ini`
+- 测试环境：使用 `config.test.json` 或 `config.test.ini`
+- 生产环境：使用 `config.prod.json` 或 `config.prod.ini`
+
+### 配置安全原则
+- 敏感信息（密码、密钥）使用环境变量或加密存储
+- 配置文件不包含生产环境敏感数据
+- 支持配置文件模板化
+
+### 配置使用示例
+```go
+// 初始化配置
+type AppConfig struct {
+    Database DatabaseConfig `json:"database"`
+    Redis    RedisConfig    `json:"redis"`
+    Server   ServerConfig   `json:"server"`
+}
+
+func initConfig() {
+    config := &AppConfig{}
+    opt := jcbaseGo.New(jcbaseGo.Option{
+        ConfigData:   config,
+        ConfigType:   jcbaseGo.ConfigTypeJSON,
+        ConfigSource: "config.json",
+    })
+    
+    // 获取配置实例
+    appConfig := opt.GetConfig().(*AppConfig)
+}
+```
+
+## 配置更新和迁移
+- 配置结构变更时自动生成新的配置文件
+- 保持向后兼容性
+- 提供配置迁移指导和工具

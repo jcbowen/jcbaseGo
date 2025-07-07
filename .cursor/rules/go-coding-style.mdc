@@ -1,0 +1,58 @@
+---
+globs: *.go
+description: Go 语言代码风格和最佳实践
+---
+
+# Go 语言代码风格规范
+
+## 注释规范
+- **必须使用简体中文注释**，便于团队维护
+- 所有公共函数、方法、结构体都需要详细的中文注释
+- 重要的业务逻辑需要注释说明用途和实现思路
+- 不要随意删除现有注释，除非确认注释有误
+
+## 代码结构
+- 避免多重嵌套，最多不超过 3 层
+- 使用早期返回（early return）减少嵌套
+- 函数保持简洁，单一职责
+- 复杂逻辑拆分为多个小函数
+
+## 错误处理
+- 使用 `PanicIfError` 函数进行统一错误处理
+- 重要操作必须检查错误返回值
+- 错误信息使用中文描述，便于调试
+
+## 命名规范
+- 包名使用小写单词
+- 导出的类型、函数使用大驼峰命名
+- 内部使用的类型、函数使用小驼峰命名
+- 常量使用大驼峰或全大写
+
+## 结构体设计
+- 使用 struct tag 进行字段标注（json、ini、default 等）
+- 实现接口时保持一致的方法签名
+- 使用组合而非继承来扩展功能
+
+## 示例代码格式
+```go
+// UserService 用户服务结构体
+// 提供用户相关的业务逻辑处理
+type UserService struct {
+    db orm.Instance // 数据库实例
+}
+
+// CreateUser 创建新用户
+// 参数：
+//   - userData: 用户数据
+// 返回：
+//   - error: 创建失败时的错误信息
+func (s *UserService) CreateUser(userData map[string]interface{}) error {
+    // 验证用户数据
+    if err := s.validateUserData(userData); err != nil {
+        return fmt.Errorf("用户数据验证失败: %w", err)
+    }
+    
+    // 保存到数据库
+    return s.saveUser(userData)
+}
+```

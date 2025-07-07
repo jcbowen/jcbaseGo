@@ -1,0 +1,84 @@
+---
+globs: component/**/*.go
+description: 组件开发规范和指导原则
+---
+
+# 组件开发规范
+
+## 组件设计原则
+- **单一职责**：每个组件只负责一个特定功能领域
+- **接口抽象**：通过接口定义组件规范，便于扩展和测试
+- **配置驱动**：支持灵活的配置选项
+- **错误透明**：完善的错误处理和日志记录
+
+## 核心组件说明
+
+### ORM 组件
+- 位置：[component/orm/](mdc:component/orm/)
+- 提供数据库抽象层，支持 MySQL 和 SQLite
+- 使用 GORM 作为底层 ORM 框架
+- 通过 `Instance` 接口定义数据库操作规范
+
+### CRUD Trait
+- 位置：[component/trait/crud/](mdc:component/trait/crud/)
+- 提供通用的 CRUD 操作模板
+- 支持自定义方法覆盖默认行为
+- 集成了数据验证和响应格式化
+
+### Helper 工具包
+- 位置：[component/helper/](mdc:component/helper/)
+- 提供常用的工具函数
+- 包含类型转换、结构体操作、字符串处理等
+- 使用链式调用提供流畅的 API
+
+### 安全组件
+- 位置：[component/security/](mdc:component/security/)
+- 提供 AES 加密、密码处理等安全功能
+- 统一的安全策略和算法实现
+
+## 组件开发模板
+
+```go
+package componentname
+
+import (
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+// Component 组件结构体
+type Component struct {
+    // 配置字段使用 default tag 设置默认值
+    Option1 string `default:"default_value"`
+    Option2 int    `default:"0"`
+}
+
+// New 创建组件实例
+func New(opts ...Option) *Component {
+    c := &Component{}
+    
+    // 设置默认值
+    helper.CheckAndSetDefault(c)
+    
+    // 应用选项
+    for _, opt := range opts {
+        opt(c)
+    }
+    
+    return c
+}
+
+// Option 配置选项函数
+type Option func(*Component)
+
+// WithOption1 设置选项1
+func WithOption1(value string) Option {
+    return func(c *Component) {
+        c.Option1 = value
+    }
+}
+```
+
+## 测试要求
+- 每个组件都应该有对应的测试文件
+- 测试用例应该覆盖主要功能和边界情况
+- 使用 table-driven test 进行参数化测试
