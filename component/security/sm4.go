@@ -16,8 +16,8 @@ import (
 // 提供SM4对称加密算法的加解密功能
 type SM4 struct {
 	Text string `json:"text" default:""`                // 待加密/解密的文本
-	Key  string `json:"key" default:"1234567890123456"` // 加密密钥，必须为16字节
-	Iv   string `json:"iv" default:"abcdefghijklmnop"`  // 初始化向量，必须为16字节
+	Key  string `json:"key" default:"jcbase.sm4_key__"` // 加密密钥，必须为16字节
+	Iv   string `json:"iv" default:"jcbase.sm4_iv___"`  // 初始化向量，必须为16字节
 	Mode string `json:"mode" default:"CBC"`             // 加密模式：CBC、GCM、CFB、OFB、CTR
 }
 
@@ -25,7 +25,6 @@ type SM4 struct {
 // 参数：
 //   - cipherText: 加密后的密文输出指针
 //
-// 
 // 返回：
 //   - error: 加密失败时的错误信息
 func (s SM4) EncryptCBC(cipherText *string) error {
@@ -57,10 +56,8 @@ func (s SM4) EncryptCBC(cipherText *string) error {
 
 // DecryptCBC 使用CBC模式解密数据
 // 参数：
- - plaintext: 解密后的明文输出指针
-//
-
 //   - plaintext: 解密后的明文输出指针
+//
 // 返回：
 //   - error: 解密失败时的错误信息
 func (s SM4) DecryptCBC(plaintext *string) error {
@@ -100,12 +97,10 @@ func (s SM4) DecryptCBC(plaintext *string) error {
 	return nil
 }
 
-，提供认证加密）
-// 参数：
-//   - cipherText: 加密后
 // EncryptGCM 使用GCM模式加密数据（推荐使用，提供认证加密）
 // 参数：
 //   - cipherText: 加密后的密文输出指针
+//
 // 返回：
 //   - error: 加密失败时的错误信息
 func (s SM4) EncryptGCM(cipherText *string) error {
@@ -138,12 +133,12 @@ func (s SM4) EncryptGCM(cipherText *string) error {
 	result := append(nonce, cipherBytes...)
 	*cipherText = base64.StdEncoding.EncodeToString(result)
 	return nil
-/
 }
 
 // DecryptGCM 使用GCM模式解密数据
 // 参数：
 //   - plaintext: 解密后的明文输出指针
+//
 // 返回：
 //   - error: 解密失败时的错误信息
 func (s SM4) DecryptGCM(plaintext *string) error {
@@ -186,12 +181,12 @@ func (s SM4) DecryptGCM(plaintext *string) error {
 
 	*plaintext = string(plainBytes)
 	return nil
-的
 }
 
 // Encrypt 通用加密方法，根据Mode字段选择加密模式
 // 参数：
 //   - cipherText: 加密后的密文输出指针
+//
 // 返回：
 //   - error: 加密失败时的错误信息
 func (s SM4) Encrypt(cipherText *string) error {
@@ -205,12 +200,12 @@ func (s SM4) Encrypt(cipherText *string) error {
 	default:
 		return fmt.Errorf("不支持的加密模式: %s", s.Mode)
 	}
-的
 }
 
 // Decrypt 通用解密方法，根据Mode字段选择解密模式
 // 参数：
 //   - plaintext: 解密后的明文输出指针
+//
 // 返回：
 //   - error: 解密失败时的错误信息
 func (s SM4) Decrypt(plaintext *string) error {
