@@ -16,7 +16,7 @@ description: jcbaseGo 项目总体架构和组件介绍
   - `mailer/` - 邮件发送组件
   - `orm/` - 数据库 ORM 抽象层，支持 MySQL 和 SQLite
   - `redis/` - Redis 缓存组件
-  - `security/` - 安全相关功能（AES加密、密码处理等）
+  - `security/` - 安全相关功能（SM4/AES加密、密码处理等）
   - `trait/` - trait 模式实现，主要包含 CRUD 和控制器基础功能
   - `validator/` - 数据验证组件
 

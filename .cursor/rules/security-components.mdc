@@ -1,0 +1,35 @@
+# 安全组件开发规范
+
+## SM4 加密组件
+- 文件：[component/security/sm4.go](mdc:component/security/sm4.go)
+- 支持 CBC、GCM 两种加密模式，推荐 GCM
+- 密钥和 IV 必须为 16 字节，生产环境建议用强随机密钥
+- 自动 PKCS7 填充，Base64 编码输出
+- 所有加解密操作必须检查错误，敏感信息不得暴露
+- 每次加密建议使用不同 IV（CBC），GCM 模式自动生成 nonce
+- 需有完善测试覆盖不同模式、密钥、异常情况
+
+## AES 加密组件
+- 文件：[component/security/aes.go](mdc:component/security/aes.go)
+- 支持 16/24/32 字节密钥，CBC 模式
+- 自动填充和 Base64 编码
+- 密钥、IV 长度校验，错误处理规范
+- 需有完善测试覆盖不同密钥长度、异常情况
+
+## 密码处理
+- 文件：[component/security/password.go](mdc:component/security/password.go)
+- 使用 bcrypt 进行密码哈希和验证
+
+## 最佳实践
+- 密钥建议通过配置或环境变量注入，避免硬编码
+- 错误日志不应泄露明文或密钥
+- 组件变更需同步更新测试和注释
+- 详细中文注释，说明用途、参数、返回值
+
+## 测试要求
+- 每个加密方法、模式、边界情况都需有测试
+- 测试用例应覆盖加解密一致性、错误输入、默认值
+description:
+globs:
+alwaysApply: false
+---

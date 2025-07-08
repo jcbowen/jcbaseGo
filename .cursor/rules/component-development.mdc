@@ -33,8 +33,18 @@ description: 组件开发规范和指导原则
 
 ### 安全组件
 - 位置：[component/security/](mdc:component/security/)
-- 提供 AES 加密、密码处理等安全功能
+- 提供 SM4/AES 加密、密码处理等安全功能
 - 统一的安全策略和算法实现
+- **SM4 加密**：[component/security/sm4.go](mdc:component/security/sm4.go)
+  - 支持 CBC 和 GCM 两种加密模式
+  - CBC 模式：传统分组加密，需要 IV
+  - GCM 模式：认证加密，提供数据完整性验证（推荐）
+  - 自动 PKCS7 填充处理
+  - Base64 编码输出
+- **AES 加密**：[component/security/aes.go](mdc:component/security/aes.go)
+  - 支持多种密钥长度（16/24/32字节）
+  - CBC 模式加密
+  - 自动填充和编码处理
 
 ## 组件开发模板
 
