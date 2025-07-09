@@ -23,10 +23,11 @@ type Trait struct {
 	Controller         interface{}  // 控制器
 
 	// ----- 初始化时生成 ----- /
-	ModelTableName string   // 模型表名
-	ModelFields    []string // 模型所有字段
-	OperateTime    string   // 操作时间
-	TableAlias     string   // 表别名（仅用于拼接查询语句，配置别名请用ModelTableAlias）
+	ModelTableName      string   // 模型表名
+	ModelFields         []string // 模型所有字段
+	SoftDeleteCondition string   // 软删除判断条件（如: "IS NULL" 或 "= '0000-00-00 00:00:00'"，不包含字段名）
+	OperateTime         string   // 操作时间
+	TableAlias          string   // 表别名（仅用于拼接查询语句，配置别名请用ModelTableAlias）
 
 	// ----- 非基础配置 ----- /
 	BaseControllerTrait controller.Base
@@ -65,11 +66,11 @@ func (t *Trait) InitCrud(c *gin.Context) {
 	// 确保获取到具体模型的名称
 	model := reflect.New(modelType).Interface()
 
-	// 解析模型（获取模型表名以及表字段）
+	// 解析模型（获取模型表名、表字段以及软删除条件）
 	if modelParseProvider, ok := model.(interface {
-		ModelParse(modelType reflect.Type) (tableName string, fields []string)
+		ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteCondition string)
 	}); ok {
-		t.ModelTableName, t.ModelFields = modelParseProvider.ModelParse(modelType)
+		t.ModelTableName, t.ModelFields, t.SoftDeleteCondition = modelParseProvider.ModelParse(modelType)
 	} else {
 		log.Panic("模型未实现 ModelParse 方法")
 	}

@@ -90,8 +90,9 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 	modelType := reflect.TypeOf(t.Model).Elem()
 	result := reflect.New(modelType).Interface()
 	query := tx.Table(t.ModelTableName)
+	// 应用软删除条件
 	if helper.InArray("deleted_at", t.ModelFields) {
-		query = query.Where("deleted_at IS NULL")
+		query = query.Where("deleted_at " + t.SoftDeleteCondition)
 	}
 	err := query.Where(t.PkId+" = ?", id).First(result).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

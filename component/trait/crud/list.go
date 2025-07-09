@@ -35,8 +35,9 @@ func (t *Trait) ActionList(c *gin.Context) {
 	// 构建查询
 	query := t.DBI.GetDb().Table(t.ModelTableName + tableAlias)
 
+	// 应用软删除条件
 	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
-		query = query.Where(t.TableAlias + "deleted_at IS NULL")
+		query = query.Where(t.TableAlias + "deleted_at " + t.SoftDeleteCondition)
 	}
 
 	callResults := t.callCustomMethod("ListQuery", query)
