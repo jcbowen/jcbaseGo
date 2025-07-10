@@ -16,7 +16,7 @@ const (
 
 // Option jcbaseGo配置选项
 type Option struct {
-	ConfigType   string      `json:"config_type" default:"file"`              // 配置类型，仅支持：json、ini、file、command
+	ConfigType   string      `json:"config_type" default:"file"`              // 配置类型，仅支持：json、ini、command
 	ConfigSource string      `json:"config_source" default:"./data/conf.ini"` // 配置源（json文件/ini文件/命令行）
 	ConfigData   interface{} `json:"config_data"`                             // 配置信息
 	RuntimePath  string      `json:"runtime_path" default:"/runtime/"`        // 运行缓存目录
