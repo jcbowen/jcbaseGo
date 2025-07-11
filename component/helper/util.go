@@ -1,7 +1,9 @@
 package helper
 
 import (
+	"crypto/md5"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/jcbowen/jcbaseGo/component/validator"
@@ -15,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // ----- map[string]interface{} 类型相关操作 -----/
@@ -914,4 +917,43 @@ func FindAvailablePort(startPort string) string {
 		log.Printf("端口 %d 已被占用，尝试端口 %d", port, port+1)
 		port++
 	}
+}
+
+// BuildYii2RedisCacheKey
+// 生成一个规范化的缓存键，支持可选的前缀参数。
+// 逻辑同yii2的yii\caching\Cache::buildKey
+//
+// 参数说明：
+// - key: 需要规范化的缓存键字符串。
+// - args: 可选参数，args[0] 为缓存键的前缀字符串。
+//
+// 处理逻辑：
+//  1. 如果 key 只包含字母和数字，且长度不超过 32 个字符，
+//     则直接返回前缀加 key。
+//  2. 否则对 key 进行 MD5 哈希处理，
+//     返回前缀加哈希字符串，保证缓存键长度和格式统一。
+//
+// 该方法适用于缓存键的标准化处理，避免因 key 格式差异导致缓存失效。
+func BuildYii2RedisCacheKey(key string, args ...string) string {
+	keyPrefix := ""
+	if len(args) > 0 && args[0] != "" {
+		keyPrefix = args[0]
+	}
+
+	// 判断 key 是否只包含字母和数字，且长度不超过 32
+	isAlNum := true
+	for _, r := range key {
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) {
+			isAlNum = false
+			break
+		}
+	}
+
+	if isAlNum && len(key) <= 32 {
+		return keyPrefix + key
+	}
+
+	// 否则对 key 进行 MD5 哈希处理，并返回带前缀的哈希值
+	hash := md5.Sum([]byte(key))
+	return keyPrefix + hex.EncodeToString(hash[:])
 }
