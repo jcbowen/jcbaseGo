@@ -33,7 +33,9 @@ type Trait struct {
 	BaseControllerTrait controller.Base
 }
 
-// InitCrud 初始化crud，仅当初始化完成才可以使用
+// InitCrud 初始化CRUD，仅当初始化完成才可以使用
+// 参数说明：
+//   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) InitCrud(c *gin.Context) {
 	_ = helper.CheckAndSetDefault(t)
 	t.BaseControllerTrait.GinContext = c
@@ -86,7 +88,13 @@ func (t *Trait) InitCrud(c *gin.Context) {
 	t.TableAlias += "."
 }
 
-// 调用自定义方法，如果方法不存在则调用默认方法
+// callCustomMethod 调用自定义方法，如果方法不存在则调用默认方法
+// 参数说明：
+//   - methodName string: 要调用的方法名称
+//   - args ...interface{}: 传递给方法的可变参数列表
+//
+// 返回值：
+//   - results []interface{}: 方法调用的返回值列表
 func (t *Trait) callCustomMethod(methodName string, args ...interface{}) (results []interface{}) {
 	// 调用自定义方法
 	method := reflect.ValueOf(t.Controller).MethodByName(methodName)
@@ -132,7 +140,10 @@ func (t *Trait) callCustomMethod(methodName string, args ...interface{}) (result
 
 // ----- 公共方法 ----- /
 
-// ExtractPkId 方法从不同类型的请求中提取 PkId
+// ExtractPkId 从不同类型的请求中提取主键ID
+// 返回值：
+//   - pkValue uint: 提取到的主键ID值
+//   - err error: 提取过程中的错误信息
 func (t *Trait) ExtractPkId() (pkValue uint, err error) {
 	gpcInterface, GPCExists := t.BaseControllerTrait.GinContext.Get("GPC")
 	if !GPCExists {
@@ -189,7 +200,13 @@ func (t *Trait) Result(code int, msg string, args ...any) {
 	t.BaseControllerTrait.Result(code, msg, args...)
 }
 
-// BindMapToStruct 将 map 数据绑定到 struct，并处理类型转换
+// BindMapToStruct 将map数据绑定到struct，并处理类型转换
+// 参数说明：
+//   - mapData map[string]any: 要绑定的map数据
+//   - modelValue interface{}: 目标struct的指针，必须是非nil的指针类型
+//
+// 返回值：
+//   - error: 绑定过程中的错误信息
 func (t *Trait) BindMapToStruct(mapData map[string]any, modelValue interface{}) error {
 	val := reflect.ValueOf(modelValue)
 	if val.Kind() != reflect.Ptr || val.IsNil() {
@@ -225,6 +242,12 @@ func (t *Trait) BindMapToStruct(mapData map[string]any, modelValue interface{}) 
 }
 
 // setValue 根据字段类型设置值
+// 参数说明：
+//   - fieldVal reflect.Value: 目标字段的反射值对象
+//   - val interface{}: 要设置的值
+//
+// 返回值：
+//   - error: 设置过程中的错误信息
 func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 	switch fieldVal.Kind() {
 	case reflect.String:
@@ -334,7 +357,12 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 	return nil
 }
 
-// GetSafeMapGPC 安全获取map类型GPC
+// GetSafeMapGPC 安全获取map类型的GPC数据
+// 参数说明：
+//   - key ...string: 可选的键名，用于指定获取特定的GPC数据类型（如"get", "post", "all"等）
+//
+// 返回值：
+//   - mapData map[string]any: 获取到的GPC数据映射
 func (t *Trait) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 	return t.BaseControllerTrait.GetSafeMapGPC(key...)
 }

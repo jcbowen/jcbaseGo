@@ -11,6 +11,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// ActionList 获取数据列表的主要处理方法
+// 参数说明：
+//   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionList(c *gin.Context) {
 	t.InitCrud(c)
 
@@ -123,23 +126,51 @@ func (t *Trait) ActionList(c *gin.Context) {
 	})
 }
 
+// ListSelect 设置列表查询的SELECT字段
+// 参数说明：
+//   - query *gorm.DB: 数据库查询对象
+//
+// 返回值：
+//   - *gorm.DB: 设置了SELECT字段的查询对象
 func (t *Trait) ListSelect(query *gorm.DB) *gorm.DB {
 	// 默认就是查询*，所以这里就没必要单独写query.Select("*")了
 	return query
 }
 
+// ListQuery 设置列表查询的WHERE条件和其他查询参数
+// 参数说明：
+//   - query *gorm.DB: 数据库查询对象
+//
+// 返回值：
+//   - *gorm.DB: 设置了查询条件的查询对象
+//   - error: 处理过程中的错误信息
 func (t *Trait) ListQuery(query *gorm.DB) (*gorm.DB, error) {
 	return query, nil
 }
 
+// ListOrder 设置列表查询的排序规则
+// 返回值：
+//   - order interface{}: 排序规则，可以是字符串或其他GORM支持的排序格式
 func (t *Trait) ListOrder() (order interface{}) {
 	return t.TableAlias + t.PkId + " DESC"
 }
 
+// ListEach 对列表中的每个数据项进行处理
+// 参数说明：
+//   - item interface{}: 列表中的单个数据项
+//
+// 返回值：
+//   - interface{}: 处理后的数据项
 func (t *Trait) ListEach(item interface{}) interface{} {
 	return item
 }
 
+// ListReturn 列表查询成功后的返回处理方法
+// 参数说明：
+//   - listData jcbaseGo.ListData: 包含列表数据和分页信息的结构体
+//
+// 返回值：
+//   - bool: 处理结果，通常返回true表示成功
 func (t *Trait) ListReturn(listData jcbaseGo.ListData) bool {
 	t.Result(200, "ok", listData)
 	return true

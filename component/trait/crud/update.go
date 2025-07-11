@@ -10,6 +10,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// ActionUpdate 更新数据的主要处理方法
+// 参数说明：
+//   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionUpdate(c *gin.Context) {
 	t.InitCrud(c)
 
@@ -36,8 +39,24 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 		return
 	}
 
+	// 动态创建模型实例
+	modelType := reflect.TypeOf(t.Model).Elem()
+	result := reflect.New(modelType).Interface()
+
+	// 查询数据
+	query := t.DBI.GetDb().Table(t.ModelTableName)
+	// 应用软删除条件
+	if helper.InArray("deleted_at", t.ModelFields) {
+		query = query.Where("deleted_at " + t.SoftDeleteCondition)
+	}
+	err := query.Where(t.PkId+" = ?", id).First(result).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Result(errcode.NotExist, "数据不存在或已被删除")
+		return
+	}
+
 	// 调用自定义的UpdateBefore方法进行前置处理
-	callResults = t.callCustomMethod("UpdateBefore", modelValue, mapData)
+	callResults = t.callCustomMethod("UpdateBefore", modelValue, mapData, result)
 	modelValue = callResults[0]
 	mapData = callResults[1].(map[string]any)
 	if callResults[2] != nil {
@@ -50,23 +69,6 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 
 	// 开始事务
 	tx := t.DBI.GetDb().Begin()
-
-	// 动态创建模型实例
-	modelType := reflect.TypeOf(t.Model).Elem()
-	result := reflect.New(modelType).Interface()
-
-	// 查询数据
-	query := tx.Table(t.ModelTableName)
-	// 应用软删除条件
-	if helper.InArray("deleted_at", t.ModelFields) {
-		query = query.Where("deleted_at " + t.SoftDeleteCondition)
-	}
-	err := query.Where(t.PkId+" = ?", id).First(result).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		tx.Rollback()
-		t.Result(errcode.NotExist, "数据不存在或已被删除")
-		return
-	}
 
 	// 仅更新传入的字段
 	var updateFields []string
@@ -109,12 +111,27 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 	t.callCustomMethod("UpdateReturn", modelValue)
 }
 
+// UpdateFormData 获取更新操作的表单数据
+// 返回值：
+//   - modelValue interface{}: 绑定后的模型实例
+//   - mapData map[string]any: 原始表单数据映射
+//   - err error: 处理过程中的错误信息
 func (t *Trait) UpdateFormData() (modelValue interface{}, mapData map[string]any, err error) {
 	return t.SaveFormData()
 }
 
-func (t *Trait) UpdateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
-	callResults := t.callCustomMethod("SaveBefore", modelValue, mapData)
+// UpdateBefore 更新前的钩子方法，用于数据预处理和验证
+// 参数说明：
+//   - modelValue interface{}: 要更新的模型实例（包含新数据）
+//   - mapData map[string]any: 表单数据映射
+//   - originalData interface{}: 数据库中的原始数据
+//
+// 返回值：
+//   - interface{}: 处理后的模型实例
+//   - map[string]any: 处理后的表单数据映射
+//   - error: 处理过程中的错误信息
+func (t *Trait) UpdateBefore(modelValue interface{}, mapData map[string]any, originalData interface{}) (interface{}, map[string]any, error) {
+	callResults := t.callCustomMethod("SaveBefore", modelValue, mapData, originalData)
 	modelValue = callResults[0]
 	mapData = callResults[1].(map[string]any)
 	var err error
@@ -127,6 +144,13 @@ func (t *Trait) UpdateBefore(modelValue interface{}, mapData map[string]any) (in
 	return modelValue, mapData, err
 }
 
+// UpdateAfter 更新后的钩子方法，用于后续处理（在事务内执行）
+// 参数说明：
+//   - tx *gorm.DB: 数据库事务对象
+//   - modelValue interface{}: 已更新的模型实例
+//
+// 返回值：
+//   - error: 处理过程中的错误信息，如果返回错误则会回滚事务
 func (t *Trait) UpdateAfter(tx *gorm.DB, modelValue interface{}) error {
 	callResults := t.callCustomMethod("SaveAfter", tx, modelValue)
 	var err error
@@ -139,6 +163,12 @@ func (t *Trait) UpdateAfter(tx *gorm.DB, modelValue interface{}) error {
 	return err
 }
 
+// UpdateReturn 更新成功后的返回处理方法
+// 参数说明：
+//   - item interface{}: 更新成功的数据项
+//
+// 返回值：
+//   - bool: 处理结果，通常返回true表示成功
 func (t *Trait) UpdateReturn(item interface{}) bool {
 	t.Result(errcode.Success, "ok")
 	return true

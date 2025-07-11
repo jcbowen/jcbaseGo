@@ -10,6 +10,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// ActionSetValue 设置单个字段值的主要处理方法
+// 参数说明：
+//   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionSetValue(c *gin.Context) {
 	t.InitCrud(c)
 
@@ -138,11 +141,21 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 	t.callCustomMethod("SetValueReturn", value, field, id)
 }
 
+// SetValueFormData 获取设置字段值操作的表单数据
+// 返回值：
+//   - modelValue interface{}: 绑定后的模型实例
+//   - mapData map[string]any: 原始表单数据映射
+//   - err error: 处理过程中的错误信息
 func (t *Trait) SetValueFormData() (modelValue interface{}, mapData map[string]any, err error) {
 	return t.SaveFormData()
 }
 
 // SetValueCheckField 验证传入的字段名是否有效
+// 参数说明：
+//   - field string: 要验证的字段名
+//
+// 返回值：
+//   - error: 验证失败时的错误信息
 func (t *Trait) SetValueCheckField(field string) error {
 	if !helper.InArray(field, t.ModelFields) {
 		return errors.New("参数错误，请传入有效的字段名")
@@ -150,14 +163,40 @@ func (t *Trait) SetValueCheckField(field string) error {
 	return nil
 }
 
+// SetValueBefore 设置字段值前的钩子方法，用于数据预处理和验证
+// 参数说明：
+//   - modelValue interface{}: 要设置的模型实例
+//   - mapData map[string]any: 表单数据映射
+//
+// 返回值：
+//   - interface{}: 处理后的模型实例
+//   - map[string]any: 处理后的表单数据映射
+//   - error: 处理过程中的错误信息
 func (t *Trait) SetValueBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
 	return modelValue, mapData, nil
 }
 
+// SetValueAfter 设置字段值后的钩子方法，用于后续处理（在事务内执行）
+// 参数说明：
+//   - tx *gorm.DB: 数据库事务对象
+//   - id uint: 被设置的记录ID
+//   - field string: 被设置的字段名
+//   - value any: 设置的值
+//
+// 返回值：
+//   - error: 处理过程中的错误信息，如果返回错误则会回滚事务
 func (t *Trait) SetValueAfter(tx *gorm.DB, id uint, field string, value any) error {
 	return nil
 }
 
+// SetValueReturn 设置字段值成功后的返回处理方法
+// 参数说明：
+//   - value interface{}: 设置的值
+//   - field string: 设置的字段名
+//   - id uint: 被设置的记录ID
+//
+// 返回值：
+//   - bool: 处理结果，通常返回true表示成功
 func (t *Trait) SetValueReturn(value interface{}, field string, id uint) bool {
 	t.Result(errcode.Success, "设置成功", gin.H{
 		"id":    id,

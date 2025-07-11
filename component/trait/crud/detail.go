@@ -10,6 +10,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// ActionDetail 获取数据详情的主要处理方法
+// 参数说明：
+//   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionDetail(c *gin.Context) {
 	t.InitCrud(c)
 
@@ -104,6 +107,10 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 	t.callCustomMethod("DetailReturn", result)
 }
 
+// DetailFormData 获取详情查询的参数数据
+// 返回值：
+//   - map[string]any: 请求参数映射
+//   - error: 处理过程中的错误信息
 func (t *Trait) DetailFormData() (map[string]any, error) {
 	// 获取安全过滤后的请求参数
 	mapData := t.GetSafeMapGPC("all")
@@ -111,19 +118,44 @@ func (t *Trait) DetailFormData() (map[string]any, error) {
 	return mapData, nil
 }
 
+// DetailSelect 设置详情查询的SELECT字段
+// 参数说明：
+//   - query *gorm.DB: 数据库查询对象
+//
+// 返回值：
+//   - *gorm.DB: 设置了SELECT字段的查询对象
 func (t *Trait) DetailSelect(query *gorm.DB) *gorm.DB {
 	// 默认就是查询*，所以这里就没必要单独写query.Select("*")了
 	return query
 }
 
+// DetailQuery 设置详情查询的WHERE条件和其他查询参数
+// 参数说明：
+//   - query *gorm.DB: 数据库查询对象
+//   - mapData map[string]any: 请求参数映射
+//
+// 返回值：
+//   - *gorm.DB: 设置了查询条件的查询对象
 func (t *Trait) DetailQuery(query *gorm.DB, mapData map[string]any) *gorm.DB {
 	return query
 }
 
+// Detail 对详情数据进行处理
+// 参数说明：
+//   - item interface{}: 查询到的详情数据
+//
+// 返回值：
+//   - interface{}: 处理后的详情数据
 func (t *Trait) Detail(item interface{}) interface{} {
 	return item
 }
 
+// DetailReturn 详情查询成功后的返回处理方法
+// 参数说明：
+//   - detail interface{}: 详情数据
+//
+// 返回值：
+//   - bool: 处理结果，通常返回true表示成功
 func (t *Trait) DetailReturn(detail interface{}) bool {
 	t.Result(errcode.Success, "ok", detail)
 	return true

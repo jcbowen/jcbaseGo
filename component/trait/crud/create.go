@@ -9,6 +9,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// ActionCreate 创建数据的主要处理方法
+// 参数说明：
+//   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionCreate(c *gin.Context) {
 	t.InitCrud(c)
 
@@ -69,10 +72,24 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	t.callCustomMethod("CreateReturn", modelValue)
 }
 
+// CreateFormData 获取创建操作的表单数据
+// 返回值：
+//   - modelValue interface{}: 绑定后的模型实例
+//   - mapData map[string]any: 原始表单数据映射
+//   - err error: 处理过程中的错误信息
 func (t *Trait) CreateFormData() (modelValue interface{}, mapData map[string]any, err error) {
 	return t.SaveFormData()
 }
 
+// CreateBefore 创建前的钩子方法，用于数据预处理和验证
+// 参数说明：
+//   - modelValue interface{}: 要创建的模型实例
+//   - mapData map[string]any: 表单数据映射
+//
+// 返回值：
+//   - interface{}: 处理后的模型实例
+//   - map[string]any: 处理后的表单数据映射
+//   - error: 处理过程中的错误信息
 func (t *Trait) CreateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
 	callResults := t.callCustomMethod("SaveBefore", modelValue, mapData)
 	modelValue = callResults[0]
@@ -87,6 +104,13 @@ func (t *Trait) CreateBefore(modelValue interface{}, mapData map[string]any) (in
 	return modelValue, mapData, err
 }
 
+// CreateAfter 创建后的钩子方法，用于后续处理（在事务内执行）
+// 参数说明：
+//   - tx *gorm.DB: 数据库事务对象
+//   - modelValue interface{}: 已创建的模型实例
+//
+// 返回值：
+//   - error: 处理过程中的错误信息，如果返回错误则会回滚事务
 func (t *Trait) CreateAfter(tx *gorm.DB, modelValue interface{}) error {
 	callResults := t.callCustomMethod("SaveAfter", tx, modelValue)
 	var err error
@@ -99,6 +123,12 @@ func (t *Trait) CreateAfter(tx *gorm.DB, modelValue interface{}) error {
 	return err
 }
 
+// CreateReturn 创建成功后的返回处理方法
+// 参数说明：
+//   - item any: 创建成功的数据项
+//
+// 返回值：
+//   - bool: 处理结果，通常返回true表示成功
 func (t *Trait) CreateReturn(item any) bool {
 	var (
 		mapItem map[string]any

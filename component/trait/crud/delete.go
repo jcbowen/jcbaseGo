@@ -10,6 +10,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// ActionDelete 删除数据的主要处理方法
+// 参数说明：
+//   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionDelete(c *gin.Context) {
 	t.InitCrud(c)
 
@@ -134,37 +137,76 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	t.callCustomMethod("DeleteReturn", delIds, delArr)
 }
 
+// DeleteFields 获取删除操作时需要查询的字段列表
+// 返回值：
+//   - []string: 字段名称列表，默认只包含主键字段
 func (t *Trait) DeleteFields() []string {
 	return []string{t.PkId}
 }
 
+// GetDeleteWhere 构建删除操作的WHERE条件
+// 参数说明：
+//   - deleteQuery *gorm.DB: 数据库查询对象
+//   - ids []interface{}: 要删除的ID列表
+//
+// 返回值：
+//   - *gorm.DB: 添加了WHERE条件的查询对象
 func (t *Trait) GetDeleteWhere(deleteQuery *gorm.DB, ids []interface{}) *gorm.DB {
 	return deleteQuery.Where(t.PkId+" IN ?", ids)
 }
 
+// DeleteBefore 删除前的钩子方法，用于数据预处理和验证
+// 参数说明：
+//   - delArr []map[string]interface{}: 要删除的数据记录列表
+//   - delIds []interface{}: 要删除的ID列表
+//
+// 返回值：
+//   - []interface{}: 处理后的ID列表
+//   - error: 处理过程中的错误信息
 func (t *Trait) DeleteBefore(delArr []map[string]interface{}, delIds []interface{}) ([]interface{}, error) {
 	// 可以在此处添加一些前置处理逻辑
 	return delIds, nil
 }
 
+// DeleteCondition 获取软删除的条件数据
+// 参数说明：
+//   - delArr []map[string]interface{}: 要删除的数据记录列表
+//
+// 返回值：
+//   - map[string]interface{}: 软删除时要更新的字段和值
 func (t *Trait) DeleteCondition(delArr []map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"deleted_at": time.Now().Format("2006-01-02 15:04:05"),
 	}
 }
 
+// DeleteAfter 删除后的钩子方法，用于后续处理（在事务内执行）
+// 参数说明：
+//   - delIds []interface{}: 已删除的ID列表
+//   - delArr []map[string]interface{}: 已删除的数据记录列表
+//
+// 返回值：
+//   - error: 处理过程中的错误信息，如果返回错误则会回滚事务
 func (t *Trait) DeleteAfter(delIds []interface{}, delArr []map[string]interface{}) error {
 	// 可以在此处添加一些后置处理逻辑
 	return nil
 }
 
+// DeleteReturn 删除成功后的返回处理方法
+// 参数说明：
+//   - delIds []interface{}: 已删除的ID列表
+//   - delArr []map[string]interface{}: 已删除的数据记录列表
 func (t *Trait) DeleteReturn(delIds []interface{}, delArr []map[string]interface{}) {
 	t.Result(errcode.Success, "删除成功", gin.H{
 		"delIds": delIds,
 	})
 }
 
-// checkFieldExistInSelect is a helper function to check if a field exists in the select fields
+// checkFieldExistInSelect 检查字段是否存在于选择字段列表中的辅助方法
+// 参数说明：
+//   - fields []string: 字段列表
+//   - field string: 要检查的字段名
+//   - context string: 上下文描述，用于错误信息
 func (t *Trait) checkFieldExistInSelect(fields []string, field, context string) {
 	if !helper.InArray(field, fields) {
 		log.Panic(context + "字段未包含主键")

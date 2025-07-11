@@ -9,6 +9,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// ActionAll 获取所有数据的主要处理方法（不分页）
+// 参数说明：
+//   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionAll(c *gin.Context) {
 	t.InitCrud(c)
 
@@ -67,18 +70,39 @@ func (t *Trait) ActionAll(c *gin.Context) {
 	t.callCustomMethod("AllReturn", results)
 }
 
+// AllQuery 设置获取所有数据的WHERE条件和其他查询参数
+// 参数说明：
+//   - query *gorm.DB: 数据库查询对象
+//
+// 返回值：
+//   - *gorm.DB: 设置了查询条件的查询对象
 func (t *Trait) AllQuery(query *gorm.DB) *gorm.DB {
 	return query
 }
 
+// AllOrder 设置获取所有数据的排序规则
+// 返回值：
+//   - interface{}: 排序规则，可以是字符串或其他GORM支持的排序格式
 func (t *Trait) AllOrder() interface{} {
 	return t.TableAlias + t.PkId + " DESC"
 }
 
+// AllEach 对获取的每个数据项进行处理
+// 参数说明：
+//   - item interface{}: 数据列表中的单个数据项
+//
+// 返回值：
+//   - interface{}: 处理后的数据项
 func (t *Trait) AllEach(item interface{}) interface{} {
 	return item
 }
 
+// AllReturn 获取所有数据成功后的返回处理方法
+// 参数说明：
+//   - results interface{}: 查询到的所有数据
+//
+// 返回值：
+//   - bool: 处理结果，通常返回true表示成功
 func (t *Trait) AllReturn(results interface{}) bool {
 	t.Result(errcode.Success, "ok", results)
 	return true
