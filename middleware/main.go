@@ -223,7 +223,7 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 		mergeToall(GPC["cookie"])
 		mergeToall(GPC["data"])
 
-		log.Println("GPC：", GPC)
+		// log.Println("GPC：", GPC)
 
 		c.Set("GPC", GPC)
 
