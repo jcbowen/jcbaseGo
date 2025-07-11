@@ -147,7 +147,9 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 		// 获取请求数据并解析
 		switch c.ContentType() {
 		case "application/json":
-			err = c.ShouldBindJSON(&formDataMap)
+			if c.Request.ContentLength > 0 {
+				err = c.ShouldBindJSON(&formDataMap)
+			}
 		case "application/x-www-form-urlencoded":
 			err = c.Request.ParseForm()
 			if err == nil {
@@ -221,7 +223,7 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 		mergeToall(GPC["cookie"])
 		mergeToall(GPC["data"])
 
-		// log.Println("GPC：", GPC)
+		log.Println("GPC：", GPC)
 
 		c.Set("GPC", GPC)
 
