@@ -272,28 +272,28 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 						} else if key.Value() == "false" || key.Value() == "0" {
 							currentVal.SetBool(false)
 						} else {
-							currentVal.SetBool(false)
+							log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：布尔值\n实际值有误，无法转换为布尔类型。\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value())
 						}
 					case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 						// 整数类型转换
 						if i, err := strconv.ParseInt(key.Value(), 10, 64); err == nil {
 							currentVal.SetInt(i)
 						} else {
-							currentVal.SetInt(0)
+							log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：整数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
 						}
 					case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 						// 无符号整数类型转换
 						if i, err := strconv.ParseUint(key.Value(), 10, 64); err == nil {
 							currentVal.SetUint(i)
 						} else {
-							currentVal.SetUint(0)
+							log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：无符号整数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
 						}
 					case reflect.Float32, reflect.Float64:
 						// 浮点数类型转换
 						if f, err := strconv.ParseFloat(key.Value(), 64); err == nil {
 							currentVal.SetFloat(f)
 						} else {
-							currentVal.SetFloat(0.0)
+							log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：浮点数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
 						}
 					default:
 						// 其他类型（如字符串）直接设置
