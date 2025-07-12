@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-ini/ini"
 	"github.com/go-redis/redis/v8"
 	"github.com/jcbowen/jcbaseGo/component/helper"
+	"gopkg.in/ini.v1"
 )
 
 // Config 实例化后配置信息将储存在此全局变量中
@@ -193,8 +193,8 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 			var found bool
 			for i := 0; i < val.NumField(); i++ {
 				field := val.Type().Field(i)
-				jsonTag := field.Tag.Get("json")
-				iniTag := field.Tag.Get("ini")
+				jsonTag := parseTagName(field.Tag.Get("json"))
+				iniTag := parseTagName(field.Tag.Get("ini"))
 				if jsonTag == section.Name() || iniTag == section.Name() {
 					sectionField = field
 					found = true
@@ -236,8 +236,8 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 						// 如果通过字段名没找到，尝试通过标签查找
 						for j := 0; j < currentVal.NumField(); j++ {
 							field := currentVal.Type().Field(j)
-							jsonTag := field.Tag.Get("json")
-							iniTag := field.Tag.Get("ini")
+							jsonTag := parseTagName(field.Tag.Get("json"))
+							iniTag := parseTagName(field.Tag.Get("ini"))
 							if jsonTag == fieldNames[i] || iniTag == fieldNames[i] {
 								currentField = field
 								found = true
@@ -355,6 +355,73 @@ func formatErrors(errs []error) string {
 	return sb.String()
 }
 
+// parseTagName 解析结构体标签，提取字段名部分
+// 参数：
+//   - tag: 完整的标签字符串，如 "fieldname,omitempty"
+//
+// 返回：
+//   - string: 提取的字段名，如 "fieldname"
+func parseTagName(tag string) string {
+	// 如果标签为空，直接返回
+	if tag == "" {
+		return ""
+	}
+
+	// 按逗号分割，取第一部分作为字段名
+	parts := strings.Split(tag, ",")
+	return parts[0]
+}
+
+// hasOmitEmpty 检查标签是否包含omitempty选项
+// 参数：
+//   - tag: 完整的标签字符串，如 "fieldname,omitempty"
+//
+// 返回：
+//   - bool: 是否包含omitempty选项
+func hasOmitEmpty(tag string) bool {
+	// 如果标签为空，直接返回false
+	if tag == "" {
+		return false
+	}
+
+	// 按逗号分割，检查是否包含omitempty
+	parts := strings.Split(tag, ",")
+	for _, part := range parts {
+		if strings.TrimSpace(part) == "omitempty" {
+			return true
+		}
+	}
+	return false
+}
+
+// isZeroValue 检查反射值是否为零值
+// 参数：
+//   - val: 反射值
+//
+// 返回：
+//   - bool: 是否为零值
+func isZeroValue(val reflect.Value) bool {
+	switch val.Kind() {
+	case reflect.Bool:
+		return !val.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return val.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return val.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return val.Float() == 0
+	case reflect.String:
+		return val.String() == ""
+	case reflect.Ptr, reflect.Interface:
+		return val.IsNil()
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return val.Len() == 0
+	default:
+		// 对于其他类型，使用reflect的Zero方法比较
+		return reflect.DeepEqual(val.Interface(), reflect.Zero(val.Type()).Interface())
+	}
+}
+
 // processStructToINI 递归处理结构体，生成INI配置
 // 参数：
 //   - cfg: INI配置文件对象
@@ -379,9 +446,9 @@ func (opt *Option) processStructToINI(cfg *ini.File, data interface{}, prefix st
 		field := val.Type().Field(i)
 		fieldVal := val.Field(i)
 
-		// 获取字段的标签
-		jsonTag := field.Tag.Get("json")
-		iniTag := field.Tag.Get("ini")
+		// 获取字段的标签并正确解析
+		jsonTag := parseTagName(field.Tag.Get("json"))
+		iniTag := parseTagName(field.Tag.Get("ini"))
 
 		// 确定字段名（优先使用ini标签，其次json标签，最后字段名）
 		fieldName := field.Name
@@ -397,6 +464,14 @@ func (opt *Option) processStructToINI(cfg *ini.File, data interface{}, prefix st
 				continue
 			}
 			fieldVal = fieldVal.Elem()
+		}
+
+		// 检查omitempty标签和零值
+		// 优先检查ini标签，其次检查json标签
+		hasOmitEmptyTag := hasOmitEmpty(field.Tag.Get("ini")) || hasOmitEmpty(field.Tag.Get("json"))
+		if hasOmitEmptyTag && isZeroValue(fieldVal) {
+			// 如果有omitempty标签且值为零值，则跳过该字段
+			continue
 		}
 
 		// 构建当前字段的完整路径

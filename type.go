@@ -35,18 +35,18 @@ type WebServer struct {
 
 // DbStruct 数据库配置
 type DbStruct struct {
-	DriverName    string `json:"driverName" ini:"driverName" default:"mysql"`      // 驱动类型
-	Protocol      string `json:"protocol" ini:"protocol" default:"tcp"`            // 协议
-	Host          string `json:"host" ini:"host" default:"localhost"`              // 数据库地址
-	Port          string `json:"port" ini:"port" default:"3306"`                   // 数据库端口号
-	Dbname        string `json:"dbname" ini:"dbname" default:"dbname"`             // 表名称
-	Username      string `json:"username" ini:"username" default:"root"`           // 用户名
-	Password      string `json:"password" ini:"password" default:""`               // 密码
-	Charset       string `json:"charset" ini:"charset" default:"utf8mb4"`          // 编码
-	TablePrefix   string `json:"tablePrefix" ini:"tablePrefix" default:""`         // 表前缀
-	ParseTime     string `json:"parseTime" ini:"parseTime" default:"False"`        // 是否开启时间解析
-	SingularTable bool   `json:"singularTable" ini:"singularTable" default:"true"` // 使用单数表名
-	Alias         string `json:"alias" ini:"alias" default:"db"`                   // 配置信息别名
+	DriverName    string `json:"driverName" ini:"driverName" default:"mysql"`                  // 驱动类型
+	Protocol      string `json:"protocol" ini:"protocol" default:"tcp"`                        // 协议
+	Host          string `json:"host" ini:"host" default:"localhost"`                          // 数据库地址
+	Port          string `json:"port" ini:"port" default:"3306"`                               // 数据库端口号
+	Dbname        string `json:"dbname" ini:"dbname" default:"dbname"`                         // 表名称
+	Username      string `json:"username" ini:"username" default:"root"`                       // 用户名
+	Password      string `json:"password" ini:"password" default:""`                           // 密码
+	Charset       string `json:"charset" ini:"charset" default:"utf8mb4"`                      // 编码
+	TablePrefix   string `json:"tablePrefix,omitempty" ini:"tablePrefix,omitempty" default:""` // 表前缀
+	ParseTime     string `json:"parseTime" ini:"parseTime" default:"False"`                    // 是否开启时间解析
+	SingularTable bool   `json:"singularTable" ini:"singularTable" default:"true"`             // 使用单数表名
+	Alias         string `json:"alias" ini:"alias" default:"db"`                               // 配置信息别名
 }
 
 // SqlLiteStruct sqlite配置
@@ -59,10 +59,10 @@ type SqlLiteStruct struct {
 
 // RedisStruct redis配置
 type RedisStruct struct {
-	Host     string `json:"host" ini:"host" default:"localhost"` // redis地址
-	Port     string `json:"port" ini:"port" default:"6379"`      // redis端口号
-	Password string `json:"password" ini:"password" default:""`  // redis密码
-	Db       string `json:"db" ini:"db" default:"0"`             // redis数据库
+	Host     string `json:"host" ini:"host" default:"localhost"`                    // redis地址
+	Port     string `json:"port" ini:"port" default:"6379"`                         // redis端口号
+	Password string `json:"password,omitempty" ini:"password,omitempty" default:""` // redis密码
+	Db       string `json:"db,omitempty" ini:"db,omitempty" default:"0"`            // redis数据库
 }
 
 // MailerStruct 发送邮箱配置
@@ -100,7 +100,7 @@ type OSSStruct struct {
 	BucketName      string `json:"bucketName" ini:"bucketName" default:""`           // 阿里云OSS存储桶名称
 
 	// 自定义附件访问域名(非平台配置，供程序调用，非必填，一定以"/"结尾)
-	CustomizeVisitDomain string `json:"customize_visit_domain" ini:"customize_visit_domain" default:""`
+	CustomizeVisitDomain string `json:"customize_visit_domain,omitempty" ini:"customize_visit_domain,omitempty" default:""`
 }
 
 // COSStruct cos配置
@@ -112,29 +112,29 @@ type COSStruct struct {
 	Url       string `json:"url" ini:"url" default:""`             // 腾讯云Cos Url
 
 	// 自定义附件访问域名(非平台配置，供程序调用，非必填，一定以"/"结尾)
-	CustomizeVisitDomain string `json:"customize_visit_domain" ini:"customize_visit_domain" default:""`
+	CustomizeVisitDomain string `json:"customize_visit_domain,omitempty" ini:"customize_visit_domain,omitempty" default:""`
 }
 
 type FTPStruct struct {
-	Address  string        `json:"address" ini:"address" default:""`           // FTP服务器地址
-	Username string        `json:"username" ini:"username" default:""`         // FTP登录用户名
-	Password string        `json:"password" ini:"password" default:""`         // FTP登录密码
-	Timeout  time.Duration `json:"timeout,omitempty" ini:"timeout" default:""` // 连接超时时间，可选
+	Address  string        `json:"address" ini:"address" default:""`                     // FTP服务器地址
+	Username string        `json:"username" ini:"username" default:""`                   // FTP登录用户名
+	Password string        `json:"password" ini:"password" default:""`                   // FTP登录密码
+	Timeout  time.Duration `json:"timeout,omitempty" ini:"timeout,omitempty" default:""` // 连接超时时间，可选
 
 	// 自定义附件访问域名(非平台配置，供程序调用，非必填，一定以"/"结尾)
-	CustomizeVisitDomain string `json:"customize_visit_domain" ini:"customize_visit_domain" default:""`
+	CustomizeVisitDomain string `json:"customize_visit_domain,omitempty" ini:"customize_visit_domain,omitempty" default:""`
 }
 
 // SFTPStruct sftp配置
 type SFTPStruct struct {
-	Address    string        `json:"address" ini:"address" default:""`           // SFTP服务器地址
-	Username   string        `json:"username" ini:"username" default:""`         // SFTP登录用户名
-	Password   string        `json:"password" ini:"password" default:""`         // SFTP登录密码
-	PrivateKey []byte        `json:"private_key" ini:"private_key" default:""`   // SFTP登录私钥
-	Timeout    time.Duration `json:"timeout,omitempty" ini:"timeout" default:""` // 连接超时时间，可选
+	Address    string        `json:"address" ini:"address" default:""`                     // SFTP服务器地址
+	Username   string        `json:"username" ini:"username" default:""`                   // SFTP登录用户名
+	Password   string        `json:"password" ini:"password" default:""`                   // SFTP登录密码
+	PrivateKey []byte        `json:"private_key" ini:"private_key" default:""`             // SFTP登录私钥
+	Timeout    time.Duration `json:"timeout,omitempty" ini:"timeout,omitempty" default:""` // 连接超时时间，可选
 
 	// 自定义附件访问域名(非平台配置，供程序调用，非必填，一定以"/"结尾)
-	CustomizeVisitDomain string `json:"customize_visit_domain" ini:"customize_visit_domain" default:""`
+	CustomizeVisitDomain string `json:"customize_visit_domain,omitempty" ini:"customize_visit_domain,omitempty" default:""`
 }
 
 // ProjectStruct 项目配置

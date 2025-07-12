@@ -8,12 +8,12 @@ require (
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
 	github.com/emmansun/gmsm v0.30.1
 	github.com/gin-gonic/gin v1.10.0
-	github.com/go-ini/ini v1.67.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/pkg/sftp v1.13.6
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.55
 	golang.org/x/crypto v0.37.0
+	gopkg.in/ini.v1 v1.67.0
 	gorm.io/driver/mysql v1.4.1
 	gorm.io/driver/sqlite v1.5.6
 	gorm.io/gorm v1.25.7-0.20240204074919-46816ad31dde
