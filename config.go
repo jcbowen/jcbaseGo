@@ -320,32 +320,10 @@ func (opt *Option) updateConfigFile(fileNameFull string, overwrite bool) {
 
 	switch opt.ConfigType {
 	case ConfigTypeINI:
-		// 将结构体转换为map
-		jsonData, err := json.Marshal(opt.ConfigData)
-		if err != nil {
-			log.Fatalf("转换结构体到JSON错误: %v", err)
-		}
-		var configMap map[string]interface{}
-		if err = json.Unmarshal(jsonData, &configMap); err != nil {
-			log.Fatalf("解析JSON到map错误: %v", err)
-		}
 		// 创建INI文件
 		cfg := ini.Empty()
-		for sectionName, sectionData := range configMap {
-			section, err := cfg.NewSection(sectionName)
-			if err != nil {
-				log.Fatalf("创建INI节错误: %v", err)
-			}
-			if sectionMap, ok := sectionData.(map[string]interface{}); ok {
-				for key, value := range sectionMap {
-					strValue := helper.Convert{Value: value}.ToString()
-					_, err = section.NewKey(key, strValue)
-					if err != nil {
-						log.Fatalf("创建INI键错误: %v", err)
-					}
-				}
-			}
-		}
+		// 递归处理结构体，生成INI配置
+		opt.processStructToINI(cfg, opt.ConfigData, "")
 		// 使用 helper.NewFile 创建文件
 		var buf bytes.Buffer
 		if _, err = cfg.WriteTo(&buf); err != nil {
@@ -375,4 +353,137 @@ func formatErrors(errs []error) string {
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+// processStructToINI 递归处理结构体，生成INI配置
+// 参数：
+//   - cfg: INI配置文件对象
+//   - data: 要处理的数据（结构体或指针）
+//   - prefix: 当前处理的路径前缀
+func (opt *Option) processStructToINI(cfg *ini.File, data interface{}, prefix string) {
+	val := reflect.ValueOf(data)
+	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return
+		}
+		val = val.Elem()
+	}
+
+	// 如果不是结构体，直接返回
+	if val.Kind() != reflect.Struct {
+		return
+	}
+
+	// 遍历结构体的所有字段
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Type().Field(i)
+		fieldVal := val.Field(i)
+
+		// 获取字段的标签
+		jsonTag := field.Tag.Get("json")
+		iniTag := field.Tag.Get("ini")
+
+		// 确定字段名（优先使用ini标签，其次json标签，最后字段名）
+		fieldName := field.Name
+		if iniTag != "" {
+			fieldName = iniTag
+		} else if jsonTag != "" {
+			fieldName = jsonTag
+		}
+
+		// 处理指针类型字段
+		if fieldVal.Kind() == reflect.Ptr {
+			if fieldVal.IsNil() {
+				continue
+			}
+			fieldVal = fieldVal.Elem()
+		}
+
+		// 构建当前字段的完整路径
+		currentPath := fieldName
+		if prefix != "" {
+			currentPath = prefix + "." + fieldName
+		}
+
+		// 根据字段类型进行处理
+		switch fieldVal.Kind() {
+		case reflect.Struct:
+			// 如果是结构体，递归处理
+			opt.processStructToINI(cfg, fieldVal.Interface(), currentPath)
+		case reflect.Map, reflect.Slice, reflect.Array:
+			// 如果是复杂类型，转换为JSON字符串
+			jsonData, err := json.Marshal(fieldVal.Interface())
+			if err != nil {
+				log.Printf("序列化字段 %s 失败: %v", currentPath, err)
+				continue
+			}
+			opt.addINIKey(cfg, currentPath, string(jsonData))
+		default:
+			// 基本类型，直接转换为字符串
+			strValue := opt.valueToString(fieldVal)
+			opt.addINIKey(cfg, currentPath, strValue)
+		}
+	}
+}
+
+// addINIKey 添加INI键值对
+// 参数：
+//   - cfg: INI配置文件对象
+//   - key: 键名（可能包含点号分隔的路径）
+//   - value: 值
+func (opt *Option) addINIKey(cfg *ini.File, key, value string) {
+	// 如果键名包含点号，需要分割为节名和键名
+	if strings.Contains(key, ".") {
+		parts := strings.SplitN(key, ".", 2)
+		sectionName := parts[0]
+		keyName := parts[1]
+
+		// 获取或创建节
+		section := cfg.Section(sectionName)
+		if section == nil {
+			var err error
+			section, err = cfg.NewSection(sectionName)
+			if err != nil {
+				log.Printf("创建INI节 %s 失败: %v", sectionName, err)
+				return
+			}
+		}
+
+		// 添加键值对
+		_, err := section.NewKey(keyName, value)
+		if err != nil {
+			log.Printf("添加INI键 %s 失败: %v", key, err)
+		}
+	} else {
+		// 如果没有点号，使用默认节
+		section := cfg.Section("")
+		_, err := section.NewKey(key, value)
+		if err != nil {
+			log.Printf("添加INI键 %s 失败: %v", key, err)
+		}
+	}
+}
+
+// valueToString 将反射值转换为字符串
+// 参数：
+//   - val: 反射值
+//
+// 返回：
+//   - string: 转换后的字符串
+func (opt *Option) valueToString(val reflect.Value) string {
+	switch val.Kind() {
+	case reflect.Bool:
+		return strconv.FormatBool(val.Bool())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(val.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.FormatUint(val.Uint(), 10)
+	case reflect.Float32, reflect.Float64:
+		return strconv.FormatFloat(val.Float(), 'f', -1, 64)
+	case reflect.String:
+		return val.String()
+	default:
+		// 对于其他类型，尝试使用 helper.Convert
+		return helper.Convert{Value: val.Interface()}.ToString()
+	}
 }
