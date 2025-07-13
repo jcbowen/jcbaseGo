@@ -4,8 +4,9 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
-	"github.com/jcbowen/jcbaseGo/component/helper"
 	"time"
+
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 // CacheOpt 结构体表示缓存组件
