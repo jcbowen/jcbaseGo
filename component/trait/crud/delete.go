@@ -116,7 +116,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	// 删除后处理
 	callErr := t.callCustomMethod("DeleteAfter", delIds, delArr)[0]
 	if callErr != nil {
-		err, ok := callErr.(error)
+		err, ok = callErr.(error)
 		if ok && err != nil {
 			tx.Rollback()
 			t.Result(errcode.Unknown, err.Error())
