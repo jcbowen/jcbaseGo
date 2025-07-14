@@ -35,8 +35,13 @@ func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
 }
 
 // New 获取新的数据库连接
-func New(dbConfig jcbaseGo.DbStruct) *Instance {
+func New(dbConfig jcbaseGo.DbStruct, opts ...string) *Instance {
 	context := &Instance{}
+
+	alias := "db"
+	if len(opts) > 0 && opts[0] != "" {
+		alias = opts[0]
+	}
 
 	err := helper.CheckAndSetDefault(&dbConfig)
 	jcbaseGo.PanicIfError(err)
@@ -63,7 +68,7 @@ func New(dbConfig jcbaseGo.DbStruct) *Instance {
 	// 将配置信息储存到环境变量
 	envStr := ""
 	helper.Json(dbConfig).ToString(&envStr)
-	err = os.Setenv("jc_mysql_"+dbConfig.Alias, envStr)
+	err = os.Setenv("jc_mysql_"+alias, envStr)
 	jcbaseGo.PanicIfError(err)
 
 	return context

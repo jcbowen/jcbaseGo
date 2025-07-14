@@ -63,7 +63,6 @@ func connectDatabase() (*mysql.Instance, error) {
 		Protocol:    "tcp",
 		ParseTime:   "True",
 		TablePrefix: "",
-		Alias:       "default",
 	}
 
 	// 连接数据库

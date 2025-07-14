@@ -22,8 +22,13 @@ type Instance struct {
 }
 
 // New 获取新的数据库连接
-func New(Conf jcbaseGo.SqlLiteStruct) (i *Instance) {
+func New(Conf jcbaseGo.SqlLiteStruct, opts ...string) (i *Instance) {
 	i = &Instance{}
+
+	alias := "main"
+	if len(opts) > 0 && opts[0] != "" {
+		alias = opts[0]
+	}
 
 	err := helper.CheckAndSetDefault(&Conf)
 	jcbaseGo.PanicIfError(err)
@@ -57,7 +62,7 @@ func New(Conf jcbaseGo.SqlLiteStruct) (i *Instance) {
 	// 将配置信息储存到环境变量
 	envStr := ""
 	helper.Json(Conf).ToString(&envStr)
-	err = os.Setenv("jc_sql_lite_"+Conf.Alias, envStr)
+	err = os.Setenv("jc_sql_lite_"+alias, envStr)
 	jcbaseGo.PanicIfError(err)
 
 	return

@@ -18,14 +18,17 @@ type SQLLiteBaseModel struct {
 	//DeletedAt string `gorm:"column:deleted_at;type:STRING;index;default:NULL" json:"deleted_at"`
 }
 
-func (b *SQLLiteBaseModel) ConfigAlias() string {
+func (b *SQLLiteBaseModel) ConfigAlias(model interface{}) string {
+	if aliaser, ok := model.(interface{ ConfigAlias() string }); ok {
+		return aliaser.ConfigAlias()
+	}
 	return "main"
 }
 
-func (b *SQLLiteBaseModel) ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteCondition string) {
+func (b *SQLLiteBaseModel) ModelParse(model interface{}, modelType reflect.Type) (tableName string, fields []string, softDeleteCondition string) {
 	// ----- 获取数据表名称 ----- /
 	var dbConfig SqlLiteStruct
-	dbConfigStr := os.Getenv("jc_sql_lite_" + b.ConfigAlias())
+	dbConfigStr := os.Getenv("jc_sql_lite_" + b.ConfigAlias(model))
 	helper.Json(dbConfigStr).ToStruct(&dbConfig)
 
 	// 获取表前缀

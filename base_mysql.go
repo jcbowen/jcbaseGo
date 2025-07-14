@@ -1,6 +1,7 @@
 package jcbaseGo
 
 import (
+	"log"
 	"os"
 	"reflect"
 	"strings"
@@ -18,18 +19,22 @@ type MysqlBaseModel struct {
 	//DeletedAt string `gorm:"column:deleted_at;type:DATETIME;index;default:NULL;comment:删除时间" json:"deleted_at"`
 }
 
-func (b *MysqlBaseModel) ConfigAlias() string {
+func (b *MysqlBaseModel) GetConfigAlias(model interface{}) string {
+	if aliaser, ok := model.(interface{ ConfigAlias() string }); ok {
+		return aliaser.ConfigAlias()
+	}
 	return "db"
 }
 
-func (b *MysqlBaseModel) ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteCondition string) {
+func (b *MysqlBaseModel) ModelParse(model interface{}, modelType reflect.Type) (tableName string, fields []string, softDeleteCondition string) {
 	// ----- 获取数据表名称 ----- /
 	var dbConfig DbStruct
-	dbConfigStr := os.Getenv("jc_mysql_" + b.ConfigAlias())
+	dbConfigStr := os.Getenv("jc_mysql_" + b.GetConfigAlias(model))
 	helper.Json(dbConfigStr).ToStruct(&dbConfig)
 
 	// 获取表前缀
 	prefix := dbConfig.TablePrefix
+	log.Println(prefix, "prefix", b.GetConfigAlias(model))
 
 	// 转换为小写字母并添加下划线
 	convertModelName := helper.NewStr(modelType.Name()).ConvertCamelToSnake()

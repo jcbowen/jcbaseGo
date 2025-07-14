@@ -70,9 +70,9 @@ func (t *Trait) InitCrud(c *gin.Context) {
 
 	// 解析模型（获取模型表名、表字段以及软删除条件）
 	if modelParseProvider, ok := model.(interface {
-		ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteCondition string)
+		ModelParse(model interface{}, modelType reflect.Type) (tableName string, fields []string, softDeleteCondition string)
 	}); ok {
-		t.ModelTableName, t.ModelFields, t.SoftDeleteCondition = modelParseProvider.ModelParse(modelType)
+		t.ModelTableName, t.ModelFields, t.SoftDeleteCondition = modelParseProvider.ModelParse(model, modelType)
 	} else {
 		log.Panic("模型未实现 ModelParse 方法")
 	}

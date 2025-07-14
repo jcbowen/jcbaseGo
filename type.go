@@ -46,7 +46,6 @@ type DbStruct struct {
 	TablePrefix   string `json:"tablePrefix,omitempty" ini:"tablePrefix,omitempty" default:""` // 表前缀
 	ParseTime     string `json:"parseTime" ini:"parseTime" default:"False"`                    // 是否开启时间解析
 	SingularTable bool   `json:"singularTable" ini:"singularTable" default:"true"`             // 使用单数表名
-	Alias         string `json:"alias" ini:"alias" default:"db"`                               // 配置信息别名
 }
 
 // SqlLiteStruct sqlite配置
@@ -54,7 +53,6 @@ type SqlLiteStruct struct {
 	DbFile        string `json:"dbFile" ini:"dbFile" default:"./data/db/jcbaseGo.db"` // 数据库文件，默认在data目录下
 	TablePrefix   string `json:"tablePrefix" ini:"tablePrefix" default:"jc_"`         // 表前缀
 	SingularTable bool   `json:"singularTable" ini:"singularTable" default:"true"`    // 使用单数表名
-	Alias         string `json:"alias" ini:"alias" default:"main"`                    // 配置信息别名
 }
 
 // RedisStruct redis配置
