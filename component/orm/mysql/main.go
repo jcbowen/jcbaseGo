@@ -88,6 +88,11 @@ func (c *Instance) GetDb() *gorm.DB {
 	return db
 }
 
+// GetConf 获取配置信息
+func (c *Instance) GetConf() interface{} {
+	return c.Conf
+}
+
 // GetAllTableName 获取所有表名
 func (c *Instance) GetAllTableName() (tableNames []AllTableName, err error) {
 	// 如果有错误，就不再执行
