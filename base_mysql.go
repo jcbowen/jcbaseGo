@@ -1,7 +1,6 @@
 package jcbaseGo
 
 import (
-	"log"
 	"os"
 	"reflect"
 	"strings"
@@ -34,7 +33,6 @@ func (b *MysqlBaseModel) ModelParse(model interface{}, modelType reflect.Type) (
 
 	// 获取表前缀
 	prefix := dbConfig.TablePrefix
-	log.Println(prefix, "prefix", b.GetConfigAlias(model))
 
 	// 转换为小写字母并添加下划线
 	convertModelName := helper.NewStr(modelType.Name()).ConvertCamelToSnake()
