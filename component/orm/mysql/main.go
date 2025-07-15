@@ -54,6 +54,7 @@ func New(dbConfig jcbaseGo.DbStruct, opts ...string) *Instance {
 
 	dsn := getDSN(dbConfig)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		DisableForeignKeyConstraintWhenMigrating: dbConfig.DisableForeignKeyConstraintWhenMigrating,
 		NamingStrategy: schema.NamingStrategy{
 			TablePrefix:   dbConfig.TablePrefix,   // 表名前缀，`User`表为`t_users`
 			SingularTable: dbConfig.SingularTable, // 使用单数表名，启用该选项后，`User` 表将是`user`

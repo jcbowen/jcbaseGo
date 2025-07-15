@@ -35,24 +35,26 @@ type WebServer struct {
 
 // DbStruct 数据库配置
 type DbStruct struct {
-	DriverName    string `json:"driverName" ini:"driverName" default:"mysql"`                  // 驱动类型
-	Protocol      string `json:"protocol" ini:"protocol" default:"tcp"`                        // 协议
-	Host          string `json:"host" ini:"host" default:"localhost"`                          // 数据库地址
-	Port          string `json:"port" ini:"port" default:"3306"`                               // 数据库端口号
-	Dbname        string `json:"dbname" ini:"dbname" default:"dbname"`                         // 表名称
-	Username      string `json:"username" ini:"username" default:"root"`                       // 用户名
-	Password      string `json:"password" ini:"password" default:""`                           // 密码
-	Charset       string `json:"charset" ini:"charset" default:"utf8mb4"`                      // 编码
-	TablePrefix   string `json:"tablePrefix,omitempty" ini:"tablePrefix,omitempty" default:""` // 表前缀
-	ParseTime     string `json:"parseTime" ini:"parseTime" default:"False"`                    // 是否开启时间解析
-	SingularTable bool   `json:"singularTable" ini:"singularTable" default:"true"`             // 使用单数表名
+	DriverName                               string `json:"driverName" ini:"driverName" default:"mysql"`                                                             // 驱动类型
+	Protocol                                 string `json:"protocol" ini:"protocol" default:"tcp"`                                                                   // 协议
+	Host                                     string `json:"host" ini:"host" default:"localhost"`                                                                     // 数据库地址
+	Port                                     string `json:"port" ini:"port" default:"3306"`                                                                          // 数据库端口号
+	Dbname                                   string `json:"dbname" ini:"dbname" default:"dbname"`                                                                    // 表名称
+	Username                                 string `json:"username" ini:"username" default:"root"`                                                                  // 用户名
+	Password                                 string `json:"password" ini:"password" default:""`                                                                      // 密码
+	Charset                                  string `json:"charset" ini:"charset" default:"utf8mb4"`                                                                 // 编码
+	TablePrefix                              string `json:"tablePrefix,omitempty" ini:"tablePrefix,omitempty" default:""`                                            // 表前缀
+	ParseTime                                string `json:"parseTime" ini:"parseTime" default:"False"`                                                               // 是否开启时间解析
+	SingularTable                            bool   `json:"singularTable" ini:"singularTable" default:"true"`                                                        // 使用单数表名
+	DisableForeignKeyConstraintWhenMigrating bool   `json:"disableForeignKeyConstraintWhenMigrating" ini:"disableForeignKeyConstraintWhenMigrating" default:"false"` // 是否禁用外键约束
 }
 
 // SqlLiteStruct sqlite配置
 type SqlLiteStruct struct {
-	DbFile        string `json:"dbFile" ini:"dbFile" default:"./data/db/jcbaseGo.db"` // 数据库文件，默认在data目录下
-	TablePrefix   string `json:"tablePrefix" ini:"tablePrefix" default:"jc_"`         // 表前缀
-	SingularTable bool   `json:"singularTable" ini:"singularTable" default:"true"`    // 使用单数表名
+	DbFile                                   string `json:"dbFile" ini:"dbFile" default:"./data/db/jcbaseGo.db"`                                                     // 数据库文件，默认在data目录下
+	TablePrefix                              string `json:"tablePrefix" ini:"tablePrefix" default:"jc_"`                                                             // 表前缀
+	SingularTable                            bool   `json:"singularTable" ini:"singularTable" default:"true"`                                                        // 使用单数表名
+	DisableForeignKeyConstraintWhenMigrating bool   `json:"disableForeignKeyConstraintWhenMigrating" ini:"disableForeignKeyConstraintWhenMigrating" default:"false"` // 是否禁用外键约束
 }
 
 // RedisStruct redis配置

@@ -49,6 +49,7 @@ func New(Conf jcbaseGo.SqlLiteStruct, opts ...string) (i *Instance) {
 
 	// 创建数据库连接
 	db, err := gorm.Open(sqlite.Open(Conf.DbFile), &gorm.Config{
+		DisableForeignKeyConstraintWhenMigrating: Conf.DisableForeignKeyConstraintWhenMigrating,
 		NamingStrategy: schema.NamingStrategy{
 			TablePrefix:   Conf.TablePrefix,   // 表名前缀，`User`表为`t_users`
 			SingularTable: Conf.SingularTable, // 使用单数表名，启用该选项后，`User` 表将是`user`

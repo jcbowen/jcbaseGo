@@ -10,22 +10,22 @@ import (
 	"gorm.io/gorm"
 )
 
-// SQLLiteBaseModel gorm基础模型
-type SQLLiteBaseModel struct {
+// SqliteBaseModel gorm基础模型
+type SqliteBaseModel struct {
 	//Id        uint   `gorm:"column:id;type:INTEGER;primaryKey;autoIncrement" json:"id"`
 	//UpdatedAt string `gorm:"column:updated_at;type:STRING;default:NULL" json:"updated_at"`
 	//CreatedAt string `gorm:"column:created_at;type:STRING;default:NULL" json:"created_at"`
 	//DeletedAt string `gorm:"column:deleted_at;type:STRING;index;default:NULL" json:"deleted_at"`
 }
 
-func (b *SQLLiteBaseModel) ConfigAlias(model interface{}) string {
+func (b *SqliteBaseModel) ConfigAlias(model interface{}) string {
 	if aliaser, ok := model.(interface{ ConfigAlias() string }); ok {
 		return aliaser.ConfigAlias()
 	}
 	return "main"
 }
 
-func (b *SQLLiteBaseModel) ModelParse(model interface{}, modelType reflect.Type) (tableName string, fields []string, softDeleteCondition string) {
+func (b *SqliteBaseModel) ModelParse(model interface{}, modelType reflect.Type) (tableName string, fields []string, softDeleteCondition string) {
 	// ----- 获取数据表名称 ----- /
 	var dbConfig SqlLiteStruct
 	dbConfigStr := os.Getenv("jc_sql_lite_" + b.ConfigAlias(model))
@@ -63,7 +63,7 @@ func (b *SQLLiteBaseModel) ModelParse(model interface{}, modelType reflect.Type)
 					softDeleteCondition = "= '0000-00-00 00:00:00'"
 				}
 			}
-		} else if field.Name != "SQLLiteBaseModel" {
+		} else if field.Name != "SqliteBaseModel" {
 			// 如果没有定义gorm标签，则使用字段名称转换为下划线格式
 			fieldName := helper.NewStr(field.Name).ConvertCamelToSnake()
 			fields = append(fields, fieldName)
@@ -73,14 +73,14 @@ func (b *SQLLiteBaseModel) ModelParse(model interface{}, modelType reflect.Type)
 	return
 }
 
-func (b *SQLLiteBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
+func (b *SqliteBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
 	strTime := time.Now().Format("2006-01-02 15:04:05")
 	setFieldIfExist(tx.Statement.Dest, "CreatedAt", strTime)
 	setFieldIfExist(tx.Statement.Dest, "UpdatedAt", strTime)
 	return
 }
 
-func (b *SQLLiteBaseModel) BeforeUpdate(tx *gorm.DB) (err error) {
+func (b *SqliteBaseModel) BeforeUpdate(tx *gorm.DB) (err error) {
 	setFieldIfExist(tx.Statement.Dest, "UpdatedAt", time.Now().Format("2006-01-02 15:04:05"))
 	return
 }
