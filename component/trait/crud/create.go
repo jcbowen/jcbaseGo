@@ -41,30 +41,28 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 		}
 	}
 
-	// 开始事务
-	tx := t.DBI.GetDb().Begin()
-
-	// 插入数据
-	if err = tx.Create(modelValue).Error; err != nil {
-		tx.Rollback()
-		t.Result(errcode.DatabaseError, "ok")
-		return
-	}
-
-	// 调用自定义的CreateAfter方法进行后置处理
-	callErr := t.callCustomMethod("CreateAfter", tx, modelValue)[0]
-	if callErr != nil {
-		err = callErr.(error)
-		if err != nil {
-			tx.Rollback()
-			t.Result(errcode.Unknown, err.Error())
-			return
+	// 使用GORM的事务方法，自动处理提交和回滚
+	err = t.DBI.GetDb().Transaction(func(tx *gorm.DB) error {
+		// 插入数据
+		if err = tx.Create(modelValue).Error; err != nil {
+			return err
 		}
-	}
 
-	// 提交事务
-	if err := tx.Commit().Error; err != nil {
-		t.Result(errcode.DatabaseTransactionCommitError, "事务提交失败，请重试")
+		// 调用自定义的CreateAfter方法进行后置处理
+		callErr := t.callCustomMethod("CreateAfter", tx, modelValue)[0]
+		if callErr != nil {
+			err = callErr.(error)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	// 处理事务结果
+	if err != nil {
+		t.Result(errcode.DatabaseError, "创建失败："+err.Error())
 		return
 	}
 

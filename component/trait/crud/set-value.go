@@ -86,54 +86,57 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 		}
 	}
 
-	// 开始事务
-	tx := t.DBI.GetDb().Begin()
-
-	// 查询数据
-	modelType := reflect.TypeOf(t.Model).Elem()
-	result := reflect.New(modelType).Interface()
-	query := tx.Table(t.ModelTableName)
-	// 应用软删除条件
-	if helper.InArray("deleted_at", t.ModelFields) {
-		query = query.Where("deleted_at " + t.SoftDeleteCondition)
-	}
-	err := query.Where(t.PkId+" = ?", id).First(result).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		tx.Rollback()
-		t.Result(errcode.NotExist, "数据不存在或已被删除")
-		return
-	}
-
-	// 检查值是否发生变化
-	modelValueField := reflect.ValueOf(result).Elem().FieldByName(field)
-	if modelValueField.IsValid() && modelValueField.Interface() == value {
-		tx.Rollback()
-		t.Result(errcode.Success, "值未发生改变，请确认修改内容")
-		return
-	}
-
-	// 更新数据
-	updateData := map[string]interface{}{field: value}
-	if err = tx.Table(t.ModelTableName).Where(t.PkId+" = ?", id).Updates(updateData).Error; err != nil {
-		tx.Rollback()
-		t.Result(errcode.DatabaseError, err.Error())
-		return
-	}
-
-	// 调用自定义的SetValueAfter方法进行后置处理
-	callResults = t.callCustomMethod("SetValueAfter", tx, id, field, value)
-	if callResults[0] != nil {
-		err, ok := callResults[0].(error)
-		if ok && err != nil {
-			tx.Rollback()
-			t.Result(errcode.Unknown, err.Error())
-			return
+	// 使用GORM的事务方法，自动处理提交和回滚
+	err := t.DBI.GetDb().Transaction(func(tx *gorm.DB) error {
+		// 查询数据
+		modelType := reflect.TypeOf(t.Model).Elem()
+		result := reflect.New(modelType).Interface()
+		query := tx.Table(t.ModelTableName)
+		// 应用软删除条件
+		if helper.InArray("deleted_at", t.ModelFields) {
+			query = query.Where("deleted_at " + t.SoftDeleteCondition)
 		}
-	}
+		err := query.Where(t.PkId+" = ?", id).First(result).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("数据不存在或已被删除")
+		}
+		if err != nil {
+			return err
+		}
 
-	// 提交事务
-	if err = tx.Commit().Error; err != nil {
-		t.Result(errcode.DatabaseTransactionCommitError, "事务提交失败，请重试")
+		// 检查值是否发生变化
+		modelValueField := reflect.ValueOf(result).Elem().FieldByName(field)
+		if modelValueField.IsValid() && modelValueField.Interface() == value {
+			return errors.New("值未发生改变，请确认修改内容")
+		}
+
+		// 更新数据
+		updateData := map[string]interface{}{field: value}
+		if err = tx.Table(t.ModelTableName).Where(t.PkId+" = ?", id).Updates(updateData).Error; err != nil {
+			return err
+		}
+
+		// 调用自定义的SetValueAfter方法进行后置处理
+		callResults = t.callCustomMethod("SetValueAfter", tx, id, field, value)
+		if callResults[0] != nil {
+			err, ok := callResults[0].(error)
+			if ok && err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	// 处理事务结果
+	if err != nil {
+		if err.Error() == "数据不存在或已被删除" {
+			t.Result(errcode.NotExist, err.Error())
+		} else if err.Error() == "值未发生改变，请确认修改内容" {
+			t.Result(errcode.Success, err.Error())
+		} else {
+			t.Result(errcode.DatabaseError, "设置失败："+err.Error())
+		}
 		return
 	}
 

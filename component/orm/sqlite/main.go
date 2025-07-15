@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/helper"
@@ -56,6 +57,19 @@ func New(Conf jcbaseGo.SqlLiteStruct, opts ...string) (i *Instance) {
 		},
 	})
 	jcbaseGo.PanicIfError(err)
+
+	// 配置连接池参数，防止连接泄漏
+	sqlDB, err := db.DB()
+	if err == nil {
+		// 设置最大连接数（SQLite通常只需要少量连接）
+		sqlDB.SetMaxOpenConns(1)
+		// 设置最大空闲连接数
+		sqlDB.SetMaxIdleConns(1)
+		// 设置连接最大生命周期（10分钟）
+		sqlDB.SetConnMaxLifetime(10 * time.Minute)
+		// 设置空闲连接超时时间（5分钟）
+		sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+	}
 
 	i.Conf = Conf
 	i.Db = db

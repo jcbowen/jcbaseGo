@@ -453,7 +453,74 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
 - 在Each方法中过滤敏感信息
 - 使用参数绑定防止SQL注入
 
-### 4. 错误处理
+### 4. 事务管理和锁定优化 ⭐
+
+#### 事务最佳实践
+- **使用GORM的Transaction方法**: 自动处理提交和回滚，避免手动管理事务
+- **避免长时间事务**: 在After方法中避免执行耗时的外部API调用或文件处理
+- **事务超时控制**: 设置合理的事务超时时间，防止长时间锁定
+
+```golang
+// 推荐的事务处理方式
+err := db.Transaction(func(tx *gorm.DB) error {
+    // 数据库操作
+    if err := tx.Create(&user).Error; err != nil {
+        return err
+    }
+    
+    // 轻量级的后续处理
+    if err := tx.Create(&profile).Error; err != nil {
+        return err
+    }
+    
+    return nil
+})
+```
+
+#### 避免锁定的建议
+- **避免嵌套事务**: 不要在钩子方法中开启新的事务
+- **及时释放锁**: 确保事务尽快提交或回滚
+- **使用乐观锁**: 对于并发更新场景，考虑使用版本号或时间戳
+- **连接池配置**: 合理配置连接池参数，防止连接泄漏
+
+```golang
+// 乐观锁示例
+type User struct {
+    ID      uint   `gorm:"primaryKey"`
+    Name    string
+    Version int    `gorm:"default:1"` // 版本号字段
+}
+
+// 更新时检查版本号
+func (u *User) UpdateWithOptimisticLock(tx *gorm.DB, newName string) error {
+    result := tx.Model(u).
+        Where("id = ? AND version = ?", u.ID, u.Version).
+        Updates(map[string]interface{}{
+            "name":    newName,
+            "version": u.Version + 1,
+        })
+    
+    if result.RowsAffected == 0 {
+        return errors.New("数据已被其他用户修改，请重试")
+    }
+    
+    return nil
+}
+```
+
+#### 连接池配置建议
+```golang
+// MySQL连接池配置
+sqlDB, err := db.DB()
+if err == nil {
+    sqlDB.SetMaxOpenConns(100)        // 最大连接数
+    sqlDB.SetMaxIdleConns(10)         // 最大空闲连接数
+    sqlDB.SetConnMaxLifetime(5 * time.Minute)  // 连接最大生命周期
+    sqlDB.SetConnMaxIdleTime(3 * time.Minute)  // 空闲连接超时时间
+}
+```
+
+### 5. 错误处理
 
 ```golang
 func (i *Index) CreateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
@@ -466,7 +533,7 @@ func (i *Index) CreateBefore(modelValue interface{}, mapData map[string]any) (in
 }
 ```
 
-### 5. 日志记录
+### 6. 日志记录
 
 ```golang
 func (i *Index) CreateAfter(tx *gorm.DB, modelValue interface{}) error {

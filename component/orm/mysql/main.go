@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/helper"
@@ -61,6 +62,19 @@ func New(dbConfig jcbaseGo.DbStruct, opts ...string) *Instance {
 		},
 	})
 	jcbaseGo.PanicIfError(err)
+
+	// 配置连接池参数，防止连接泄漏和长时间锁定
+	sqlDB, err := db.DB()
+	if err == nil {
+		// 设置最大连接数
+		sqlDB.SetMaxOpenConns(100)
+		// 设置最大空闲连接数
+		sqlDB.SetMaxIdleConns(10)
+		// 设置连接最大生命周期（5分钟）
+		sqlDB.SetConnMaxLifetime(5 * time.Minute)
+		// 设置空闲连接超时时间（3分钟）
+		sqlDB.SetConnMaxIdleTime(3 * time.Minute)
+	}
 
 	context.Dsn = dsn
 	context.Conf = dbConfig

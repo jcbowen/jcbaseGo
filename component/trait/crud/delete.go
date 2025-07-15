@@ -89,44 +89,42 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	}
 	delIds = callResults[0].([]interface{})
 
-	// 开启事务
-	tx := t.DBI.GetDb().Begin()
-
-	// 执行删除
-	if helper.InArray("deleted_at", t.ModelFields) {
-		// 软删除（更新deleted_at字段）
-		condition := t.callCustomMethod("DeleteCondition", delArr)[0].(map[string]interface{})
-		deleteQuery = tx.Model(t.Model)
-		deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
-		err = deleteQuery.Updates(condition).Error
-	} else {
-		// 真实删除
-		deleteQuery = tx.Model(t.Model)
-		deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
-		err = deleteQuery.Delete(t.Model).Error
-	}
-
-	// 执行删除
-	if err != nil {
-		tx.Rollback()
-		t.Result(errcode.StorageError, "删除失败，未知错误")
-		return
-	}
-
-	// 删除后处理
-	callErr := t.callCustomMethod("DeleteAfter", delIds, delArr)[0]
-	if callErr != nil {
-		err, ok = callErr.(error)
-		if ok && err != nil {
-			tx.Rollback()
-			t.Result(errcode.Unknown, err.Error())
-			return
+	// 使用GORM的事务方法，自动处理提交和回滚
+	err = t.DBI.GetDb().Transaction(func(tx *gorm.DB) error {
+		// 执行删除
+		if helper.InArray("deleted_at", t.ModelFields) {
+			// 软删除（更新deleted_at字段）
+			condition := t.callCustomMethod("DeleteCondition", delArr)[0].(map[string]interface{})
+			deleteQuery := tx.Model(t.Model)
+			deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
+			err = deleteQuery.Updates(condition).Error
+		} else {
+			// 真实删除
+			deleteQuery := tx.Model(t.Model)
+			deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
+			err = deleteQuery.Delete(t.Model).Error
 		}
-	}
 
-	// 提交事务
-	if err = tx.Commit().Error; err != nil {
-		t.Result(errcode.DatabaseTransactionCommitError, "事务提交失败，请重试")
+		// 检查删除结果
+		if err != nil {
+			return err
+		}
+
+		// 删除后处理
+		callErr := t.callCustomMethod("DeleteAfter", delIds, delArr)[0]
+		if callErr != nil {
+			err, ok = callErr.(error)
+			if ok && err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	// 处理事务结果
+	if err != nil {
+		t.Result(errcode.StorageError, "删除失败："+err.Error())
 		return
 	}
 

@@ -39,71 +39,74 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 		return
 	}
 
-	// 动态创建模型实例
-	modelType := reflect.TypeOf(t.Model).Elem()
-	result := reflect.New(modelType).Interface()
+	// 使用GORM的事务方法，自动处理提交和回滚
+	err := t.DBI.GetDb().Transaction(func(tx *gorm.DB) error {
+		// 动态创建模型实例
+		modelType := reflect.TypeOf(t.Model).Elem()
+		result := reflect.New(modelType).Interface()
 
-	// 查询数据
-	query := t.DBI.GetDb().Table(t.ModelTableName)
-	// 应用软删除条件
-	if helper.InArray("deleted_at", t.ModelFields) {
-		query = query.Where("deleted_at " + t.SoftDeleteCondition)
-	}
-	err := query.Where(t.PkId+" = ?", id).First(result).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Result(errcode.NotExist, "数据不存在或已被删除")
-		return
-	}
-
-	// 调用自定义的UpdateBefore方法进行前置处理
-	callResults = t.callCustomMethod("UpdateBefore", modelValue, mapData, result)
-	modelValue = callResults[0]
-	mapData = callResults[1].(map[string]any)
-	if callResults[2] != nil {
-		err := callResults[2].(error)
+		// 在事务内查询数据，避免并发问题
+		query := tx.Table(t.ModelTableName)
+		// 应用软删除条件
+		if helper.InArray("deleted_at", t.ModelFields) {
+			query = query.Where("deleted_at " + t.SoftDeleteCondition)
+		}
+		err := query.Where(t.PkId+" = ?", id).First(result).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("数据不存在或已被删除")
+		}
 		if err != nil {
-			t.Result(errcode.ParamError, err.Error())
-			return
+			return err
 		}
-	}
 
-	// 开始事务
-	tx := t.DBI.GetDb().Begin()
-
-	// 仅更新传入的字段
-	var updateFields []string
-	if helper.InArray("updated_at", t.ModelFields) {
-		updateFields = append(updateFields, "updated_at")
-	}
-	for key := range mapData {
-		if helper.InArray(key, t.ModelFields) {
-			updateFields = append(updateFields, key)
+		// 调用自定义的UpdateBefore方法进行前置处理
+		callResults = t.callCustomMethod("UpdateBefore", modelValue, mapData, result)
+		modelValue = callResults[0]
+		mapData = callResults[1].(map[string]any)
+		if callResults[2] != nil {
+			err := callResults[2].(error)
+			if err != nil {
+				return err
+			}
 		}
-	}
 
-	// 更新数据
-	if err = tx.Table(t.ModelTableName).
-		Select(updateFields).
-		Updates(modelValue).Error; err != nil {
-		tx.Rollback()
-		t.Result(errcode.DatabaseError, err.Error())
-		return
-	}
-
-	// 调用自定义的UpdateAfter方法进行后置处理
-	callErr := t.callCustomMethod("UpdateAfter", tx, modelValue, result)[0]
-	if callErr != nil {
-		err = callErr.(error)
-		if err != nil {
-			tx.Rollback()
-			t.Result(errcode.Unknown, err.Error())
-			return
+		// 仅更新传入的字段
+		var updateFields []string
+		if helper.InArray("updated_at", t.ModelFields) {
+			updateFields = append(updateFields, "updated_at")
 		}
-	}
+		for key := range mapData {
+			if helper.InArray(key, t.ModelFields) {
+				updateFields = append(updateFields, key)
+			}
+		}
 
-	// 提交事务
-	if err = tx.Commit().Error; err != nil {
-		t.Result(errcode.DatabaseTransactionCommitError, "事务提交失败，请重试")
+		// 更新数据
+		if err = tx.Table(t.ModelTableName).
+			Select(updateFields).
+			Updates(modelValue).Error; err != nil {
+			return err
+		}
+
+		// 调用自定义的UpdateAfter方法进行后置处理
+		callErr := t.callCustomMethod("UpdateAfter", tx, modelValue, result)[0]
+		if callErr != nil {
+			err = callErr.(error)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	// 处理事务结果
+	if err != nil {
+		if err.Error() == "数据不存在或已被删除" {
+			t.Result(errcode.NotExist, err.Error())
+		} else {
+			t.Result(errcode.DatabaseError, "更新失败："+err.Error())
+		}
 		return
 	}
 
