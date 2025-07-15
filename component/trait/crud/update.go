@@ -91,7 +91,7 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 	}
 
 	// 调用自定义的UpdateAfter方法进行后置处理
-	callErr := t.callCustomMethod("UpdateAfter", tx, modelValue)[0]
+	callErr := t.callCustomMethod("UpdateAfter", tx, modelValue, result)[0]
 	if callErr != nil {
 		err = callErr.(error)
 		if err != nil {
@@ -148,10 +148,11 @@ func (t *Trait) UpdateBefore(modelValue interface{}, mapData map[string]any, ori
 // 参数说明：
 //   - tx *gorm.DB: 数据库事务对象
 //   - modelValue interface{}: 已更新的模型实例
+//   - originalData interface{}: 数据库中的原始数据
 //
 // 返回值：
 //   - error: 处理过程中的错误信息，如果返回错误则会回滚事务
-func (t *Trait) UpdateAfter(tx *gorm.DB, modelValue interface{}) error {
+func (t *Trait) UpdateAfter(tx *gorm.DB, modelValue interface{}, originalData interface{}) error {
 	callResults := t.callCustomMethod("SaveAfter", tx, modelValue)
 	var err error
 	if callResults[0] != nil {
