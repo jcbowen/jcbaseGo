@@ -71,10 +71,10 @@ func (t *Trait) InitCrud(c *gin.Context) {
 
 	// 解析模型（获取模型表名、表字段、软删除字段名以及软删除条件）
 	if modelParseProvider, ok := model.(interface {
-		ModelParse(model interface{}, modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string)
+		ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string)
 	}); ok {
 		var SoftDeleteField, SoftDeleteCondition string
-		t.ModelTableName, t.ModelFields, SoftDeleteField, SoftDeleteCondition = modelParseProvider.ModelParse(model, modelType)
+		t.ModelTableName, t.ModelFields, SoftDeleteField, SoftDeleteCondition = modelParseProvider.ModelParse(modelType)
 		// 如果在初始化crud时配置过了，优先以配置的来（旧版只支持配置）
 		if t.SoftDeleteField == "" {
 			t.SoftDeleteField = SoftDeleteField

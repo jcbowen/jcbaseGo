@@ -33,16 +33,23 @@ func (User) TableName() string {
 }
 
 // ModelParse 解析模型信息（供 CRUD trait 使用）
-func (u User) ModelParse(modelType reflect.Type) (tableName string, fields []string) {
+// 参数说明：
+//   - modelType reflect.Type: 模型的反射类型
+// 返回值：
+//   - tableName string: 数据表名称
+//   - fields []string: 字段列表
+//   - softDeleteField string: 软删除字段名
+//   - softDeleteCondition string: 软删除条件
+func (u User) ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string) {
     tableName = u.TableName()
-    
+
     for i := 0; i < modelType.NumField(); i++ {
         field := modelType.Field(i)
         if jsonTag := field.Tag.Get("json"); jsonTag != "" && jsonTag != "-" {
             fields = append(fields, strings.Split(jsonTag, ",")[0])
         }
     }
-    
+
     return
 }
 ```

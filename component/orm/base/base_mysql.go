@@ -26,8 +26,20 @@ func (b *MysqlBaseModel) GetConfigAlias(model interface{}) string {
 	return "db"
 }
 
-func (b *MysqlBaseModel) ModelParse(model interface{}, modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string) {
+// ModelParse 解析模型信息（供 CRUD trait 使用）
+// 参数说明：
+//   - modelType reflect.Type: 模型的反射类型
+//
+// 返回值：
+//   - tableName string: 数据表名称
+//   - fields []string: 字段列表
+//   - softDeleteField string: 软删除字段名
+//   - softDeleteCondition string: 软删除条件
+func (b *MysqlBaseModel) ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string) {
 	// ----- 获取数据表名称 ----- /
+	// 通过反射创建模型实例
+	model := reflect.New(modelType).Interface()
+
 	var dbConfig jcbaseGo.DbStruct
 	dbConfigStr := os.Getenv("jc_mysql_" + b.GetConfigAlias(model))
 	helper.Json(dbConfigStr).ToStruct(&dbConfig)
