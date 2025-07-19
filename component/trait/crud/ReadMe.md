@@ -20,8 +20,57 @@ CRUD系统提供了完整的增删改查功能，支持自定义钩子方法进�
 - 🔧 **高度可扩展**: 丰富的钩子方法支持自定义逻辑
 - 🛡️ **事务安全**: 自动事务管理，支持回滚
 - 📊 **分页支持**: 内置分页功能
-- 🗑️ **软删除**: 支持软删除和硬删除
+- 🗑️ **软删除**: 支持软删除和硬删除，可自定义软删除字段名
 - 🔍 **灵活查询**: 支持复杂查询条件
+
+## 软删除配置
+
+CRUD系统支持灵活的软删除配置，您可以自定义软删除字段名和删除条件。
+
+### 配置方式
+
+通过在模型字段的 `gorm` 标签中添加 `soft_delete` 标签来配置软删除：
+
+```golang
+import "github.com/jcbowen/jcbaseGo/component/orm/base"
+
+type User struct {
+    base.MysqlBaseModel  // 或者 base.SqliteBaseModel
+    ID        uint   `gorm:"column:id;primaryKey" json:"id"`
+    Name      string `gorm:"column:name;size:100" json:"name"`
+
+    // 方式1: 使用系统默认的 deleted_at 字段
+    DeletedAt string `gorm:"column:deleted_at;type:DATETIME;default:NULL" json:"deleted_at"`
+
+    // 方式2: 自定义软删除字段，条件为 IS NULL
+    // IsDeleted string `gorm:"column:is_deleted;type:DATETIME;soft_delete:IS NULL" json:"is_deleted"`
+
+    // 方式3: 使用状态字段作为软删除，条件为 = 1（表示正常状态）
+    // Status int `gorm:"column:status;type:INT;soft_delete:= 1" json:"status"`
+
+    // 方式4: 使用特殊默认值的 deleted_at 字段
+    // DeletedAt string `gorm:"column:deleted_at;type:DATETIME;default:0000-00-00 00:00:00" json:"deleted_at"`
+}
+```
+
+### 配置说明
+
+1. **默认配置**：如果模型中存在 `deleted_at` 字段且没有 `soft_delete` 标签，系统会自动将其作为软删除字段，条件为 `IS NULL`
+
+2. **自定义字段名**：通过 `soft_delete` 标签可以指定任意字段作为软删除字段
+
+3. **自定义条件**：`soft_delete` 标签的值就是软删除的判断条件，如：
+   - `IS NULL`：字段为空表示未删除
+   - `= 1`：字段值为1表示未删除
+   - `= 'active'`：字段值为'active'表示未删除
+
+4. **特殊默认值**：如果 `deleted_at` 字段的默认值为 `0000-00-00 00:00:00`，系统会自动使用 `= '0000-00-00 00:00:00'` 作为软删除条件
+
+### 使用效果
+
+- **查询时**：系统会自动添加软删除条件，只查询未删除的数据
+- **删除时**：执行软删除操作，更新软删除字段的值
+- **显示已删除数据**：通过 `show_deleted=1` 参数可以查看已删除的数据
 
 ## 使用示例
 

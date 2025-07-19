@@ -59,8 +59,8 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 	query = t.callCustomMethod("DetailSelect", query)[0].(*gorm.DB)
 
 	// 应用软删除条件
-	if !showDeleted && helper.InArray("deleted_at", t.ModelFields) {
-		query = query.Where(t.TableAlias + "deleted_at " + t.SoftDeleteCondition)
+	if !showDeleted && t.SoftDeleteField != "" && helper.InArray(t.SoftDeleteField, t.ModelFields) {
+		query = query.Where(t.TableAlias + t.SoftDeleteField + " " + t.SoftDeleteCondition)
 	}
 
 	query = t.callCustomMethod("DetailQuery", query, mapData)[0].(*gorm.DB)

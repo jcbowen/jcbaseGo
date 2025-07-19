@@ -1,4 +1,4 @@
-package jcbaseGo
+package base
 
 import (
 	"os"
@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"gorm.io/gorm"
 )
@@ -25,9 +26,9 @@ func (b *MysqlBaseModel) GetConfigAlias(model interface{}) string {
 	return "db"
 }
 
-func (b *MysqlBaseModel) ModelParse(model interface{}, modelType reflect.Type) (tableName string, fields []string, softDeleteCondition string) {
+func (b *MysqlBaseModel) ModelParse(model interface{}, modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string) {
 	// ----- 获取数据表名称 ----- /
-	var dbConfig DbStruct
+	var dbConfig jcbaseGo.DbStruct
 	dbConfigStr := os.Getenv("jc_mysql_" + b.GetConfigAlias(model))
 	helper.Json(dbConfigStr).ToStruct(&dbConfig)
 
@@ -45,7 +46,12 @@ func (b *MysqlBaseModel) ModelParse(model interface{}, modelType reflect.Type) (
 
 	// ----- 获取数据表所有字段 ----- /
 	fields = []string{}
+	softDeleteField = ""            // 软删除字段名，默认为空
 	softDeleteCondition = "IS NULL" // 默认软删除条件
+
+	// 用于记录 deleted_at 字段信息（默认软删除字段）
+	var deletedAtField string
+	var deletedAtCondition string
 
 	for i := 0; i < modelType.NumField(); i++ {
 		field := modelType.Field(i)
@@ -55,12 +61,20 @@ func (b *MysqlBaseModel) ModelParse(model interface{}, modelType reflect.Type) (
 		if columnName != "" {
 			fields = append(fields, columnName)
 
-			// 检查是否为 deleted_at 字段，解析其默认值
-			if columnName == "deleted_at" {
+			// 检查是否有 soft_delete 标签，优先使用自定义软删除配置
+			if softDeleteTag := getSoftDeleteFromTag(gormTag); softDeleteTag != "" {
+				softDeleteField = columnName
+				softDeleteCondition = softDeleteTag
+			} else if columnName == "deleted_at" {
+				// 记录 deleted_at 字段信息（系统默认的软删除字段）
+				deletedAtField = columnName
 				defaultValue := getDefaultFromTag(gormTag)
 				if defaultValue == "0000-00-00 00:00:00" || strings.Contains(gormTag, "default:0000-00-00 00:00:00") {
 					// 如果默认值是 0000-00-00 00:00:00，则用这个作为软删除判断条件
-					softDeleteCondition = "= '0000-00-00 00:00:00'"
+					deletedAtCondition = "= '0000-00-00 00:00:00'"
+				} else {
+					// 默认使用 IS NULL 作为软删除条件
+					deletedAtCondition = "IS NULL"
 				}
 			}
 		} else if field.Name != "MysqlBaseModel" {
@@ -68,6 +82,12 @@ func (b *MysqlBaseModel) ModelParse(model interface{}, modelType reflect.Type) (
 			fieldName := helper.NewStr(field.Name).ConvertCamelToSnake()
 			fields = append(fields, fieldName)
 		}
+	}
+
+	// 如果没有通过 soft_delete 标签自定义软删除字段，但存在 deleted_at 字段，则使用系统默认的软删除配置
+	if softDeleteField == "" && deletedAtField != "" {
+		softDeleteField = deletedAtField
+		softDeleteCondition = deletedAtCondition
 	}
 
 	return
@@ -83,47 +103,4 @@ func (b *MysqlBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
 func (b *MysqlBaseModel) BeforeUpdate(tx *gorm.DB) (err error) {
 	setFieldIfExist(tx.Statement.Dest, "UpdatedAt", time.Now().Format("2006-01-02 15:04:05"))
 	return
-}
-
-func getColumnFromTag(tag string) string {
-	tags := strings.Split(tag, ";")
-	for _, t := range tags {
-		if strings.HasPrefix(t, "column:") {
-			return strings.TrimPrefix(t, "column:")
-		}
-	}
-	return ""
-}
-
-// getDefaultFromTag 从gorm标签中获取默认值
-func getDefaultFromTag(tag string) string {
-	tags := strings.Split(tag, ";")
-	for _, t := range tags {
-		if strings.HasPrefix(t, "default:") {
-			return strings.TrimPrefix(t, "default:")
-		}
-	}
-	return ""
-}
-
-func setFieldIfExist(model interface{}, fieldName string, value string) {
-	modelValue := reflect.ValueOf(model)
-
-	if modelValue.Kind() == reflect.Ptr {
-		modelValue = modelValue.Elem()
-	}
-
-	switch modelValue.Kind() {
-	case reflect.Struct:
-		field := modelValue.FieldByName(fieldName)
-		if field.IsValid() && field.CanSet() && field.Kind() == reflect.String {
-			field.SetString(value)
-		}
-	case reflect.Map:
-		key := reflect.ValueOf(fieldName)
-		if modelValue.MapIndex(key).IsValid() {
-			modelValue.SetMapIndex(key, reflect.ValueOf(value))
-		}
-	default:
-	}
 }

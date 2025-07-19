@@ -55,8 +55,8 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	deleteQuery := t.DBI.GetDb().Table(t.ModelTableName).
 		Select(fields)
 	// 应用软删除条件
-	if helper.InArray("deleted_at", t.ModelFields) {
-		deleteQuery = deleteQuery.Where("deleted_at " + t.SoftDeleteCondition)
+	if t.SoftDeleteField != "" && helper.InArray(t.SoftDeleteField, t.ModelFields) {
+		deleteQuery = deleteQuery.Where(t.SoftDeleteField + " " + t.SoftDeleteCondition)
 	}
 	// 获取删除条件
 	deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
@@ -92,8 +92,8 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	// 使用GORM的事务方法，自动处理提交和回滚
 	err = t.DBI.GetDb().Transaction(func(tx *gorm.DB) error {
 		// 执行删除
-		if helper.InArray("deleted_at", t.ModelFields) {
-			// 软删除（更新deleted_at字段）
+		if t.SoftDeleteField != "" && helper.InArray(t.SoftDeleteField, t.ModelFields) {
+			// 软删除（更新软删除字段）
 			condition := t.callCustomMethod("DeleteCondition", delArr)[0].(map[string]interface{})
 			deleteQuery := tx.Model(t.Model)
 			deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
@@ -173,8 +173,16 @@ func (t *Trait) DeleteBefore(delArr []map[string]interface{}, delIds []interface
 // 返回值：
 //   - map[string]interface{}: 软删除时要更新的字段和值
 func (t *Trait) DeleteCondition(delArr []map[string]interface{}) map[string]interface{} {
+	// 使用配置的软删除字段名
+	fieldName := t.SoftDeleteField
+	if fieldName == "" {
+		// 理论上不应该到这里，因为调用此方法前已经检查了软删除字段
+		// 但为了代码健壮性，如果确实没有配置，则使用 deleted_at 作为后备
+		fieldName = "deleted_at"
+	}
+
 	return map[string]interface{}{
-		"deleted_at": time.Now().Format("2006-01-02 15:04:05"),
+		fieldName: time.Now().Format("2006-01-02 15:04:05"),
 	}
 }
 

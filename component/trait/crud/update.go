@@ -48,8 +48,8 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 		// 在事务内查询数据，避免并发问题
 		query := tx.Table(t.ModelTableName)
 		// 应用软删除条件
-		if helper.InArray("deleted_at", t.ModelFields) {
-			query = query.Where("deleted_at " + t.SoftDeleteCondition)
+		if t.SoftDeleteField != "" && helper.InArray(t.SoftDeleteField, t.ModelFields) {
+			query = query.Where(t.SoftDeleteField + " " + t.SoftDeleteCondition)
 		}
 		err := query.Where(t.PkId+" = ?", id).First(result).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
