@@ -1,3 +1,8 @@
+---
+globs: component/security/**/*.go
+description: 安全组件开发规范和使用指导
+---
+
 # 安全组件开发规范
 
 ## SM4 加密组件
@@ -29,7 +34,3 @@
 ## 测试要求
 - 每个加密方法、模式、边界情况都需有测试
 - 测试用例应覆盖加解密一致性、错误输入、默认值
-description:
-globs:
-alwaysApply: false
----

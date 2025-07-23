@@ -1,0 +1,466 @@
+# Helper 工具包使用指南
+
+## 组件概述
+Helper 工具包提供了大量常用的工具函数，包括类型转换、文件操作、字符串处理、JSON 操作、SSH 连接、金额处理等功能。
+
+## 核心文件
+- [component/helper/convert.go](mdc:component/helper/convert.go) - 类型转换工具
+- [component/helper/file.go](mdc:component/helper/file.go) - 文件操作工具
+- [component/helper/string.go](mdc:component/helper/string.go) - 字符串处理工具
+- [component/helper/json.go](mdc:component/helper/json.go) - JSON 处理工具
+- [component/helper/money.go](mdc:component/helper/money.go) - 金额处理工具
+- [component/helper/ssh.go](mdc:component/helper/ssh.go) - SSH 工具
+- [component/helper/util.go](mdc:component/helper/util.go) - 通用工具函数
+
+## 类型转换工具 (convert.go)
+
+### 基本使用
+```go
+import "github.com/jcbowen/jcbaseGo/component/helper"
+
+// 创建转换器实例
+convert := helper.Convert{Value: "123"}
+
+// 转换为不同类型
+intVal := convert.ToInt()        // 123
+floatVal := convert.ToFloat64()  // 123.0
+boolVal := convert.ToBool()      // true（非空字符串为 true）
+stringVal := convert.ToString()  // "123"
+```
+
+### 各类型转换示例
+```go
+// 字符串转整数
+stringToInt := helper.Convert{Value: "456"}.ToInt()
+fmt.Println(stringToInt) // 456
+
+// 数字转字符串
+intToString := helper.Convert{Value: 789}.ToString()
+fmt.Println(intToString) // "789"
+
+// 字符串转布尔值
+stringToBool := helper.Convert{Value: "true"}.ToBool()
+fmt.Println(stringToBool) // true
+
+// 接口类型转换
+var data interface{} = "123.45"
+floatFromInterface := helper.Convert{Value: data}.ToFloat64()
+fmt.Println(floatFromInterface) // 123.45
+
+// 批量转换
+values := []interface{}{"123", "456.78", "true", 999}
+for _, val := range values {
+    converter := helper.Convert{Value: val}
+    fmt.Printf("原值: %v, 整数: %d, 浮点: %.2f, 字符串: %s\n",
+        val, converter.ToInt(), converter.ToFloat64(), converter.ToString())
+}
+```
+
+## 文件操作工具 (file.go)
+
+### 基本文件操作
+```go
+// 创建文件操作实例
+fileHelper := helper.NewFile(&helper.File{Path: "/path/to/file.txt"})
+
+// 检查文件是否存在
+if fileHelper.Exists() {
+    fmt.Println("文件存在")
+}
+
+// 读取文件内容
+content, err := fileHelper.ReadFile()
+if err != nil {
+    log.Printf("读取文件失败: %v", err)
+} else {
+    fmt.Printf("文件内容: %s", content)
+}
+
+// 创建文件
+data := []byte("Hello, World!")
+err = fileHelper.CreateFile(data, true) // true 表示自动创建目录
+if err != nil {
+    log.Printf("创建文件失败: %v", err)
+}
+```
+
+### 目录操作
+```go
+// 检查目录是否存在，如果不存在则创建
+dirHelper := helper.NewFile(&helper.File{Path: "/path/to/directory"})
+exists, err := dirHelper.DirExists(true) // true 表示不存在时自动创建
+if err != nil {
+    log.Printf("目录操作失败: %v", err)
+}
+
+// 获取目录名
+dirName := dirHelper.DirName()
+fmt.Printf("目录名: %s", dirName)
+
+// 获取文件名（不含路径）
+fileName := dirHelper.BaseName()
+fmt.Printf("文件名: %s", fileName)
+```
+
+### 高级文件操作
+```go
+// 复制文件
+srcFile := helper.NewFile(&helper.File{Path: "source.txt"})
+destFile := helper.NewFile(&helper.File{Path: "destination.txt"})
+
+// 读取源文件
+srcContent, err := srcFile.ReadFile()
+if err == nil {
+    // 写入目标文件
+    err = destFile.CreateFile(srcContent, true)
+}
+
+// 文件大小获取
+fileInfo := helper.NewFile(&helper.File{Path: "data.txt"})
+if fileInfo.Exists() {
+    // 通过系统调用获取文件信息
+    stat, err := os.Stat(fileInfo.Path)
+    if err == nil {
+        fmt.Printf("文件大小: %d 字节", stat.Size())
+    }
+}
+```
+
+## 字符串处理工具 (string.go)
+
+### 字符串截取和处理
+```go
+// 字符串截取（按字符数）
+text := "Hello, 世界！这是一个测试"
+substr := helper.SubString(text, 0, 10)
+fmt.Printf("截取结果: %s", substr) // "Hello, 世界！"
+
+// 字符串截取（按字节数，适用于英文）
+byteSubstr := helper.SubStringBytes(text, 0, 5)
+fmt.Printf("字节截取: %s", byteSubstr) // "Hello"
+
+// 生成随机字符串
+randomStr := helper.Random(16) // 生成16位随机字符串
+fmt.Printf("随机字符串: %s", randomStr)
+
+// 字符串替换
+original := "Hello World"
+replaced := helper.StrReplace(original, "World", "Go")
+fmt.Printf("替换结果: %s", replaced) // "Hello Go"
+```
+
+### 字符串验证和检查
+```go
+// 检查字符串是否在数组中
+fruits := []string{"apple", "banana", "orange"}
+exists := helper.InArray("banana", fruits)
+fmt.Printf("banana 是否存在: %t", exists) // true
+
+// 字符串长度计算（Unicode 字符）
+text := "Hello 世界"
+length := helper.StringLength(text)
+fmt.Printf("字符串长度: %d", length) // 8
+
+// 检查是否为空字符串
+isEmpty := helper.IsEmpty("")
+fmt.Printf("是否为空: %t", isEmpty) // true
+```
+
+## JSON 处理工具 (json.go)
+
+### JSON 序列化和反序列化
+```go
+// 结构体转 JSON
+type User struct {
+    ID   int    `json:"id"`
+    Name string `json:"name"`
+    Age  int    `json:"age"`
+}
+
+user := User{ID: 1, Name: "张三", Age: 25}
+
+// 转换为 JSON 字符串
+var jsonStr string
+err := helper.Json(user).ToString(&jsonStr)
+if err != nil {
+    log.Printf("JSON 序列化失败: %v", err)
+} else {
+    fmt.Printf("JSON 字符串: %s", jsonStr)
+}
+
+// JSON 字符串转结构体
+jsonData := `{"id":2,"name":"李四","age":30}`
+var newUser User
+err = helper.Json(jsonData).ToStruct(&newUser)
+if err != nil {
+    log.Printf("JSON 反序列化失败: %v", err)
+} else {
+    fmt.Printf("用户信息: %+v", newUser)
+}
+```
+
+### 复杂 JSON 操作
+```go
+// Map 转 JSON
+dataMap := map[string]interface{}{
+    "users": []User{
+        {ID: 1, Name: "张三", Age: 25},
+        {ID: 2, Name: "李四", Age: 30},
+    },
+    "total": 2,
+    "page":  1,
+}
+
+var mapJsonStr string
+err := helper.Json(dataMap).ToString(&mapJsonStr)
+if err == nil {
+    fmt.Printf("Map JSON: %s", mapJsonStr)
+}
+
+// JSON 字符串转 Map
+var resultMap map[string]interface{}
+err = helper.Json(mapJsonStr).ToStruct(&resultMap)
+if err == nil {
+    fmt.Printf("解析结果: %+v", resultMap)
+}
+```
+
+## SSH 工具 (ssh.go)
+
+### SSH 连接和命令执行
+```go
+// SSH 连接配置
+sshConfig := helper.SSHConfig{
+    Host:     "192.168.1.100",
+    Port:     22,
+    Username: "root",
+    Password: "password",
+    // 或使用密钥认证
+    // PrivateKey: privateKeyBytes,
+}
+
+// 创建 SSH 客户端
+sshClient := helper.NewSSH(sshConfig)
+
+// 连接到远程服务器
+err := sshClient.Connect()
+if err != nil {
+    log.Printf("SSH 连接失败: %v", err)
+    return
+}
+defer sshClient.Close()
+
+// 执行远程命令
+output, err := sshClient.Run("ls -la /home")
+if err != nil {
+    log.Printf("命令执行失败: %v", err)
+} else {
+    fmt.Printf("命令输出:\n%s", output)
+}
+```
+
+### 文件传输
+```go
+// 上传文件到远程服务器
+localFile := "/local/path/file.txt"
+remoteFile := "/remote/path/file.txt"
+
+err = sshClient.UploadFile(localFile, remoteFile)
+if err != nil {
+    log.Printf("文件上传失败: %v", err)
+} else {
+    fmt.Println("文件上传成功")
+}
+
+// 从远程服务器下载文件
+err = sshClient.DownloadFile(remoteFile, "/local/download/file.txt")
+if err != nil {
+    log.Printf("文件下载失败: %v", err)
+} else {
+    fmt.Println("文件下载成功")
+}
+```
+
+## 金额处理工具 (money.go)
+
+### 金额计算和格式化
+```go
+// 金额加法（避免浮点数精度问题）
+amount1 := 12.34
+amount2 := 56.78
+sum := helper.MoneyAdd(amount1, amount2)
+fmt.Printf("%.2f + %.2f = %.2f", amount1, amount2, sum)
+
+// 金额减法
+difference := helper.MoneySubtract(sum, amount1)
+fmt.Printf("%.2f - %.2f = %.2f", sum, amount1, difference)
+
+// 金额乘法
+product := helper.MoneyMultiply(amount1, 2.5)
+fmt.Printf("%.2f * 2.5 = %.2f", amount1, product)
+
+// 金额除法
+quotient := helper.MoneyDivide(amount1, 2.0)
+fmt.Printf("%.2f / 2.0 = %.2f", amount1, quotient)
+
+// 金额格式化
+formatted := helper.MoneyFormat(12345.67)
+fmt.Printf("格式化金额: %s", formatted) // "12,345.67"
+
+// 中文大写金额
+chineseAmount := helper.MoneyToChinese(12345.67)
+fmt.Printf("中文大写: %s", chineseAmount) // "壹万贰仟叁佰肆拾伍元陆角柒分"
+```
+
+## 通用工具函数 (util.go)
+
+### 结构体操作
+```go
+// 检查并设置结构体默认值
+type Config struct {
+    Host    string `default:"localhost"`
+    Port    int    `default:"8080"`
+    Timeout int    `default:"30"`
+}
+
+config := &Config{}
+err := helper.CheckAndSetDefault(config)
+if err != nil {
+    log.Printf("设置默认值失败: %v", err)
+} else {
+    fmt.Printf("配置: %+v", config)
+    // 输出: 配置: &{Host:localhost Port:8080 Timeout:30}
+}
+
+// Map 转结构体
+dataMap := map[string]interface{}{
+    "host":    "example.com",
+    "port":    3306,
+    "timeout": 60,
+}
+
+var dbConfig Config
+helper.MapToStruct(dataMap, &dbConfig)
+fmt.Printf("数据库配置: %+v", dbConfig)
+```
+
+### 其他实用工具
+```go
+// 生成唯一 ID
+uniqueID := helper.GenerateUUID()
+fmt.Printf("唯一ID: %s", uniqueID)
+
+// 时间戳转换
+timestamp := time.Now().Unix()
+timeStr := helper.TimestampToString(timestamp, "2006-01-02 15:04:05")
+fmt.Printf("时间字符串: %s", timeStr)
+
+// 获取主机信息（需要 HTTP 请求对象）
+// hostInfo := helper.GetHostInfo(request)
+// fmt.Printf("主机信息: %s", hostInfo)
+
+// MD5 哈希
+text := "Hello, World!"
+md5Hash := helper.MD5(text)
+fmt.Printf("MD5 哈希: %s", md5Hash)
+
+// SHA256 哈希
+sha256Hash := helper.SHA256(text)
+fmt.Printf("SHA256 哈希: %s", sha256Hash)
+```
+
+## 最佳实践
+
+### 错误处理
+```go
+// 始终检查错误返回值
+fileHelper := helper.NewFile(&helper.File{Path: "config.json"})
+content, err := fileHelper.ReadFile()
+if err != nil {
+    log.Printf("读取配置文件失败: %v", err)
+    // 使用默认配置或退出程序
+    return
+}
+
+// 处理文件内容...
+```
+
+### 性能优化
+```go
+// 对于频繁的类型转换，考虑缓存转换器
+converter := helper.Convert{Value: someValue}
+intVal := converter.ToInt()
+strVal := converter.ToString() // 复用转换器实例
+
+// 批量文件操作时，考虑并发处理
+files := []string{"file1.txt", "file2.txt", "file3.txt"}
+var wg sync.WaitGroup
+
+for _, filename := range files {
+    wg.Add(1)
+    go func(file string) {
+        defer wg.Done()
+        
+        fileHelper := helper.NewFile(&helper.File{Path: file})
+        if fileHelper.Exists() {
+            content, _ := fileHelper.ReadFile()
+            // 处理文件内容
+            fmt.Printf("处理文件: %s, 大小: %d\n", file, len(content))
+        }
+    }(filename)
+}
+
+wg.Wait()
+```
+
+### 安全注意事项
+- SSH 连接使用密钥认证而非密码认证
+- 文件操作前验证路径，防止路径遍历攻击
+- JSON 处理时注意数据大小限制
+- 金额计算使用专门的金额函数避免精度问题
+
+## 扩展和自定义
+
+### 自定义类型转换
+```go
+// 扩展转换器支持自定义类型
+type CustomConverter struct {
+    helper.Convert
+}
+
+func (c *CustomConverter) ToCustomType() CustomType {
+    // 实现自定义类型转换逻辑
+    return CustomType{Value: c.ToString()}
+}
+```
+
+### 自定义文件操作
+```go
+// 扩展文件操作功能
+type EnhancedFile struct {
+    *helper.File
+}
+
+func (ef *EnhancedFile) ReadJSON(v interface{}) error {
+    content, err := ef.ReadFile()
+    if err != nil {
+        return err
+    }
+    
+    return helper.Json(string(content)).ToStruct(v)
+}
+
+func (ef *EnhancedFile) WriteJSON(v interface{}) error {
+    var jsonStr string
+    err := helper.Json(v).ToString(&jsonStr)
+    if err != nil {
+        return err
+    }
+    
+    return ef.CreateFile([]byte(jsonStr), true)
+}
+```
+description:
+globs:
+alwaysApply: false
+---

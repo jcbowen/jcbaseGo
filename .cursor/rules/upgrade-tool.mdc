@@ -1,0 +1,427 @@
+# 升级工具组件使用规范
+
+## 组件概述
+升级工具组件提供了项目代码的自动升级功能，支持从 Git 远程仓库拉取最新代码并更新本地项目。
+
+## 核心文件
+- [component/upgrade/main.go](mdc:component/upgrade/main.go) - 升级工具组件主文件
+
+## 基本使用方式
+
+### 初始化升级工具
+```go
+import "github.com/jcbowen/jcbaseGo/component/upgrade"
+
+// 配置仓库信息
+repoConfig := jcbaseGo.RepositoryStruct{
+    Dir:        "./project/app/",                                    // 本地仓库目录
+    Branch:     "master",                                            // 远程分支
+    RemoteName: "origin",                                            // 远程仓库名称
+    RemoteURL:  "git@github.com:jcbowen/jcbaseGo.git",              // 远程仓库地址
+}
+
+// 创建升级上下文
+upgradeContext := &upgrade.Context{
+    Type: "default", // 升级类型：default 或 hard
+    Conf: repoConfig,
+}
+
+// 初始化升级工具
+upgrader := upgrade.New(upgradeContext)
+```
+
+### 默认升级模式
+```go
+// 使用默认升级模式（推荐）
+// 会尝试保留本地修改，通过 git pull 更新
+upgrader.Default().Do()
+```
+
+### 暴力升级模式
+```go
+// 使用暴力升级模式（慎用）
+// 会丢弃所有本地修改，强制同步远程代码
+upgrader.Hard().Do()
+```
+
+### 带回调的升级
+```go
+// 升级完成后执行回调函数
+upgrader.Default().Do(func() {
+    fmt.Println("升级完成，正在重启服务...")
+    // 可以在这里执行重启、通知等操作
+})
+```
+
+## 升级模式详解
+
+### 默认升级（Default）
+默认升级模式会：
+1. 检查本地是否存在 Git 仓库
+2. 如果不存在，克隆远程仓库
+3. 如果存在，执行 `git pull` 更新代码
+4. 保留本地的配置文件和数据
+
+```go
+// 默认升级示例
+func defaultUpgrade() {
+    config := jcbaseGo.RepositoryStruct{
+        Dir:        "./app/",
+        Branch:     "main",
+        RemoteName: "origin",
+        RemoteURL:  "https://github.com/username/project.git",
+    }
+    
+    upgradeCtx := &upgrade.Context{
+        Type: "default",
+        Conf: config,
+    }
+    
+    upgrader := upgrade.New(upgradeCtx)
+    upgrader.Default().Do(func() {
+        log.Println("默认升级完成")
+    })
+}
+```
+
+### 暴力升级（Hard）
+暴力升级模式会：
+1. 删除本地项目目录
+2. 重新克隆远程仓库
+3. **注意：会丢失所有本地修改**
+
+```go
+// 暴力升级示例（谨慎使用）
+func hardUpgrade() {
+    config := jcbaseGo.RepositoryStruct{
+        Dir:        "./app/",
+        Branch:     "main", 
+        RemoteName: "origin",
+        RemoteURL:  "https://github.com/username/project.git",
+    }
+    
+    upgradeCtx := &upgrade.Context{
+        Type: "hard",
+        Conf: config,
+    }
+    
+    upgrader := upgrade.New(upgradeCtx)
+    
+    // 确认用户意图
+    fmt.Print("警告：暴力升级会丢失所有本地修改，确定继续吗？(y/N): ")
+    var confirm string
+    fmt.Scanln(&confirm)
+    
+    if confirm == "y" || confirm == "Y" {
+        upgrader.Hard().Do(func() {
+            log.Println("暴力升级完成")
+        })
+    } else {
+        log.Println("升级已取消")
+    }
+}
+```
+
+## 高级功能
+
+### 升级前预检查
+```go
+// 升级前检查函数
+func preUpgradeCheck(config jcbaseGo.RepositoryStruct) error {
+    // 检查网络连接
+    if !isNetworkAvailable() {
+        return fmt.Errorf("网络连接不可用")
+    }
+    
+    // 检查磁盘空间
+    if !hasSufficientDiskSpace(config.Dir) {
+        return fmt.Errorf("磁盘空间不足")
+    }
+    
+    // 检查权限
+    if !hasWritePermission(config.Dir) {
+        return fmt.Errorf("目录没有写入权限")
+    }
+    
+    return nil
+}
+
+// 使用预检查的升级
+func upgradeWithCheck() {
+    config := jcbaseGo.RepositoryStruct{
+        Dir:        "./app/",
+        Branch:     "main",
+        RemoteName: "origin", 
+        RemoteURL:  "https://github.com/username/project.git",
+    }
+    
+    // 执行预检查
+    if err := preUpgradeCheck(config); err != nil {
+        log.Printf("升级预检查失败: %v", err)
+        return
+    }
+    
+    // 执行升级
+    upgradeCtx := &upgrade.Context{
+        Type: "default",
+        Conf: config,
+    }
+    
+    upgrader := upgrade.New(upgradeCtx)
+    upgrader.Default().Do(func() {
+        log.Println("升级完成")
+    })
+}
+```
+
+### 分支管理
+```go
+// 切换到指定分支进行升级
+func upgradeWithBranch(branch string) {
+    config := jcbaseGo.RepositoryStruct{
+        Dir:        "./app/",
+        Branch:     branch,  // 指定分支
+        RemoteName: "origin",
+        RemoteURL:  "https://github.com/username/project.git",
+    }
+    
+    upgradeCtx := &upgrade.Context{
+        Type: "default",
+        Conf: config,
+    }
+    
+    upgrader := upgrade.New(upgradeCtx)
+    upgrader.Default().Do(func() {
+        log.Printf("升级到分支 %s 完成", branch)
+    })
+}
+
+// 升级到最新的稳定版本
+func upgradeToStable() {
+    upgradeWithBranch("stable")
+}
+
+// 升级到开发版本
+func upgradeToDev() {
+    upgradeWithBranch("develop")
+}
+```
+
+### 备份和回滚
+```go
+// 带备份的升级
+func upgradeWithBackup() {
+    config := jcbaseGo.RepositoryStruct{
+        Dir:        "./app/",
+        Branch:     "main",
+        RemoteName: "origin",
+        RemoteURL:  "https://github.com/username/project.git",
+    }
+    
+    // 创建备份
+    backupDir := fmt.Sprintf("./backup_%s", time.Now().Format("20060102_150405"))
+    if err := copyDirectory(config.Dir, backupDir); err != nil {
+        log.Printf("创建备份失败: %v", err)
+        return
+    }
+    
+    log.Printf("备份已创建: %s", backupDir)
+    
+    // 执行升级
+    upgradeCtx := &upgrade.Context{
+        Type: "default",
+        Conf: config,
+    }
+    
+    upgrader := upgrade.New(upgradeCtx)
+    upgrader.Default().Do(func() {
+        log.Println("升级完成")
+        
+        // 可以在这里验证升级是否成功
+        if !validateUpgrade(config.Dir) {
+            log.Println("升级验证失败，开始回滚...")
+            rollback(config.Dir, backupDir)
+        }
+    })
+}
+
+// 回滚函数
+func rollback(appDir, backupDir string) {
+    if err := os.RemoveAll(appDir); err != nil {
+        log.Printf("删除当前目录失败: %v", err)
+        return
+    }
+    
+    if err := copyDirectory(backupDir, appDir); err != nil {
+        log.Printf("回滚失败: %v", err)
+        return
+    }
+    
+    log.Println("回滚完成")
+}
+```
+
+## 配置和部署
+
+### 环境配置
+```go
+// 不同环境的升级配置
+type UpgradeConfig struct {
+    Development jcbaseGo.RepositoryStruct
+    Staging     jcbaseGo.RepositoryStruct
+    Production  jcbaseGo.RepositoryStruct
+}
+
+func getUpgradeConfig() *UpgradeConfig {
+    return &UpgradeConfig{
+        Development: jcbaseGo.RepositoryStruct{
+            Dir:        "./app/",
+            Branch:     "develop",
+            RemoteName: "origin",
+            RemoteURL:  "https://github.com/username/project.git",
+        },
+        Staging: jcbaseGo.RepositoryStruct{
+            Dir:        "./app/",
+            Branch:     "staging", 
+            RemoteName: "origin",
+            RemoteURL:  "https://github.com/username/project.git",
+        },
+        Production: jcbaseGo.RepositoryStruct{
+            Dir:        "./app/",
+            Branch:     "main",
+            RemoteName: "origin",
+            RemoteURL:  "https://github.com/username/project.git",
+        },
+    }
+}
+
+// 根据环境升级
+func upgradeByEnvironment(env string) {
+    config := getUpgradeConfig()
+    var repoConfig jcbaseGo.RepositoryStruct
+    
+    switch env {
+    case "dev":
+        repoConfig = config.Development
+    case "staging":
+        repoConfig = config.Staging
+    case "prod":
+        repoConfig = config.Production
+    default:
+        log.Printf("未知环境: %s", env)
+        return
+    }
+    
+    upgradeCtx := &upgrade.Context{
+        Type: "default",
+        Conf: repoConfig,
+    }
+    
+    upgrader := upgrade.New(upgradeCtx)
+    upgrader.Default().Do(func() {
+        log.Printf("环境 %s 升级完成", env)
+    })
+}
+```
+
+### 定时升级
+```go
+// 定时升级任务
+func scheduleUpgrade() {
+    ticker := time.NewTicker(24 * time.Hour) // 每24小时检查一次
+    defer ticker.Stop()
+    
+    for {
+        select {
+        case <-ticker.C:
+            log.Println("开始定时升级检查...")
+            
+            // 检查是否有新版本
+            if hasNewVersion() {
+                performScheduledUpgrade()
+            } else {
+                log.Println("没有发现新版本")
+            }
+        }
+    }
+}
+
+func performScheduledUpgrade() {
+    config := jcbaseGo.RepositoryStruct{
+        Dir:        "./app/",
+        Branch:     "main",
+        RemoteName: "origin",
+        RemoteURL:  "https://github.com/username/project.git",
+    }
+    
+    upgradeCtx := &upgrade.Context{
+        Type: "default",
+        Conf: config,
+    }
+    
+    upgrader := upgrade.New(upgradeCtx)
+    upgrader.Default().Do(func() {
+        log.Println("定时升级完成")
+        // 可以发送通知邮件或消息
+        sendUpgradeNotification()
+    })
+}
+```
+
+## 最佳实践
+
+### 安全升级流程
+1. **升级前备份**: 始终在升级前创建数据备份
+2. **分阶段升级**: 先在测试环境验证，再在生产环境升级
+3. **回滚计划**: 准备好快速回滚的方案
+4. **监控升级**: 升级后监控系统状态和性能
+
+### 权限管理
+```go
+// 检查升级权限
+func checkUpgradePermission(user string) bool {
+    // 实现权限检查逻辑
+    adminUsers := []string{"admin", "root", "deployer"}
+    for _, admin := range adminUsers {
+        if user == admin {
+            return true
+        }
+    }
+    return false
+}
+
+// 带权限检查的升级
+func authorizedUpgrade(user string) {
+    if !checkUpgradePermission(user) {
+        log.Printf("用户 %s 没有升级权限", user)
+        return
+    }
+    
+    log.Printf("用户 %s 开始执行升级", user)
+    // 执行升级逻辑...
+}
+```
+
+### 日志和监控
+- 记录详细的升级日志
+- 监控升级过程中的系统资源使用
+- 设置升级失败告警
+- 跟踪升级的成功率和性能指标
+
+## 故障排除
+
+### 常见问题
+1. **Git 认证失败**: 检查 SSH 密钥或访问令牌配置
+2. **权限不足**: 确保应用进程有目录写入权限
+3. **网络连接问题**: 检查防火墙和网络配置
+4. **磁盘空间不足**: 清理无用文件或扩展存储空间
+
+### 调试技巧
+- 启用详细的升级日志
+- 手动执行 Git 命令验证配置
+- 检查文件系统权限和网络连接
+- 在测试环境先验证升级流程
+description:
+globs:
+alwaysApply: false
+---

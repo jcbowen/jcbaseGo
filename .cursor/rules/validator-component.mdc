@@ -1,0 +1,495 @@
+# 数据验证器组件使用规范
+
+## 组件概述
+验证器组件提供了常用的数据验证功能，包括邮箱、手机号、身份证、URL、IP 地址等格式验证。
+
+## 核心文件
+- [component/validator/main.go](mdc:component/validator/main.go) - 验证器组件主文件
+
+## 基本使用方式
+
+### 导入组件
+```go
+import "github.com/jcbowen/jcbaseGo/component/validator"
+```
+
+### 邮箱验证
+```go
+// 验证邮箱格式
+email := "user@example.com"
+if validator.IsEmail(email) {
+    fmt.Println("邮箱格式正确")
+} else {
+    fmt.Println("邮箱格式错误")
+}
+
+// 批量邮箱验证
+emails := []string{
+    "test@example.com",
+    "invalid-email",
+    "user.name@domain.org",
+}
+
+for _, email := range emails {
+    if validator.IsEmail(email) {
+        fmt.Printf("✅ %s: 有效邮箱\n", email)
+    } else {
+        fmt.Printf("❌ %s: 无效邮箱\n", email)
+    }
+}
+```
+
+### 手机号验证
+```go
+// 验证中国大陆手机号
+phone := "13800138000"
+if validator.IsMobile(phone) {
+    fmt.Println("手机号格式正确")
+} else {
+    fmt.Println("手机号格式错误")
+}
+
+// 支持的手机号格式示例
+validPhones := []string{
+    "13800138000", // 移动
+    "15812345678", // 移动
+    "18612345678", // 联通
+    "17712345678", // 电信
+}
+
+for _, phone := range validPhones {
+    isValid := validator.IsMobile(phone)
+    fmt.Printf("手机号 %s: %t\n", phone, isValid)
+}
+```
+
+### 身份证验证
+```go
+// 验证身份证号码（支持15位和18位）
+idCard := "110101199001011234"
+if validator.IsIDCard(idCard) {
+    fmt.Println("身份证号码格式正确")
+} else {
+    fmt.Println("身份证号码格式错误")
+}
+
+// 验证不同格式的身份证
+idCards := []string{
+    "110101199001011234",     // 18位身份证
+    "110101900101123",        // 15位身份证
+    "invalid-id",             // 无效格式
+}
+
+for _, id := range idCards {
+    if validator.IsIDCard(id) {
+        fmt.Printf("✅ %s: 有效身份证\n", id)
+    } else {
+        fmt.Printf("❌ %s: 无效身份证\n", id)
+    }
+}
+```
+
+### URL 验证
+```go
+// 验证 URL 格式
+url := "https://www.example.com"
+if validator.IsURL(url) {
+    fmt.Println("URL 格式正确")
+} else {
+    fmt.Println("URL 格式错误")
+}
+
+// 验证不同类型的 URL
+urls := []string{
+    "https://www.example.com",
+    "http://example.com/path?query=value",
+    "ftp://files.example.com",
+    "invalid-url",
+}
+
+for _, url := range urls {
+    if validator.IsURL(url) {
+        fmt.Printf("✅ %s: 有效 URL\n", url)
+    } else {
+        fmt.Printf("❌ %s: 无效 URL\n", url)
+    }
+}
+```
+
+### IP 地址验证
+```go
+// 验证 IPv4 地址
+ipv4 := "192.168.1.1"
+if validator.IsIPv4(ipv4) {
+    fmt.Println("IPv4 地址格式正确")
+}
+
+// 验证 IPv6 地址
+ipv6 := "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+if validator.IsIPv6(ipv6) {
+    fmt.Println("IPv6 地址格式正确")
+}
+
+// 通用 IP 地址验证（IPv4 或 IPv6）
+ip := "192.168.1.1"
+if validator.IsIP(ip) {
+    fmt.Println("IP 地址格式正确")
+}
+```
+
+## 高级功能
+
+### 自定义验证器
+```go
+// 定义自定义验证器结构体
+type CustomValidator struct {
+    // 可以添加配置选项
+}
+
+// 验证用户名格式（3-20位字母数字下划线）
+func (v *CustomValidator) IsUsername(username string) bool {
+    if len(username) < 3 || len(username) > 20 {
+        return false
+    }
+    
+    for _, char := range username {
+        if !((char >= 'a' && char <= 'z') || 
+             (char >= 'A' && char <= 'Z') || 
+             (char >= '0' && char <= '9') || 
+             char == '_') {
+            return false
+        }
+    }
+    return true
+}
+
+// 验证密码强度
+func (v *CustomValidator) IsStrongPassword(password string) bool {
+    if len(password) < 8 {
+        return false
+    }
+    
+    hasUpper := false
+    hasLower := false
+    hasDigit := false
+    hasSpecial := false
+    
+    for _, char := range password {
+        switch {
+        case char >= 'A' && char <= 'Z':
+            hasUpper = true
+        case char >= 'a' && char <= 'z':
+            hasLower = true
+        case char >= '0' && char <= '9':
+            hasDigit = true
+        case char >= 33 && char <= 126:
+            hasSpecial = true
+        }
+    }
+    
+    return hasUpper && hasLower && hasDigit && hasSpecial
+}
+
+// 使用自定义验证器
+validator := &CustomValidator{}
+
+username := "user_123"
+if validator.IsUsername(username) {
+    fmt.Println("用户名格式正确")
+}
+
+password := "MyPass123!"
+if validator.IsStrongPassword(password) {
+    fmt.Println("密码强度符合要求")
+}
+```
+
+### 批量验证
+```go
+// 定义验证结果结构体
+type ValidationResult struct {
+    Field   string
+    Value   string
+    IsValid bool
+    Message string
+}
+
+// 批量验证函数
+func BatchValidate(data map[string]string) []ValidationResult {
+    var results []ValidationResult
+    
+    for field, value := range data {
+        var isValid bool
+        var message string
+        
+        switch field {
+        case "email":
+            isValid = validator.IsEmail(value)
+            message = "邮箱格式验证"
+        case "mobile":
+            isValid = validator.IsMobile(value)
+            message = "手机号格式验证"
+        case "id_card":
+            isValid = validator.IsIDCard(value)
+            message = "身份证号码验证"
+        case "url":
+            isValid = validator.IsURL(value)
+            message = "URL 格式验证"
+        default:
+            isValid = value != ""
+            message = "非空验证"
+        }
+        
+        results = append(results, ValidationResult{
+            Field:   field,
+            Value:   value,
+            IsValid: isValid,
+            Message: message,
+        })
+    }
+    
+    return results
+}
+
+// 使用批量验证
+data := map[string]string{
+    "email":   "user@example.com",
+    "mobile":  "13800138000",
+    "id_card": "110101199001011234",
+    "url":     "https://www.example.com",
+}
+
+results := BatchValidate(data)
+for _, result := range results {
+    status := "✅"
+    if !result.IsValid {
+        status = "❌"
+    }
+    fmt.Printf("%s %s (%s): %s\n", status, result.Field, result.Message, result.Value)
+}
+```
+
+### 表单验证集成
+```go
+// 与 Gin 框架集成的表单验证
+func validateUserForm(c *gin.Context) {
+    type UserForm struct {
+        Email    string `json:"email" binding:"required"`
+        Mobile   string `json:"mobile" binding:"required"`
+        Username string `json:"username" binding:"required"`
+    }
+    
+    var form UserForm
+    if err := c.ShouldBindJSON(&form); err != nil {
+        c.JSON(400, gin.H{"error": "表单数据格式错误"})
+        return
+    }
+    
+    // 执行自定义验证
+    errors := make(map[string]string)
+    
+    if !validator.IsEmail(form.Email) {
+        errors["email"] = "邮箱格式不正确"
+    }
+    
+    if !validator.IsMobile(form.Mobile) {
+        errors["mobile"] = "手机号格式不正确"
+    }
+    
+    customValidator := &CustomValidator{}
+    if !customValidator.IsUsername(form.Username) {
+        errors["username"] = "用户名格式不正确（3-20位字母数字下划线）"
+    }
+    
+    if len(errors) > 0 {
+        c.JSON(400, gin.H{
+            "success": false,
+            "errors":  errors,
+        })
+        return
+    }
+    
+    c.JSON(200, gin.H{
+        "success": true,
+        "message": "表单验证通过",
+    })
+}
+```
+
+## 最佳实践
+
+### 验证规则配置
+```go
+// 定义验证规则配置
+type ValidationRules struct {
+    Email struct {
+        Required bool
+        Message  string
+    }
+    Mobile struct {
+        Required bool
+        Message  string
+    }
+    IDCard struct {
+        Required bool
+        Message  string
+    }
+}
+
+// 使用配置化验证
+func ValidateWithRules(data map[string]string, rules ValidationRules) map[string]string {
+    errors := make(map[string]string)
+    
+    // 邮箱验证
+    if email, exists := data["email"]; exists {
+        if rules.Email.Required && email == "" {
+            errors["email"] = "邮箱不能为空"
+        } else if email != "" && !validator.IsEmail(email) {
+            errors["email"] = rules.Email.Message
+        }
+    } else if rules.Email.Required {
+        errors["email"] = "邮箱不能为空"
+    }
+    
+    // 手机号验证
+    if mobile, exists := data["mobile"]; exists {
+        if rules.Mobile.Required && mobile == "" {
+            errors["mobile"] = "手机号不能为空"
+        } else if mobile != "" && !validator.IsMobile(mobile) {
+            errors["mobile"] = rules.Mobile.Message
+        }
+    } else if rules.Mobile.Required {
+        errors["mobile"] = "手机号不能为空"
+    }
+    
+    return errors
+}
+```
+
+### 国际化支持
+```go
+// 多语言错误消息
+type ValidationMessages struct {
+    Lang string
+    Messages map[string]string
+}
+
+func NewValidationMessages(lang string) *ValidationMessages {
+    messages := make(map[string]string)
+    
+    switch lang {
+    case "en":
+        messages["email_invalid"] = "Invalid email format"
+        messages["mobile_invalid"] = "Invalid mobile number format"
+        messages["id_card_invalid"] = "Invalid ID card number"
+    case "zh":
+        messages["email_invalid"] = "邮箱格式不正确"
+        messages["mobile_invalid"] = "手机号格式不正确"
+        messages["id_card_invalid"] = "身份证号码格式不正确"
+    default:
+        messages["email_invalid"] = "邮箱格式不正确"
+        messages["mobile_invalid"] = "手机号格式不正确"
+        messages["id_card_invalid"] = "身份证号码格式不正确"
+    }
+    
+    return &ValidationMessages{
+        Lang:     lang,
+        Messages: messages,
+    }
+}
+
+func (vm *ValidationMessages) GetMessage(key string) string {
+    if message, exists := vm.Messages[key]; exists {
+        return message
+    }
+    return "验证失败"
+}
+```
+
+### 性能优化
+- 对于频繁验证的场景，考虑缓存正则表达式编译结果
+- 批量验证时使用并发处理提高效率
+- 避免在验证函数中进行复杂的字符串操作
+
+### 安全注意事项
+- 服务端验证不能替代客户端验证，但客户端验证不能替代服务端验证
+- 对于敏感数据（如身份证），建议额外进行校验和验证
+- 验证失败的错误信息不应暴露内部实现细节
+
+## 扩展验证器
+
+### 银行卡号验证
+```go
+// 银行卡号验证（基于 Luhn 算法）
+func IsBankCard(cardNumber string) bool {
+    if len(cardNumber) < 13 || len(cardNumber) > 19 {
+        return false
+    }
+    
+    // 移除空格和连字符
+    cardNumber = strings.ReplaceAll(cardNumber, " ", "")
+    cardNumber = strings.ReplaceAll(cardNumber, "-", "")
+    
+    // 检查是否全为数字
+    for _, char := range cardNumber {
+        if char < '0' || char > '9' {
+            return false
+        }
+    }
+    
+    // Luhn 算法验证
+    sum := 0
+    alternate := false
+    
+    for i := len(cardNumber) - 1; i >= 0; i-- {
+        n := int(cardNumber[i] - '0')
+        
+        if alternate {
+            n *= 2
+            if n > 9 {
+                n = (n % 10) + 1
+            }
+        }
+        
+        sum += n
+        alternate = !alternate
+    }
+    
+    return sum%10 == 0
+}
+```
+
+### 中文姓名验证
+```go
+// 中文姓名验证
+func IsChineseName(name string) bool {
+    if len(name) < 2 || len(name) > 10 {
+        return false
+    }
+    
+    for _, char := range name {
+        // 检查是否为中文字符
+        if !((char >= 0x4e00 && char <= 0x9fff) || char == '·') {
+            return false
+        }
+    }
+    
+    return true
+}
+```
+
+## 故障排除
+
+### 常见问题
+1. **正则表达式性能**: 复杂的正则可能影响性能，考虑优化或缓存
+2. **字符编码问题**: 确保输入数据的字符编码正确
+3. **验证规则过于严格**: 根据实际需求调整验证规则的严格程度
+
+### 调试技巧
+- 使用单元测试验证各种边界情况
+- 记录验证失败的具体原因和输入数据
+- 提供详细的错误消息帮助用户修正输入
+description:
+globs:
+alwaysApply: false
+---

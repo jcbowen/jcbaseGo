@@ -1,0 +1,302 @@
+# 邮件发送组件使用规范
+
+## 组件概述
+邮件组件提供了基于 SMTP 协议的邮件发送功能，支持 HTML 邮件、附件、TLS/SSL 安全连接等特性。
+
+## 核心文件
+- [component/mailer/mailer.go](mdc:component/mailer/mailer.go) - 邮件发送组件主文件
+
+## 基本使用方式
+
+### 初始化邮件服务
+```go
+import "github.com/jcbowen/jcbaseGo/component/mailer"
+
+// 创建邮件实例
+mailer := mailer.Mailer{
+    Host:     "smtp.example.com",           // SMTP 服务器地址
+    Port:     587,                          // SMTP 端口
+    Username: "your-email@example.com",     // 发送邮箱
+    Password: "your-password",              // 邮箱密码或应用密码
+    From:     "your-email@example.com",     // 发件人邮箱
+    FromName: "系统通知",                    // 发件人名称
+    TLS:      true,                         // 是否启用 TLS
+}
+```
+
+### 发送简单文本邮件
+```go
+err := mailer.Send("recipient@example.com", "邮件主题", "邮件内容")
+if err != nil {
+    log.Printf("邮件发送失败: %v", err)
+    return
+}
+```
+
+### 发送 HTML 邮件
+```go
+htmlContent := `
+<html>
+<body>
+    <h1>欢迎注册</h1>
+    <p>感谢您注册我们的服务！</p>
+    <a href="https://example.com/activate">点击激活账户</a>
+</body>
+</html>
+`
+
+err := mailer.SendHTML("recipient@example.com", "账户激活", htmlContent)
+if err != nil {
+    log.Printf("HTML 邮件发送失败: %v", err)
+    return
+}
+```
+
+### 发送带附件的邮件
+```go
+// 准备附件
+attachments := []mailer.Attachment{
+    {
+        Name:     "document.pdf",
+        Content:  pdfBytes,        // 文件内容（[]byte）
+        MimeType: "application/pdf",
+    },
+    {
+        Name:     "image.jpg",
+        Content:  imageBytes,
+        MimeType: "image/jpeg",
+    },
+}
+
+err := mailer.SendWithAttachments(
+    "recipient@example.com",
+    "带附件的邮件",
+    "请查看附件中的文档。",
+    attachments,
+)
+if err != nil {
+    log.Printf("带附件邮件发送失败: %v", err)
+    return
+}
+```
+
+### 批量发送邮件
+```go
+recipients := []string{
+    "user1@example.com",
+    "user2@example.com",
+    "user3@example.com",
+}
+
+for _, recipient := range recipients {
+    err := mailer.Send(recipient, "批量通知", "这是一封批量发送的邮件")
+    if err != nil {
+        log.Printf("发送给 %s 失败: %v", recipient, err)
+        continue
+    }
+    log.Printf("邮件成功发送给: %s", recipient)
+    
+    // 添加发送间隔，避免被标记为垃圾邮件
+    time.Sleep(100 * time.Millisecond)
+}
+```
+
+## 常见 SMTP 服务配置
+
+### Gmail
+```go
+mailer := mailer.Mailer{
+    Host:     "smtp.gmail.com",
+    Port:     587,
+    Username: "your-gmail@gmail.com",
+    Password: "your-app-password", // 使用应用专用密码
+    TLS:      true,
+}
+```
+
+### QQ 邮箱
+```go
+mailer := mailer.Mailer{
+    Host:     "smtp.qq.com",
+    Port:     587,
+    Username: "your-qq@qq.com",
+    Password: "your-authorization-code", // 使用授权码
+    TLS:      true,
+}
+```
+
+### 163 邮箱
+```go
+mailer := mailer.Mailer{
+    Host:     "smtp.163.com",
+    Port:     25, // 或 465（SSL）
+    Username: "your-email@163.com",
+    Password: "your-authorization-code", // 使用授权码
+    TLS:      false, // 25 端口不使用 TLS，465 端口使用 SSL
+}
+```
+
+### 企业邮箱
+```go
+mailer := mailer.Mailer{
+    Host:     "smtp.exmail.qq.com", // 腾讯企业邮箱
+    Port:     587,
+    Username: "your-email@company.com",
+    Password: "your-password",
+    TLS:      true,
+}
+```
+
+## 高级功能
+
+### 邮件模板系统
+```go
+// 定义邮件模板
+type WelcomeTemplate struct {
+    UserName    string
+    CompanyName string
+    ActivateURL string
+}
+
+func (t WelcomeTemplate) Render() string {
+    return fmt.Sprintf(`
+    <html>
+    <body>
+        <h1>欢迎 %s！</h1>
+        <p>感谢您注册 %s 的服务。</p>
+        <p><a href="%s">点击此处激活您的账户</a></p>
+    </body>
+    </html>
+    `, t.UserName, t.CompanyName, t.ActivateURL)
+}
+
+// 使用模板发送邮件
+template := WelcomeTemplate{
+    UserName:    "张三",
+    CompanyName: "我的公司",
+    ActivateURL: "https://example.com/activate?token=abc123",
+}
+
+err := mailer.SendHTML("user@example.com", "欢迎注册", template.Render())
+```
+
+### 异步邮件发送
+```go
+type MailJob struct {
+    To      string
+    Subject string
+    Content string
+}
+
+// 邮件队列
+mailQueue := make(chan MailJob, 100)
+
+// 启动邮件发送工作协程
+go func() {
+    for job := range mailQueue {
+        err := mailer.Send(job.To, job.Subject, job.Content)
+        if err != nil {
+            log.Printf("邮件发送失败: %v", err)
+            // 可以实现重试机制
+        }
+    }
+}()
+
+// 将邮件加入队列
+mailQueue <- MailJob{
+    To:      "user@example.com",
+    Subject: "异步邮件",
+    Content: "这是一封异步发送的邮件",
+}
+```
+
+### 邮件发送状态跟踪
+```go
+type MailTracker struct {
+    mailer *mailer.Mailer
+    logger *log.Logger
+}
+
+func (t *MailTracker) SendWithTracking(to, subject, content string) error {
+    startTime := time.Now()
+    
+    err := t.mailer.Send(to, subject, content)
+    
+    duration := time.Since(startTime)
+    
+    if err != nil {
+        t.logger.Printf("邮件发送失败 - 收件人: %s, 耗时: %v, 错误: %v", 
+            to, duration, err)
+        return err
+    }
+    
+    t.logger.Printf("邮件发送成功 - 收件人: %s, 耗时: %v", to, duration)
+    return nil
+}
+```
+
+## 最佳实践
+
+### 安全配置
+- 使用应用专用密码而非邮箱登录密码
+- 启用 TLS/SSL 加密传输
+- 定期更换邮箱密码和应用密码
+- 避免在代码中硬编码邮箱密码
+
+### 发送策略
+- 控制发送频率，避免被标记为垃圾邮件
+- 使用邮件队列进行异步发送
+- 实现发送失败重试机制
+- 监控邮件发送成功率
+
+### 内容优化
+- 使用合适的邮件主题，避免敏感词汇
+- HTML 邮件要兼容不同邮件客户端
+- 提供纯文本版本作为备选
+- 添加退订链接（批量邮件）
+
+### 错误处理
+```go
+func sendMailWithRetry(mailer *mailer.Mailer, to, subject, content string, maxRetries int) error {
+    var lastErr error
+    
+    for i := 0; i < maxRetries; i++ {
+        err := mailer.Send(to, subject, content)
+        if err == nil {
+            return nil // 成功发送
+        }
+        
+        lastErr = err
+        log.Printf("邮件发送失败，第 %d 次重试: %v", i+1, err)
+        
+        // 指数退避
+        time.Sleep(time.Duration(math.Pow(2, float64(i))) * time.Second)
+    }
+    
+    return fmt.Errorf("邮件发送失败，已重试 %d 次: %v", maxRetries, lastErr)
+}
+```
+
+## 故障排除
+
+### 常见问题
+1. **认证失败**: 检查用户名、密码和 SMTP 服务器配置
+2. **连接超时**: 检查网络连接和防火墙设置
+3. **TLS 错误**: 确认 SMTP 服务器是否支持 TLS
+4. **邮件被拒**: 检查发件人域名和 SPF 记录
+
+### 调试技巧
+- 启用详细日志记录
+- 使用邮件测试工具验证 SMTP 配置
+- 检查邮件服务商的发送限制
+- 监控邮件发送队列状态
+
+### 性能优化
+- 使用连接池减少连接开销
+- 批量发送时控制并发数量
+- 缓存邮件模板渲染结果
+- 异步处理邮件发送任务
+description:
+globs:
+alwaysApply: false
+---

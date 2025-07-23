@@ -1,0 +1,537 @@
+# TLS 配置组件使用规范
+
+## 组件概述
+TLS 配置组件提供了安全的 TLS/SSL 配置管理功能，用于 HTTPS 服务器、客户端连接和证书管理。
+
+## 核心文件
+- [component/tlsconfig/tlsconfig.go](mdc:component/tlsconfig/tlsconfig.go) - TLS 配置组件主文件
+
+## 基本使用方式
+
+### 服务器 TLS 配置
+```go
+import "github.com/jcbowen/jcbaseGo/component/tlsconfig"
+
+// 基本 HTTPS 服务器配置
+func setupHTTPSServer() {
+    // 创建 TLS 配置
+    tlsConf := &tls.Config{
+        MinVersion: tls.VersionTLS12, // 最低支持 TLS 1.2
+        MaxVersion: tls.VersionTLS13, // 最高支持 TLS 1.3
+    }
+    
+    // 设置加密套件（仅 TLS 1.2）
+    tlsConf.CipherSuites = []uint16{
+        tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+        tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+        tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+    }
+    
+    // 设置椭圆曲线
+    tlsConf.CurvePreferences = []tls.CurveID{
+        tls.CurveP521,
+        tls.CurveP384,
+        tls.CurveP256,
+    }
+    
+    // 启用会话票据
+    tlsConf.SessionTicketsDisabled = false
+    
+    // 创建 HTTPS 服务器
+    server := &http.Server{
+        Addr:      ":443",
+        TLSConfig: tlsConf,
+        Handler:   yourHandler,
+    }
+    
+    // 启动服务器
+    log.Fatal(server.ListenAndServeTLS("cert.pem", "key.pem"))
+}
+```
+
+### 客户端 TLS 配置
+```go
+// 安全的 HTTPS 客户端配置
+func createSecureHTTPClient() *http.Client {
+    tlsConf := &tls.Config{
+        MinVersion:         tls.VersionTLS12,
+        InsecureSkipVerify: false, // 生产环境必须为 false
+        ServerName:         "example.com",
+    }
+    
+    transport := &http.Transport{
+        TLSClientConfig: tlsConf,
+        DialTimeout:     10 * time.Second,
+        TLSHandshakeTimeout: 10 * time.Second,
+    }
+    
+    return &http.Client{
+        Transport: transport,
+        Timeout:   30 * time.Second,
+    }
+}
+
+// 使用客户端
+func makeSecureRequest() {
+    client := createSecureHTTPClient()
+    
+    resp, err := client.Get("https://api.example.com/data")
+    if err != nil {
+        log.Printf("请求失败: %v", err)
+        return
+    }
+    defer resp.Body.Close()
+    
+    // 处理响应...
+}
+```
+
+## 证书管理
+
+### 自签名证书生成
+```go
+// 生成自签名证书（仅用于开发测试）
+func generateSelfSignedCert() error {
+    // 生成私钥
+    priv, err := rsa.GenerateKey(rand.Reader, 2048)
+    if err != nil {
+        return fmt.Errorf("生成私钥失败: %v", err)
+    }
+    
+    // 创建证书模板
+    template := x509.Certificate{
+        SerialNumber: big.NewInt(1),
+        Subject: pkix.Name{
+            Organization:  []string{"Test Company"},
+            Country:       []string{"CN"},
+            Province:      []string{"Beijing"},
+            Locality:      []string{"Beijing"},
+            StreetAddress: []string{""},
+            PostalCode:    []string{""},
+        },
+        NotBefore:    time.Now(),
+        NotAfter:     time.Now().Add(365 * 24 * time.Hour), // 1年有效期
+        KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+        ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+        IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
+        DNSNames:     []string{"localhost"},
+    }
+    
+    // 生成证书
+    certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+    if err != nil {
+        return fmt.Errorf("创建证书失败: %v", err)
+    }
+    
+    // 保存证书文件
+    certOut, err := os.Create("cert.pem")
+    if err != nil {
+        return fmt.Errorf("创建证书文件失败: %v", err)
+    }
+    defer certOut.Close()
+    
+    err = pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+    if err != nil {
+        return fmt.Errorf("编码证书失败: %v", err)
+    }
+    
+    // 保存私钥文件
+    keyOut, err := os.Create("key.pem")
+    if err != nil {
+        return fmt.Errorf("创建私钥文件失败: %v", err)
+    }
+    defer keyOut.Close()
+    
+    privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+    if err != nil {
+        return fmt.Errorf("序列化私钥失败: %v", err)
+    }
+    
+    err = pem.Encode(keyOut, &pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
+    if err != nil {
+        return fmt.Errorf("编码私钥失败: %v", err)
+    }
+    
+    fmt.Println("自签名证书生成成功")
+    return nil
+}
+```
+
+### 证书验证
+```go
+// 验证证书链
+func verifyCertificate(certFile string) error {
+    // 读取证书文件
+    certPEM, err := ioutil.ReadFile(certFile)
+    if err != nil {
+        return fmt.Errorf("读取证书文件失败: %v", err)
+    }
+    
+    // 解析证书
+    block, _ := pem.Decode(certPEM)
+    if block == nil {
+        return fmt.Errorf("无法解析 PEM 格式证书")
+    }
+    
+    cert, err := x509.ParseCertificate(block.Bytes)
+    if err != nil {
+        return fmt.Errorf("解析证书失败: %v", err)
+    }
+    
+    // 检查证书有效期
+    now := time.Now()
+    if now.Before(cert.NotBefore) {
+        return fmt.Errorf("证书尚未生效，生效时间: %v", cert.NotBefore)
+    }
+    
+    if now.After(cert.NotAfter) {
+        return fmt.Errorf("证书已过期，过期时间: %v", cert.NotAfter)
+    }
+    
+    // 验证证书链（针对 CA 签发的证书）
+    roots := x509.NewCertPool()
+    // 加载 CA 根证书...
+    
+    opts := x509.VerifyOptions{
+        Roots: roots,
+    }
+    
+    _, err = cert.Verify(opts)
+    if err != nil {
+        return fmt.Errorf("证书验证失败: %v", err)
+    }
+    
+    fmt.Printf("证书验证成功\n")
+    fmt.Printf("颁发给: %s\n", cert.Subject)
+    fmt.Printf("颁发者: %s\n", cert.Issuer)
+    fmt.Printf("有效期: %v 至 %v\n", cert.NotBefore, cert.NotAfter)
+    
+    return nil
+}
+```
+
+## 高级 TLS 配置
+
+### 双向认证（mTLS）
+```go
+// 服务器端双向认证配置
+func setupMTLSServer() {
+    // 加载服务器证书
+    serverCert, err := tls.LoadX509KeyPair("server-cert.pem", "server-key.pem")
+    if err != nil {
+        log.Fatalf("加载服务器证书失败: %v", err)
+    }
+    
+    // 加载客户端 CA 证书
+    clientCACert, err := ioutil.ReadFile("client-ca.pem")
+    if err != nil {
+        log.Fatalf("读取客户端 CA 证书失败: %v", err)
+    }
+    
+    clientCACertPool := x509.NewCertPool()
+    clientCACertPool.AppendCertsFromPEM(clientCACert)
+    
+    // 配置双向认证
+    tlsConf := &tls.Config{
+        Certificates: []tls.Certificate{serverCert},
+        ClientAuth:   tls.RequireAndVerifyClientCert,
+        ClientCAs:    clientCACertPool,
+        MinVersion:   tls.VersionTLS12,
+    }
+    
+    server := &http.Server{
+        Addr:      ":443",
+        TLSConfig: tlsConf,
+        Handler:   yourHandler,
+    }
+    
+    log.Fatal(server.ListenAndServeTLS("", ""))
+}
+
+// 客户端双向认证配置
+func createMTLSClient() *http.Client {
+    // 加载客户端证书
+    clientCert, err := tls.LoadX509KeyPair("client-cert.pem", "client-key.pem")
+    if err != nil {
+        log.Fatalf("加载客户端证书失败: %v", err)
+    }
+    
+    // 加载服务器 CA 证书
+    serverCACert, err := ioutil.ReadFile("server-ca.pem")
+    if err != nil {
+        log.Fatalf("读取服务器 CA 证书失败: %v", err)
+    }
+    
+    serverCACertPool := x509.NewCertPool()
+    serverCACertPool.AppendCertsFromPEM(serverCACert)
+    
+    tlsConf := &tls.Config{
+        Certificates: []tls.Certificate{clientCert},
+        RootCAs:      serverCACertPool,
+        MinVersion:   tls.VersionTLS12,
+    }
+    
+    transport := &http.Transport{
+        TLSClientConfig: tlsConf,
+    }
+    
+    return &http.Client{Transport: transport}
+}
+```
+
+### 动态证书加载
+```go
+// 动态证书管理器
+type CertificateManager struct {
+    certFile string
+    keyFile  string
+    cert     *tls.Certificate
+    mutex    sync.RWMutex
+}
+
+func NewCertificateManager(certFile, keyFile string) *CertificateManager {
+    cm := &CertificateManager{
+        certFile: certFile,
+        keyFile:  keyFile,
+    }
+    
+    // 初始加载证书
+    cm.ReloadCertificate()
+    
+    // 启动证书监控
+    go cm.watchCertificate()
+    
+    return cm
+}
+
+func (cm *CertificateManager) ReloadCertificate() error {
+    cert, err := tls.LoadX509KeyPair(cm.certFile, cm.keyFile)
+    if err != nil {
+        return fmt.Errorf("加载证书失败: %v", err)
+    }
+    
+    cm.mutex.Lock()
+    cm.cert = &cert
+    cm.mutex.Unlock()
+    
+    log.Println("证书重新加载成功")
+    return nil
+}
+
+func (cm *CertificateManager) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+    cm.mutex.RLock()
+    defer cm.mutex.RUnlock()
+    
+    if cm.cert == nil {
+        return nil, fmt.Errorf("证书未加载")
+    }
+    
+    return cm.cert, nil
+}
+
+func (cm *CertificateManager) watchCertificate() {
+    watcher, err := fsnotify.NewWatcher()
+    if err != nil {
+        log.Printf("创建文件监控器失败: %v", err)
+        return
+    }
+    defer watcher.Close()
+    
+    err = watcher.Add(cm.certFile)
+    if err != nil {
+        log.Printf("监控证书文件失败: %v", err)
+        return
+    }
+    
+    for {
+        select {
+        case event := <-watcher.Events:
+            if event.Op&fsnotify.Write == fsnotify.Write {
+                log.Printf("检测到证书文件变更: %s", event.Name)
+                time.Sleep(1 * time.Second) // 等待文件写入完成
+                cm.ReloadCertificate()
+            }
+        case err := <-watcher.Errors:
+            log.Printf("文件监控错误: %v", err)
+        }
+    }
+}
+
+// 使用动态证书管理器
+func setupDynamicTLSServer() {
+    certManager := NewCertificateManager("cert.pem", "key.pem")
+    
+    tlsConf := &tls.Config{
+        GetCertificate: certManager.GetCertificate,
+        MinVersion:     tls.VersionTLS12,
+    }
+    
+    server := &http.Server{
+        Addr:      ":443",
+        TLSConfig: tlsConf,
+        Handler:   yourHandler,
+    }
+    
+    log.Fatal(server.ListenAndServeTLS("", ""))
+}
+```
+
+## 安全最佳实践
+
+### TLS 版本和加密套件
+```go
+// 生产环境推荐的 TLS 配置
+func createSecureTLSConfig() *tls.Config {
+    return &tls.Config{
+        // 仅支持 TLS 1.2 和 1.3
+        MinVersion: tls.VersionTLS12,
+        MaxVersion: tls.VersionTLS13,
+        
+        // TLS 1.2 加密套件（按优先级排序）
+        CipherSuites: []uint16{
+            // AEAD 加密套件（推荐）
+            tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+            tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+            tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+            tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+            tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        },
+        
+        // 椭圆曲线优先级
+        CurvePreferences: []tls.CurveID{
+            tls.CurveP521,
+            tls.CurveP384,
+            tls.CurveP256,
+        },
+        
+        // 安全选项
+        PreferServerCipherSuites: true,
+        SessionTicketsDisabled:   false,
+        InsecureSkipVerify:       false,
+        
+        // HSTS 相关（在 HTTP 层面配置）
+        // NextProtos: []string{"h2", "http/1.1"},
+    }
+}
+```
+
+### 证书验证增强
+```go
+// 自定义证书验证函数
+func customCertVerification(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+    // 基本链验证
+    if len(verifiedChains) == 0 {
+        return fmt.Errorf("无有效证书链")
+    }
+    
+    cert := verifiedChains[0][0]
+    
+    // 检查证书关键用途
+    if !cert.KeyUsage&x509.KeyUsageDigitalSignature != 0 {
+        return fmt.Errorf("证书缺少数字签名用途")
+    }
+    
+    // 检查扩展密钥用途
+    validEKU := false
+    for _, eku := range cert.ExtKeyUsage {
+        if eku == x509.ExtKeyUsageServerAuth {
+            validEKU = true
+            break
+        }
+    }
+    if !validEKU {
+        return fmt.Errorf("证书缺少服务器认证扩展用途")
+    }
+    
+    // 检查证书透明度（可选）
+    // 实现 CT 日志验证...
+    
+    return nil
+}
+
+// 应用自定义验证
+func createCustomVerifyTLSConfig() *tls.Config {
+    tlsConf := createSecureTLSConfig()
+    tlsConf.VerifyPeerCertificate = customCertVerification
+    return tlsConf
+}
+```
+
+### OCSP Stapling
+```go
+// OCSP Stapling 配置
+func setupOCSPStapling() *tls.Config {
+    cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
+    if err != nil {
+        log.Fatalf("加载证书失败: %v", err)
+    }
+    
+    // 解析 X.509 证书
+    x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+    if err != nil {
+        log.Fatalf("解析证书失败: %v", err)
+    }
+    
+    // 获取 OCSP 响应
+    ocspResp, err := getOCSPResponse(x509Cert)
+    if err != nil {
+        log.Printf("获取 OCSP 响应失败: %v", err)
+    } else {
+        cert.OCSPStaple = ocspResp
+    }
+    
+    return &tls.Config{
+        Certificates: []tls.Certificate{cert},
+        MinVersion:   tls.VersionTLS12,
+    }
+}
+
+func getOCSPResponse(cert *x509.Certificate) ([]byte, error) {
+    // 实现 OCSP 响应获取逻辑
+    // 这里需要向 CA 的 OCSP 服务器查询证书状态
+    return nil, fmt.Errorf("OCSP 实现需要根据具体 CA 定制")
+}
+```
+
+## 故障排除
+
+### TLS 连接调试
+```go
+// TLS 连接调试工具
+func debugTLSConnection(addr string) {
+    conn, err := tls.Dial("tcp", addr, &tls.Config{
+        InsecureSkipVerify: true, // 仅用于调试
+    })
+    if err != nil {
+        log.Printf("TLS 连接失败: %v", err)
+        return
+    }
+    defer conn.Close()
+    
+    state := conn.ConnectionState()
+    
+    fmt.Printf("TLS 版本: %x\n", state.Version)
+    fmt.Printf("加密套件: %x\n", state.CipherSuite)
+    fmt.Printf("服务器证书:\n")
+    
+    for i, cert := range state.PeerCertificates {
+        fmt.Printf("  证书 %d:\n", i)
+        fmt.Printf("    颁发给: %s\n", cert.Subject)
+        fmt.Printf("    颁发者: %s\n", cert.Issuer)
+        fmt.Printf("    有效期: %v 至 %v\n", cert.NotBefore, cert.NotAfter)
+        fmt.Printf("    序列号: %s\n", cert.SerialNumber)
+    }
+}
+```
+
+### 常见问题
+1. **证书验证失败**: 检查证书链、主机名匹配、有效期
+2. **TLS 握手失败**: 检查 TLS 版本兼容性、加密套件支持
+3. **性能问题**: 启用会话复用、使用 ECDSA 证书、优化加密套件
+4. **安全警告**: 更新 TLS 版本、禁用弱加密套件、使用强椭圆曲线
+description:
+globs:
+alwaysApply: false
+---

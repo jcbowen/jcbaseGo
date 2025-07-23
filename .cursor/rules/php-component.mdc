@@ -1,0 +1,105 @@
+---
+globs: component/php/**/*.go
+description: PHP 组件使用规范和指导原则
+---
+
+# PHP 组件使用规范
+
+## 组件概述
+PHP 组件允许在 Go 项目中调用 PHP 函数，通过内置的 PHP 控制台脚本执行 PHP 代码。
+
+## 核心文件
+- [component/php/main.go](mdc:component/php/main.go) - PHP 组件主文件
+- [component/php/jcbasePHP.go](mdc:component/php/jcbasePHP.go) - 内置 PHP 控制台脚本
+
+## 使用方式
+
+### 初始化 PHP 组件
+```go
+import "github.com/jcbowen/jcbaseGo/component/php"
+
+// 创建 PHP 组件实例
+phpComponent := php.New(jcbaseGo.Option{
+    RuntimePath:  "./data/runtime/", // 运行时目录
+    ConfigSource: "./config.json",   // 配置文件路径
+})
+```
+
+### 调用 PHP 函数
+```go
+// 调用无参数的 PHP 函数
+result, err := phpComponent.RunFunc("phpinfo")
+if err != nil {
+    log.Fatalf("调用 PHP 函数失败: %v", err)
+}
+
+// 调用带参数的 PHP 函数
+result, err := phpComponent.RunFunc("json_encode", `{"key": "value"}`, "true")
+if err != nil {
+    log.Fatalf("调用 PHP 函数失败: %v", err)
+}
+```
+
+## 内置控制台功能
+PHP 组件内置了一个功能完整的控制台类，支持：
+
+### 基本功能
+- **帮助信息**: `php script.php --help` 或 `php script.php -h`
+- **版本信息**: `php script.php --version` 或 `php script.php -v`
+- **函数执行**: `php script.php --func=function_name` 或 `php script.php -f function_name`
+
+### 参数类型自动转换
+- **布尔值**: "true"/"false" 自动转换为 PHP 布尔类型
+- **数值**: 数字字符串自动转换为整数
+- **JSON**: JSON 格式字符串自动解析为 PHP 数组
+- **字符串**: 其他类型保持为字符串
+
+### 交互功能
+```php
+// 获取用户输入
+$input = Console::input("请输入内容: ");
+
+// 输出信息
+Console::output("处理完成");
+
+// 确认操作
+if (Console::confirm("确定要继续吗?")) {
+    // 用户确认后的操作
+}
+
+// 选择菜单
+$choice = Console::select("请选择操作", [
+    '1' => '选项一',
+    '2' => '选项二',
+    '3' => '选项三'
+]);
+```
+
+## 最佳实践
+
+### 错误处理
+- 所有 PHP 函数调用都应该检查错误返回值
+- PHP 函数不存在时会返回 "fatal:Function {function_name} not exists" 错误
+- 建议使用 Go 的错误处理机制进行适当的错误处理
+
+### 性能注意事项
+- 每次调用 `RunFunc` 都会启动一个新的 PHP 进程
+- 频繁调用可能影响性能，建议批量处理或缓存结果
+- 大数据处理建议使用纯 Go 实现
+
+### 安全注意事项
+- 避免将用户输入直接传递给 PHP 函数，防止代码注入
+- 谨慎处理 PHP 函数的返回值，特别是涉及文件操作的函数
+- 生产环境建议限制可调用的 PHP 函数范围
+
+## 故障排除
+
+### 常见问题
+1. **PHP 环境未安装**: 确保系统已安装 PHP 并可在命令行中执行
+2. **权限问题**: 确保运行时目录有写入权限
+3. **函数不存在**: 检查 PHP 函数名拼写和可用性
+
+### 调试技巧
+- 使用 `php --version` 检查 PHP 是否正确安装
+- 检查生成的临时 PHP 文件内容是否正确
+- 使用 Go 的日志功能输出详细的错误信息
