@@ -1,0 +1,571 @@
+# ORM 基础模型使用规范
+
+## 基础模型概述
+
+ORM 基础模型位于 [component/orm/base/](mdc:component/orm/base/)，提供了 MySQL 和 SQLite 两种数据库的基础模型，包含通用的字段定义、软删除配置、时间戳管理等功能。
+
+### 核心文件
+- [base_mysql.go](mdc:component/orm/base/base_mysql.go) - MySQL 基础模型
+- [base_sqlite.go](mdc:component/orm/base/base_sqlite.go) - SQLite 基础模型  
+- [model_utils.go](mdc:component/orm/base/model_utils.go) - 模型工具函数
+
+## 基础模型类型
+
+### MysqlBaseModel - MySQL 基础模型
+```go
+package base
+
+// MysqlBaseModel MySQL 基础模型
+// 提供 MySQL 数据库的标准字段和方法
+type MysqlBaseModel struct {
+    // 注释中的字段定义展示了默认的数据库字段结构：
+    // Id        uint   `gorm:"column:id;type:INT(11) UNSIGNED;primaryKey;autoIncrement" json:"id"`
+    // UpdatedAt string `gorm:"column:updated_at;type:DATETIME;default:NULL;comment:更新时间" json:"updated_at"`
+    // CreatedAt string `gorm:"column:created_at;type:DATETIME;default:NULL;comment:创建时间" json:"created_at"`
+    // DeletedAt string `gorm:"column:deleted_at;type:DATETIME;index;default:NULL;comment:删除时间" json:"deleted_at"`
+}
+```
+
+### SqliteBaseModel - SQLite 基础模型
+```go
+package base
+
+// SqliteBaseModel SQLite 基础模型
+// 提供 SQLite 数据库的标准字段和方法
+type SqliteBaseModel struct {
+    // 注释中的字段定义展示了默认的数据库字段结构：
+    // Id        uint   `gorm:"column:id;type:INTEGER;primaryKey;autoIncrement" json:"id"`
+    // UpdatedAt string `gorm:"column:updated_at;type:STRING;default:NULL" json:"updated_at"`
+    // CreatedAt string `gorm:"column:created_at;type:STRING;default:NULL" json:"created_at"`
+    // DeletedAt string `gorm:"column:deleted_at;type:STRING;index;default:NULL" json:"deleted_at"`
+}
+```
+
+## 基础模型使用方法
+
+### 标准模型定义
+```go
+package models
+
+import (
+    "github.com/jcbowen/jcbaseGo/component/orm/base"
+)
+
+// User 用户模型（MySQL版本）
+type User struct {
+    base.MysqlBaseModel                                   // 继承基础字段
+    Username string `gorm:"uniqueIndex;size:50" json:"username"` // 用户名
+    Email    string `gorm:"index;size:100" json:"email"`         // 邮箱
+    Password string `gorm:"size:255" json:"-"`                   // 密码（不输出到JSON）
+    Status   int    `gorm:"default:1" json:"status"`             // 状态
+    RealName string `gorm:"size:50" json:"real_name"`            // 真实姓名
+}
+
+// TableName 指定数据表名
+func (User) TableName() string {
+    return "users"
+}
+
+// Product 产品模型（SQLite版本）
+type Product struct {
+    base.SqliteBaseModel                              // 继承基础字段
+    Name        string `gorm:"size:100" json:"name"`        // 产品名称
+    Description string `gorm:"type:text" json:"description"` // 产品描述
+    Price       int64  `gorm:"default:0" json:"price"`      // 价格（分为单位）
+    CategoryID  uint   `gorm:"index" json:"category_id"`    // 分类ID
+}
+
+func (Product) TableName() string {
+    return "products"
+}
+```
+
+### 自定义字段模型
+如果需要自定义字段结构，可以不继承基础模型：
+
+```go
+// CustomUser 自定义用户模型
+type CustomUser struct {
+    ID        uint      `gorm:"primaryKey" json:"id"`
+    Username  string    `gorm:"uniqueIndex;size:50" json:"username"`
+    Email     string    `gorm:"index;size:100" json:"email"`
+    CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+    DeletedAt string    `gorm:"column:deleted_at;type:DATETIME;default:NULL" json:"deleted_at"`
+}
+
+// 必须实现 ModelParse 方法
+func (u CustomUser) ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string) {
+    tableName = "custom_users"
+    
+    // 解析字段
+    for i := 0; i < modelType.NumField(); i++ {
+        field := modelType.Field(i)
+        if jsonTag := field.Tag.Get("json"); jsonTag != "" && jsonTag != "-" {
+            fields = append(fields, strings.Split(jsonTag, ",")[0])
+        }
+    }
+    
+    // 设置软删除配置
+    softDeleteField = "deleted_at"
+    softDeleteCondition = "IS NULL"
+    
+    return
+}
+
+func (CustomUser) TableName() string {
+    return "custom_users"
+}
+```
+
+## 模型解析机制
+
+### ModelParse 方法
+基础模型自动实现了 `ModelParse` 方法，该方法负责：
+
+1. **表名解析**：根据模型名称和配置生成数据表名
+2. **字段解析**：解析模型中的所有字段
+3. **软删除配置**：自动识别和配置软删除字段
+4. **配置读取**：从环境变量中读取数据库配置
+
+```go
+// ModelParse 方法签名
+func (b *MysqlBaseModel) ModelParse(modelType reflect.Type) (
+    tableName string,           // 数据表名称
+    fields []string,           // 字段列表
+    softDeleteField string,    // 软删除字段名
+    softDeleteCondition string // 软删除条件
+)
+```
+
+### 表名生成规则
+1. 获取模型配置的表前缀（`TablePrefix`）
+2. 将模型名称从驼峰转换为下划线格式
+3. 根据 `SingularTable` 配置决定是否添加复数后缀
+4. 组合成最终表名：`prefix + snake_case_name + s（可选）`
+
+**示例**：
+- 模型名：`User`
+- 表前缀：`tb_`
+- 单数表名：`false`
+- 最终表名：`tb_users`
+
+### 字段解析规则
+1. 优先使用 `gorm:"column:字段名"` 标签指定的字段名
+2. 如果没有 column 标签，将字段名从驼峰转换为下划线格式
+3. 跳过基础模型本身的字段（`MysqlBaseModel`、`SqliteBaseModel`）
+
+### 软删除配置优先级
+1. **最高优先级**：`gorm:"soft_delete:条件"` 标签
+2. **中等优先级**：`deleted_at` 字段的特殊配置
+3. **默认配置**：`deleted_at` 字段 + `IS NULL` 条件
+
+## 软删除配置详解
+
+### 标准软删除配置
+```go
+type User struct {
+    base.MysqlBaseModel
+    // 使用默认的软删除配置
+    // deleted_at 字段默认条件为 IS NULL
+}
+```
+
+### 自定义软删除字段
+```go
+type User struct {
+    base.MysqlBaseModel
+    // 使用 is_deleted 字段作为软删除字段
+    IsDeleted string `gorm:"column:is_deleted;type:DATETIME;soft_delete:IS NULL" json:"is_deleted"`
+}
+```
+
+### 状态字段软删除
+```go
+type User struct {
+    base.MysqlBaseModel
+    // 使用状态字段，status = 1 表示正常，其他值表示删除
+    Status int `gorm:"column:status;type:INT;soft_delete:= 1" json:"status"`
+}
+```
+
+### 特殊默认值软删除
+```go
+type User struct {
+    base.MysqlBaseModel
+    // 使用特殊默认值，0000-00-00 00:00:00 表示未删除
+    DeletedAt string `gorm:"column:deleted_at;type:DATETIME;default:0000-00-00 00:00:00" json:"deleted_at"`
+}
+```
+
+## 数据库钩子方法
+
+### 自动时间戳管理
+基础模型提供了自动的时间戳管理：
+
+```go
+// BeforeCreate 创建前钩子
+// 自动设置 CreatedAt 和 UpdatedAt 字段
+func (b *MysqlBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
+    strTime := time.Now().Format("2006-01-02 15:04:05")
+    setFieldIfExist(tx.Statement.Dest, "CreatedAt", strTime)
+    setFieldIfExist(tx.Statement.Dest, "UpdatedAt", strTime)
+    return
+}
+
+// BeforeUpdate 更新前钩子
+// 自动更新 UpdatedAt 字段
+func (b *MysqlBaseModel) BeforeUpdate(tx *gorm.DB) (err error) {
+    setFieldIfExist(tx.Statement.Dest, "UpdatedAt", time.Now().Format("2006-01-02 15:04:05"))
+    return
+}
+```
+
+### 自定义钩子方法
+可以在模型中重写钩子方法来实现自定义逻辑：
+
+```go
+type User struct {
+    base.MysqlBaseModel
+    Username string `gorm:"uniqueIndex;size:50" json:"username"`
+    Email    string `gorm:"index;size:100" json:"email"`
+    LoginAt  string `gorm:"type:datetime" json:"login_at"`
+}
+
+// BeforeCreate 重写创建前钩子
+func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
+    // 调用父级方法设置基础时间戳
+    if err = u.MysqlBaseModel.BeforeCreate(tx); err != nil {
+        return err
+    }
+    
+    // 自定义逻辑：设置首次登录时间
+    u.LoginAt = time.Now().Format("2006-01-02 15:04:05")
+    
+    return nil
+}
+
+// BeforeUpdate 重写更新前钩子
+func (u *User) BeforeUpdate(tx *gorm.DB) (err error) {
+    // 调用父级方法设置基础时间戳
+    if err = u.MysqlBaseModel.BeforeUpdate(tx); err != nil {
+        return err
+    }
+    
+    // 自定义逻辑：检查用户名格式
+    if u.Username != "" && len(u.Username) < 3 {
+        return errors.New("用户名长度不能少于3个字符")
+    }
+    
+    return nil
+}
+```
+
+## 配置别名管理
+
+### 默认配置别名
+- MySQL 基础模型：默认别名为 `"db"`
+- SQLite 基础模型：默认别名为 `"main"`
+
+### 自定义配置别名
+```go
+type User struct {
+    base.MysqlBaseModel
+    Username string `json:"username"`
+}
+
+// ConfigAlias 自定义配置别名
+func (User) ConfigAlias() string {
+    return "user_db" // 使用 user_db 作为配置别名
+}
+```
+
+配置别名用于从环境变量中读取对应的数据库配置：
+- MySQL：`jc_mysql_配置别名`
+- SQLite：`jc_sql_lite_配置别名`
+
+## 工具函数
+
+### Tag 解析函数
+位于 [model_utils.go](mdc:component/orm/base/model_utils.go)：
+
+```go
+// getColumnFromTag 从 gorm 标签中获取列名
+func getColumnFromTag(tag string) string
+
+// getDefaultFromTag 从 gorm 标签中获取默认值
+func getDefaultFromTag(tag string) string
+
+// getSoftDeleteFromTag 从 gorm 标签中获取软删除条件
+func getSoftDeleteFromTag(tag string) string
+```
+
+### 字段设置函数
+```go
+// setFieldIfExist 设置字段值（如果字段存在且可设置）
+// 支持结构体和 map 两种类型
+func setFieldIfExist(model interface{}, fieldName string, value string)
+```
+
+## 最佳实践
+
+### 1. 字段定义规范
+```go
+type User struct {
+    base.MysqlBaseModel
+    // 推荐的字段定义格式
+    Username string `gorm:"uniqueIndex;size:50;not null;comment:用户名" json:"username" validate:"required,min=3,max=50"`
+    Email    string `gorm:"index;size:100;comment:邮箱地址" json:"email" validate:"required,email"`
+    Password string `gorm:"size:255;not null;comment:密码哈希" json:"-"` // 密码不输出到JSON
+    Status   int    `gorm:"default:1;comment:状态:1正常,0禁用" json:"status"`
+    Avatar   string `gorm:"size:255;comment:头像URL" json:"avatar"`
+}
+```
+
+### 2. 索引设计原则
+```go
+type Order struct {
+    base.MysqlBaseModel
+    UserID      uint   `gorm:"index:idx_user_status;comment:用户ID" json:"user_id"`
+    Status      string `gorm:"index:idx_user_status;size:20;comment:订单状态" json:"status"`
+    OrderNo     string `gorm:"uniqueIndex;size:50;comment:订单号" json:"order_no"`
+    TotalAmount int64  `gorm:"comment:总金额(分)" json:"total_amount"`
+    CreatedAt   string `gorm:"index;comment:创建时间" json:"created_at"` // 覆盖基础模型字段
+}
+```
+
+### 3. 关联关系定义
+```go
+type User struct {
+    base.MysqlBaseModel
+    Username string `gorm:"uniqueIndex;size:50" json:"username"`
+    
+    // 一对多关系
+    Orders []Order `gorm:"foreignKey:UserID" json:"orders,omitempty"`
+    
+    // 一对一关系
+    Profile *UserProfile `gorm:"foreignKey:UserID" json:"profile,omitempty"`
+}
+
+type UserProfile struct {
+    base.MysqlBaseModel
+    UserID   uint   `gorm:"uniqueIndex;comment:用户ID" json:"user_id"`
+    RealName string `gorm:"size:50;comment:真实姓名" json:"real_name"`
+    Phone    string `gorm:"size:20;comment:手机号码" json:"phone"`
+    
+    // 反向关联
+    User *User `gorm:"foreignKey:UserID" json:"user,omitempty"`
+}
+```
+
+### 4. 枚举和常量定义
+```go
+// 定义状态常量
+const (
+    UserStatusActive   = 1  // 正常
+    UserStatusInactive = 0  // 禁用
+    UserStatusDeleted  = -1 // 已删除
+)
+
+type User struct {
+    base.MysqlBaseModel
+    Username string `gorm:"uniqueIndex;size:50" json:"username"`
+    Status   int    `gorm:"default:1;check:status IN (1,0,-1)" json:"status"`
+}
+
+// IsActive 检查用户是否为活跃状态
+func (u *User) IsActive() bool {
+    return u.Status == UserStatusActive
+}
+
+// Activate 激活用户
+func (u *User) Activate() {
+    u.Status = UserStatusActive
+}
+```
+
+### 5. 数据验证集成
+```go
+import "github.com/go-playground/validator/v10"
+
+type User struct {
+    base.MysqlBaseModel
+    Username string `gorm:"uniqueIndex;size:50" json:"username" validate:"required,min=3,max=50,alphanum"`
+    Email    string `gorm:"index;size:100" json:"email" validate:"required,email"`
+    Age      int    `gorm:"check:age >= 0 AND age <= 150" json:"age" validate:"min=0,max=150"`
+}
+
+// Validate 数据验证方法
+func (u *User) Validate() error {
+    validate := validator.New()
+    return validate.Struct(u)
+}
+```
+
+### 6. JSON 序列化控制
+```go
+type User struct {
+    base.MysqlBaseModel
+    Username  string `json:"username"`
+    Email     string `json:"email"`
+    Password  string `json:"-"`                           // 永不序列化
+    Phone     string `json:"phone,omitempty"`             // 为空时不序列化
+    Status    int    `json:"status"`
+    CreatedAt string `json:"created_at"`
+    UpdatedAt string `json:"updated_at"`
+    DeletedAt string `json:"deleted_at,omitempty"`        // 软删除字段，为空时不序列化
+}
+
+// ToJSON 自定义JSON序列化
+func (u *User) ToJSON() map[string]interface{} {
+    return map[string]interface{}{
+        "id":         u.ID,
+        "username":   u.Username,
+        "email":      u.Email,
+        "status":     u.Status,
+        "created_at": u.CreatedAt,
+        "updated_at": u.UpdatedAt,
+    }
+}
+```
+
+## 迁移和升级指导
+
+### 从旧模型迁移
+```go
+// 旧模型定义
+type OldUser struct {
+    ID        uint      `gorm:"primaryKey"`
+    Name      string    `gorm:"size:50"`
+    CreatedAt time.Time
+    UpdatedAt time.Time
+}
+
+// 新模型定义
+type User struct {
+    base.MysqlBaseModel                                    // 使用基础模型
+    Username string `gorm:"uniqueIndex;size:50" json:"username"` // 重命名字段
+    // 其他字段...
+}
+
+// 数据迁移脚本
+func migrateOldUserToNew(db *gorm.DB) error {
+    return db.Transaction(func(tx *gorm.DB) error {
+        // 1. 创建新表
+        if err := tx.AutoMigrate(&User{}); err != nil {
+            return err
+        }
+        
+        // 2. 数据迁移
+        var oldUsers []OldUser
+        if err := tx.Table("old_users").Find(&oldUsers).Error; err != nil {
+            return err
+        }
+        
+        for _, oldUser := range oldUsers {
+            newUser := User{
+                Username: oldUser.Name,
+                // 设置其他字段...
+            }
+            // 手动设置时间戳
+            newUser.CreatedAt = oldUser.CreatedAt.Format("2006-01-02 15:04:05")
+            newUser.UpdatedAt = oldUser.UpdatedAt.Format("2006-01-02 15:04:05")
+            
+            if err := tx.Create(&newUser).Error; err != nil {
+                return err
+            }
+        }
+        
+        return nil
+    })
+}
+```
+
+### 版本兼容性
+- 基础模型向后兼容
+- 新增字段不影响现有功能
+- 软删除配置可以动态调整
+- 支持渐进式升级
+
+## 常见问题解决
+
+### 1. 时间字段类型问题
+```go
+// 问题：时间字段类型不匹配
+type User struct {
+    base.MysqlBaseModel
+    CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"` // 与基础模型冲突
+}
+
+// 解决：使用一致的时间格式
+type User struct {
+    base.MysqlBaseModel
+    // 不重复定义基础模型已有的字段
+    Username string `gorm:"uniqueIndex;size:50" json:"username"`
+}
+```
+
+### 2. 软删除不生效
+```go
+// 问题：软删除配置错误
+type User struct {
+    DeletedAt *time.Time `gorm:"index" json:"deleted_at"` // 类型不匹配
+}
+
+// 解决：使用正确的软删除配置
+type User struct {
+    base.MysqlBaseModel // 基础模型已包含正确的软删除配置
+    Username string `json:"username"`
+}
+
+// 或者自定义软删除字段
+type User struct {
+    base.MysqlBaseModel
+    IsDeleted string `gorm:"column:is_deleted;type:DATETIME;soft_delete:IS NULL" json:"is_deleted"`
+}
+```
+
+### 3. 表名不符合预期
+```go
+// 问题：表名生成不符合预期
+// 期望：user_accounts，实际：users
+
+// 解决：自定义表名
+type UserAccount struct {
+    base.MysqlBaseModel
+    Username string `json:"username"`
+}
+
+func (UserAccount) TableName() string {
+    return "user_accounts" // 明确指定表名
+}
+```
+
+### 4. 配置读取失败
+```go
+// 问题：无法读取数据库配置
+
+// 解决：确保环境变量正确设置
+os.Setenv("jc_mysql_db", `{
+    "host": "localhost",
+    "port": "3306",
+    "username": "root",
+    "password": "password",
+    "dbname": "myapp",
+    "charset": "utf8mb4"
+}`)
+
+// 或者使用自定义配置别名
+type User struct {
+    base.MysqlBaseModel
+    Username string `json:"username"`
+}
+
+func (User) ConfigAlias() string {
+    return "custom_db" // 对应环境变量 jc_mysql_custom_db
+}
+```
+description:
+globs:
+alwaysApply: false
+---

@@ -1,7 +1,3 @@
----
-globs: "**/orm/**/*.go,**/*_model.go,**/*_dao.go"
-description: 数据库和 ORM 操作规范
----
 
 # 数据库和 ORM 操作规范
 
@@ -9,26 +5,115 @@ description: 数据库和 ORM 操作规范
 - 统一使用 GORM 作为 ORM 框架
 - 通过 [component/orm/instance.go](mdc:component/orm/instance.go) 接口进行数据库操作
 - 支持 MySQL 和 SQLite 两种数据库
+- 所有数据库操作都应该遵循事务安全原则
 
 ## 数据库连接管理
-- MySQL 连接：使用 [component/orm/mysql/main.go](mdc:component/orm/mysql/main.go)
-- SQLite 连接：使用 [component/orm/sqlite/main.go](mdc:component/orm/sqlite/main.go)
-- 连接配置通过 [config.go](mdc:config.go) 统一管理
 
-## 模型定义规范
+### MySQL 连接
+使用 [component/orm/mysql/main.go](mdc:component/orm/mysql/main.go) 创建 MySQL 连接：
+
 ```go
-// User 用户模型
-// 定义用户表的结构和字段映射
+import (
+    "github.com/jcbowen/jcbaseGo"
+    "github.com/jcbowen/jcbaseGo/component/orm/mysql"
+)
+
+// 创建 MySQL 连接
+func initMysql() *mysql.Instance {
+    dbConfig := jcbaseGo.DbStruct{
+        Host:         "localhost",
+        Port:         "3306",
+        Username:     "root",
+        Password:     "password",
+        Dbname:       "mydb",
+        Charset:      "utf8mb4",
+        ParseTime:    "true",
+        Protocol:     "tcp",
+        TablePrefix:  "tb_",
+        SingularTable: false,
+        DisableForeignKeyConstraintWhenMigrating: false,
+    }
+    
+    return mysql.New(dbConfig, "main") // 第二个参数是别名
+}
+```
+
+### SQLite 连接
+使用 [component/orm/sqlite/main.go](mdc:component/orm/sqlite/main.go) 创建 SQLite 连接：
+
+```go
+import (
+    "github.com/jcbowen/jcbaseGo"
+    "github.com/jcbowen/jcbaseGo/component/orm/sqlite"
+)
+
+// 创建 SQLite 连接
+func initSqlite() *sqlite.Instance {
+    config := jcbaseGo.SqlLiteStruct{
+        DbFile:        "./data/app.db",
+        TablePrefix:   "tb_",
+        SingularTable: false,
+        DisableForeignKeyConstraintWhenMigrating: false,
+    }
+    
+    return sqlite.New(config, "main")
+}
+```
+
+### 连接池优化配置
+两种数据库都已内置连接池优化：
+
+**MySQL 连接池配置：**
+- 最大连接数：100
+- 最大空闲连接数：10
+- 连接最大生命周期：5分钟
+- 空闲连接超时时间：3分钟
+
+**SQLite 连接池配置：**
+- 最大连接数：1（SQLite 特性）
+- 最大空闲连接数：1
+- 连接最大生命周期：10分钟
+- 空闲连接超时时间：5分钟
+
+## 基础模型规范
+
+### 使用基础模型
+项目提供了两种基础模型，位于 [component/orm/base/](mdc:component/orm/base/)：
+
+```go
+// MySQL 基础模型
+import "github.com/jcbowen/jcbaseGo/component/orm/base"
+
 type User struct {
-    ID        uint      `gorm:"primaryKey" json:"id"`                    // 主键ID
-    Username  string    `gorm:"uniqueIndex;size:50" json:"username"`     // 用户名，唯一索引
-    Email     string    `gorm:"index;size:100" json:"email"`             // 邮箱，普通索引
-    CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`        // 创建时间
-    UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`        // 更新时间
+    base.MysqlBaseModel  // 包含 ID、CreatedAt、UpdatedAt、DeletedAt
+    Username string `gorm:"uniqueIndex;size:50" json:"username"`
+    Email    string `gorm:"index;size:100" json:"email"`
+    Status   int    `gorm:"default:1" json:"status"`
+}
+
+// SQLite 基础模型
+type Product struct {
+    base.SqliteBaseModel  // 包含 ID、CreatedAt、UpdatedAt、DeletedAt
+    Name  string `gorm:"size:100" json:"name"`
+    Price int    `gorm:"default:0" json:"price"`
+}
+```
+
+### 自定义模型定义
+如果不使用基础模型，需要实现 `ModelParse` 方法：
+
+```go
+type CustomUser struct {
+    ID        uint      `gorm:"primaryKey" json:"id"`
+    Username  string    `gorm:"uniqueIndex;size:50" json:"username"`
+    Email     string    `gorm:"index;size:100" json:"email"`
+    CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+    DeletedAt string    `gorm:"column:deleted_at;type:DATETIME;default:NULL" json:"deleted_at"`
 }
 
 // TableName 指定表名
-func (User) TableName() string {
+func (CustomUser) TableName() string {
     return "users"
 }
 
@@ -40,62 +125,342 @@ func (User) TableName() string {
 //   - fields []string: 字段列表
 //   - softDeleteField string: 软删除字段名
 //   - softDeleteCondition string: 软删除条件
-func (u User) ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string) {
+func (u CustomUser) ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string) {
     tableName = u.TableName()
-
+    
+    // 解析字段
     for i := 0; i < modelType.NumField(); i++ {
         field := modelType.Field(i)
         if jsonTag := field.Tag.Get("json"); jsonTag != "" && jsonTag != "-" {
             fields = append(fields, strings.Split(jsonTag, ",")[0])
         }
     }
-
+    
+    // 设置软删除字段
+    softDeleteField = "deleted_at"
+    softDeleteCondition = "IS NULL"
+    
     return
 }
 ```
 
-## CRUD 操作规范
-使用 [component/trait/crud/](mdc:component/trait/crud/) 提供的 trait 进行 CRUD 操作：
+## 软删除配置
+
+### 灵活的软删除支持
+系统支持多种软删除配置方式：
 
 ```go
-// UserController 用户控制器
-type UserController struct {
-    crud.Trait
-}
-
-// 初始化控制器
-func (c *UserController) Init(ctx *gin.Context) {
-    c.Model = &User{}
-    c.DBI = orm.GetInstance() // 获取数据库实例
-    c.Controller = c
-    c.InitCrud(ctx)
-}
-
-// List 获取用户列表（可选择性覆盖默认实现）
-func (c *UserController) List() {
-    // 自定义列表逻辑
-    // 如果不定义此方法，将使用 trait 中的默认实现
+type FlexibleUser struct {
+    base.MysqlBaseModel
+    
+    // 方式1: 使用默认的 deleted_at 字段（推荐）
+    // 基础模型已包含，无需额外定义
+    
+    // 方式2: 自定义软删除字段，条件为 IS NULL
+    // IsDeleted string `gorm:"column:is_deleted;type:DATETIME;soft_delete:IS NULL" json:"is_deleted"`
+    
+    // 方式3: 使用状态字段作为软删除，条件为 = 1（表示正常状态）
+    // Status int `gorm:"column:status;type:INT;soft_delete:= 1" json:"status"`
+    
+    // 方式4: 使用特殊默认值的 deleted_at 字段
+    // DeletedAt string `gorm:"column:deleted_at;type:DATETIME;default:0000-00-00 00:00:00" json:"deleted_at"`
 }
 ```
 
-## 查询优化指导
-- 使用索引优化查询性能
-- 避免 N+1 查询问题，使用 `Preload` 预加载关联数据
-- 大数据量查询使用分页
-- 复杂查询考虑使用原生 SQL
+### 软删除标签说明
+- **默认配置**：如果模型中存在 `deleted_at` 字段且没有 `soft_delete` 标签，系统会自动使用 `IS NULL` 作为软删除条件
+- **自定义字段名**：通过 `soft_delete` 标签可以指定任意字段作为软删除字段
+- **自定义条件**：`soft_delete` 标签的值就是软删除的判断条件
 
-## 事务处理
+## GORM 标签规范
+
+### 常用标签组合
 ```go
-// 使用事务处理多个操作
-func (s *Service) CreateUserWithProfile(userData, profileData map[string]interface{}) error {
-    return s.db.GetDb().Transaction(func(tx *gorm.DB) error {
-        // 创建用户
-        if err := tx.Create(&user).Error; err != nil {
+type StandardModel struct {
+    ID        uint      `gorm:"primaryKey" json:"id"`                           // 主键
+    Username  string    `gorm:"uniqueIndex;size:50;not null" json:"username"`   // 唯一索引，长度限制，非空
+    Email     string    `gorm:"index;size:100" json:"email"`                    // 普通索引
+    Status    int       `gorm:"default:1;check:status IN (0,1)" json:"status"`  // 默认值，检查约束
+    CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`               // 自动创建时间
+    UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`               // 自动更新时间
+    DeletedAt *time.Time `gorm:"index" json:"deleted_at"`                      // 软删除字段
+}
+```
+
+### 字段类型映射
+```go
+// 字符串类型
+Name     string `gorm:"size:100"`                    // VARCHAR(100)
+Content  string `gorm:"type:text"`                   // TEXT
+Code     string `gorm:"size:50;uniqueIndex"`         // VARCHAR(50) UNIQUE
+
+// 数值类型
+Age      int    `gorm:"default:0"`                   // INT DEFAULT 0
+Price    int64  `gorm:"default:0"`                   // BIGINT DEFAULT 0
+Score    float64 `gorm:"precision:10;scale:2"`       // DECIMAL(10,2)
+
+// 时间类型
+Birthday time.Time `gorm:"type:date"`                // DATE
+LoginAt  time.Time `gorm:"type:datetime"`            // DATETIME
+
+// JSON 类型
+Config   string `gorm:"type:json"`                   // JSON (MySQL 5.7+)
+```
+
+## 高级查询模式
+
+### 预加载关联
+```go
+// 预加载单个关联
+var user User
+db.Preload("Profile").First(&user)
+
+// 预加载多个关联
+db.Preload("Profile").Preload("Orders").First(&user)
+
+// 条件预加载
+db.Preload("Orders", "status = ?", "paid").First(&user)
+
+// 嵌套预加载
+db.Preload("Orders.Items").First(&user)
+```
+
+### 复杂查询构建
+```go
+// 链式查询
+query := db.Model(&User{}).
+    Select("id, username, email").
+    Where("status = ?", 1).
+    Where("created_at > ?", time.Now().AddDate(0, -1, 0))
+
+// 动态条件
+if keyword != "" {
+    query = query.Where("username LIKE ? OR email LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+}
+
+// 排序和分页
+var users []User
+query.Order("created_at desc").
+    Limit(pageSize).
+    Offset((page - 1) * pageSize).
+    Find(&users)
+```
+
+### 聚合查询
+```go
+// 统计
+var count int64
+db.Model(&User{}).Where("status = ?", 1).Count(&count)
+
+// 分组统计
+var results []struct {
+    Status string
+    Count  int64
+}
+db.Model(&User{}).
+    Select("status, count(*) as count").
+    Group("status").
+    Find(&results)
+
+// 聚合函数
+var avgAge float64
+db.Model(&User{}).Select("AVG(age)").Scan(&avgAge)
+```
+
+## 事务处理最佳实践
+
+### 自动事务管理
+```go
+// 推荐：使用 GORM 的 Transaction 方法
+err := db.Transaction(func(tx *gorm.DB) error {
+    // 创建用户
+    if err := tx.Create(&user).Error; err != nil {
+        return err // 自动回滚
+    }
+    
+    // 创建用户资料
+    if err := tx.Create(&profile).Error; err != nil {
+        return err // 自动回滚
+    }
+    
+    // 更新统计
+    if err := tx.Model(&Statistics{}).Where("type = ?", "user").
+        UpdateColumn("count", gorm.Expr("count + 1")).Error; err != nil {
+        return err
+    }
+    
+    return nil // 自动提交
+})
+
+if err != nil {
+    log.Printf("事务执行失败: %v", err)
+}
+```
+
+### 手动事务管理
+```go
+// 开始事务
+tx := db.Begin()
+defer func() {
+    if r := recover(); r != nil {
+        tx.Rollback()
+        panic(r)
+    }
+}()
+
+// 执行操作
+if err := tx.Create(&user).Error; err != nil {
+    tx.Rollback()
+    return err
+}
+
+if err := tx.Create(&profile).Error; err != nil {
+    tx.Rollback()
+    return err
+}
+
+// 提交事务
+if err := tx.Commit().Error; err != nil {
+    return err
+}
+```
+
+### 乐观锁实现
+```go
+type User struct {
+    ID      uint   `gorm:"primaryKey"`
+    Name    string
+    Version int    `gorm:"default:1"` // 版本号字段
+}
+
+// 乐观锁更新
+func UpdateUserWithOptimisticLock(db *gorm.DB, userID uint, newName string) error {
+    return db.Transaction(func(tx *gorm.DB) error {
+        var user User
+        if err := tx.Where("id = ?", userID).First(&user).Error; err != nil {
             return err
         }
         
-        // 创建用户资料
-        if err := tx.Create(&profile).Error; err != nil {
+        // 使用版本号进行更新
+        result := tx.Model(&user).
+            Where("version = ?", user.Version).
+            Updates(User{
+                Name:    newName,
+                Version: user.Version + 1,
+            })
+        
+        if result.Error != nil {
+            return result.Error
+        }
+        
+        if result.RowsAffected == 0 {
+            return errors.New("数据已被其他用户修改，请重试")
+        }
+        
+        return nil
+    })
+}
+```
+
+## 性能优化指导
+
+### 索引优化
+```go
+// 单字段索引
+type User struct {
+    Email string `gorm:"index"` // 普通索引
+    Phone string `gorm:"uniqueIndex"` // 唯一索引
+}
+
+// 复合索引
+type Order struct {
+    UserID    uint      `gorm:"index:idx_user_status"`
+    Status    string    `gorm:"index:idx_user_status"`
+    CreatedAt time.Time `gorm:"index:idx_created"`
+}
+
+// 手动创建索引
+db.Exec("CREATE INDEX idx_user_email_status ON users(email, status)")
+```
+
+### 查询优化
+```go
+// 避免 N+1 查询
+// 错误方式
+var users []User
+db.Find(&users)
+for _, user := range users {
+    var profile Profile
+    db.Where("user_id = ?", user.ID).First(&profile) // N+1 查询
+}
+
+// 正确方式
+var users []User
+db.Preload("Profile").Find(&users) // 使用预加载
+
+// 使用 Select 减少数据传输
+db.Select("id, username, email").Find(&users)
+
+// 使用 Pluck 获取单个字段
+var usernames []string
+db.Model(&User{}).Pluck("username", &usernames)
+```
+
+### 批量操作优化
+```go
+// 批量插入
+var users []User
+for i := 0; i < 1000; i++ {
+    users = append(users, User{Username: fmt.Sprintf("user%d", i)})
+}
+
+// 分批插入，避免单次插入数据过多
+db.CreateInBatches(users, 100)
+
+// 批量更新
+db.Model(&User{}).Where("status = ?", 0).Update("status", 1)
+
+// 批量删除
+db.Where("created_at < ?", time.Now().AddDate(0, -6, 0)).Delete(&User{})
+```
+
+## 数据迁移和维护
+
+### 自动迁移
+```go
+// 开发环境迁移
+func autoMigrate(db *gorm.DB) error {
+    return db.AutoMigrate(
+        &User{},
+        &Profile{},
+        &Order{},
+        &Product{},
+    )
+}
+
+// 检查表是否存在
+if !db.Migrator().HasTable(&User{}) {
+    db.AutoMigrate(&User{})
+}
+
+// 检查字段是否存在
+if !db.Migrator().HasColumn(&User{}, "phone") {
+    db.Migrator().AddColumn(&User{}, "phone")
+}
+```
+
+### 手动迁移脚本
+```go
+// 生产环境迁移脚本示例
+func migrate_20231201_add_user_phone(db *gorm.DB) error {
+    return db.Transaction(func(tx *gorm.DB) error {
+        // 添加字段
+        if err := tx.Exec("ALTER TABLE users ADD COLUMN phone VARCHAR(20)").Error; err != nil {
+            return err
+        }
+        
+        // 创建索引
+        if err := tx.Exec("CREATE INDEX idx_users_phone ON users(phone)").Error; err != nil {
             return err
         }
         
@@ -104,7 +469,151 @@ func (s *Service) CreateUserWithProfile(userData, profileData map[string]interfa
 }
 ```
 
-## 数据迁移建议
+## 错误处理和日志
+
+### 错误处理模式
+```go
+// 标准错误处理
+var user User
+err := db.Where("username = ?", username).First(&user).Error
+if err != nil {
+    if errors.Is(err, gorm.ErrRecordNotFound) {
+        return nil, errors.New("用户不存在")
+    }
+    return nil, fmt.Errorf("查询用户失败: %w", err)
+}
+
+// 检查影响行数
+result := db.Model(&user).Where("id = ?", userID).Update("status", 1)
+if result.Error != nil {
+    return fmt.Errorf("更新失败: %w", result.Error)
+}
+if result.RowsAffected == 0 {
+    return errors.New("没有数据被更新")
+}
+```
+
+### 调试和日志
+```go
+// 开启调试模式
+db.Debug().Where("username = ?", username).First(&user)
+
+// 自定义日志记录
+import (
+    "gorm.io/gorm/logger"
+)
+
+newLogger := logger.New(
+    log.New(os.Stdout, "\r\n", log.LstdFlags),
+    logger.Config{
+        SlowThreshold: time.Second,   // 慢查询阈值
+        LogLevel:      logger.Info,   // 日志级别
+        Colorful:      true,          // 彩色输出
+    },
+)
+
+db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+    Logger: newLogger,
+})
+```
+
+## 安全最佳实践
+
+### 防止 SQL 注入
+```go
+// 安全：使用参数绑定
+db.Where("username = ? AND status = ?", username, 1).First(&user)
+
+// 危险：字符串拼接（永远不要这样做）
+// db.Where("username = '" + username + "'").First(&user)
+
+// 安全：使用命名参数
+db.Where("username = @username AND status = @status", 
+    sql.Named("username", username), 
+    sql.Named("status", 1)).First(&user)
+```
+
+### 敏感数据处理
+```go
+type User struct {
+    ID       uint   `json:"id"`
+    Username string `json:"username"`
+    Password string `json:"-"` // 不序列化到 JSON
+    Salt     string `gorm:"-"` // 不存储到数据库
+}
+
+// 密码加密处理
+func (u *User) SetPassword(password string) {
+    // 使用安全的密码加密算法
+    hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+    u.Password = string(hashedPassword)
+}
+
+func (u *User) CheckPassword(password string) bool {
+    err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
+    return err == nil
+}
+```
+
+### 数据验证
+```go
+import "github.com/go-playground/validator/v10"
+
+type User struct {
+    Username string `gorm:"size:50" json:"username" validate:"required,min=3,max=50"`
+    Email    string `gorm:"size:100" json:"email" validate:"required,email"`
+    Age      int    `json:"age" validate:"min=0,max=150"`
+}
+
+func validateUser(user *User) error {
+    validate := validator.New()
+    return validate.Struct(user)
+}
+```
+
+## 连接管理和监控
+
+### 连接状态监控
+```go
+// 获取数据库统计信息
+sqlDB, err := db.DB()
+if err == nil {
+    stats := sqlDB.Stats()
+    log.Printf("打开连接数: %d", stats.OpenConnections)
+    log.Printf("使用中连接数: %d", stats.InUse)
+    log.Printf("空闲连接数: %d", stats.Idle)
+    log.Printf("等待连接数: %d", stats.WaitCount)
+    log.Printf("等待总时间: %v", stats.WaitDuration)
+}
+
+// 检查连接是否有效
+if err := sqlDB.Ping(); err != nil {
+    log.Printf("数据库连接失效: %v", err)
+}
+```
+
+### 健康检查
+```go
+func DatabaseHealthCheck(db *gorm.DB) error {
+    sqlDB, err := db.DB()
+    if err != nil {
+        return fmt.Errorf("获取数据库实例失败: %w", err)
+    }
+    
+    // 检查连接
+    if err := sqlDB.Ping(); err != nil {
+        return fmt.Errorf("数据库连接失败: %w", err)
+    }
+    
+    // 检查连接池状态
+    stats := sqlDB.Stats()
+    if stats.OpenConnections == 0 {
+        return errors.New("没有可用的数据库连接")
+    }
+    
+    return nil
+}
+
 - 使用 GORM 的 AutoMigrate 进行开发环境迁移
 - 生产环境使用专门的迁移脚本
 - 重要的结构变更需要做好数据备份

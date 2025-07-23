@@ -1,0 +1,1217 @@
+# 高级查询模式和最佳实践
+
+## 查询构建模式
+
+### 动态查询构建器
+```go
+type QueryBuilder struct {
+    db    *gorm.DB
+    model interface{}
+}
+
+func NewQueryBuilder(db *gorm.DB, model interface{}) *QueryBuilder {
+    return &QueryBuilder{
+        db:    db.Model(model),
+        model: model,
+    }
+}
+
+// Where 添加 WHERE 条件
+func (qb *QueryBuilder) Where(condition string, args ...interface{}) *QueryBuilder {
+    if condition != "" {
+        qb.db = qb.db.Where(condition, args...)
+    }
+    return qb
+}
+
+// WhereIf 条件性添加 WHERE
+func (qb *QueryBuilder) WhereIf(condition bool, query string, args ...interface{}) *QueryBuilder {
+    if condition {
+        qb.db = qb.db.Where(query, args...)
+    }
+    return qb
+}
+
+// Search 模糊搜索
+func (qb *QueryBuilder) Search(keyword string, fields ...string) *QueryBuilder {
+    if keyword != "" && len(fields) > 0 {
+        var conditions []string
+        var args []interface{}
+        
+        for _, field := range fields {
+            conditions = append(conditions, field+" LIKE ?")
+            args = append(args, "%"+keyword+"%")
+        }
+        
+        qb.db = qb.db.Where(strings.Join(conditions, " OR "), args...)
+    }
+    return qb
+}
+
+// DateRange 日期范围查询
+func (qb *QueryBuilder) DateRange(field, startDate, endDate string) *QueryBuilder {
+    if startDate != "" {
+        qb.db = qb.db.Where(field+" >= ?", startDate)
+    }
+    if endDate != "" {
+        qb.db = qb.db.Where(field+" <= ?", endDate)
+    }
+    return qb
+}
+
+// Paginate 分页查询
+func (qb *QueryBuilder) Paginate(page, pageSize int) *QueryBuilder {
+    if page < 1 {
+        page = 1
+    }
+    if pageSize < 1 {
+        pageSize = 10
+    } else if pageSize > 1000 {
+        pageSize = 1000
+    }
+    
+    offset := (page - 1) * pageSize
+    qb.db = qb.db.Limit(pageSize).Offset(offset)
+    return qb
+}
+
+// OrderBy 排序
+func (qb *QueryBuilder) OrderBy(field, direction string) *QueryBuilder {
+    if field != "" {
+        if direction == "" {
+            direction = "ASC"
+        }
+        qb.db = qb.db.Order(field + " " + direction)
+    }
+    return qb
+}
+
+// Build 构建最终查询
+func (qb *QueryBuilder) Build() *gorm.DB {
+    return qb.db
+}
+
+// 使用示例
+func SearchUsers(db *gorm.DB, params map[string]interface{}) ([]User, int64, error) {
+    builder := NewQueryBuilder(db, &User{})
+    
+    // 动态添加查询条件
+    if keyword, ok := params["keyword"].(string); ok {
+        builder.Search(keyword, "username", "email", "real_name")
+    }
+    
+    if status, ok := params["status"].(int); ok {
+        builder.Where("status = ?", status)
+    }
+    
+    if startDate, ok := params["start_date"].(string); ok {
+        if endDate, ok := params["end_date"].(string); ok {
+            builder.DateRange("created_at", startDate, endDate)
+        }
+    }
+    
+    // 计算总数
+    var total int64
+    countQuery := builder.Build()
+    if err := countQuery.Count(&total).Error; err != nil {
+        return nil, 0, err
+    }
+    
+    // 分页查询
+    if page, ok := params["page"].(int); ok {
+        if pageSize, ok := params["page_size"].(int); ok {
+            builder.Paginate(page, pageSize)
+        }
+    }
+    
+    if orderBy, ok := params["order_by"].(string); ok {
+        if orderDir, ok := params["order_dir"].(string); ok {
+            builder.OrderBy(orderBy, orderDir)
+        }
+    }
+    
+    var users []User
+    err := builder.Build().Find(&users).Error
+    return users, total, err
+}
+```
+
+### 复杂条件构建
+```go
+// 复杂 WHERE 条件构建器
+type ConditionBuilder struct {
+    conditions []string
+    args       []interface{}
+}
+
+func NewConditionBuilder() *ConditionBuilder {
+    return &ConditionBuilder{}
+}
+
+func (cb *ConditionBuilder) And(condition string, args ...interface{}) *ConditionBuilder {
+    if condition != "" {
+        cb.conditions = append(cb.conditions, "("+condition+")")
+        cb.args = append(cb.args, args...)
+    }
+    return cb
+}
+
+func (cb *ConditionBuilder) Or(condition string, args ...interface{}) *ConditionBuilder {
+    if condition != "" {
+        if len(cb.conditions) > 0 {
+            cb.conditions = append(cb.conditions, "OR ("+condition+")")
+        } else {
+            cb.conditions = append(cb.conditions, "("+condition+")")
+        }
+        cb.args = append(cb.args, args...)
+    }
+    return cb
+}
+
+func (cb *ConditionBuilder) Build() (string, []interface{}) {
+    if len(cb.conditions) == 0 {
+        return "", nil
+    }
+    return strings.Join(cb.conditions, " AND "), cb.args
+}
+
+// 使用示例
+func AdvancedUserSearch(db *gorm.DB, params SearchParams) ([]User, error) {
+    builder := NewConditionBuilder()
+    
+    // 基础条件
+    builder.And("status = ?", 1)
+    
+    // 搜索条件（用户名或邮箱）
+    if params.Keyword != "" {
+        builder.And("username LIKE ? OR email LIKE ?", "%"+params.Keyword+"%", "%"+params.Keyword+"%")
+    }
+    
+    // 年龄范围
+    if params.MinAge > 0 || params.MaxAge > 0 {
+        ageCondition := NewConditionBuilder()
+        if params.MinAge > 0 {
+            ageCondition.And("age >= ?", params.MinAge)
+        }
+        if params.MaxAge > 0 {
+            ageCondition.And("age <= ?", params.MaxAge)
+        }
+        ageSQL, ageArgs := ageCondition.Build()
+        builder.And(ageSQL, ageArgs...)
+    }
+    
+    // 特殊条件（VIP 用户或高级用户）
+    if params.SpecialUsers {
+        builder.Or("vip_level > ? OR role = ?", 0, "premium")
+    }
+    
+    whereSQL, args := builder.Build()
+    
+    var users []User
+    query := db.Model(&User{})
+    if whereSQL != "" {
+        query = query.Where(whereSQL, args...)
+    }
+    
+    return users, query.Find(&users).Error
+}
+```
+
+## 关联查询优化
+
+### 预加载策略
+```go
+// 基础预加载
+func GetUserWithProfile(db *gorm.DB, userID uint) (*User, error) {
+    var user User
+    err := db.Preload("Profile").First(&user, userID).Error
+    return &user, err
+}
+
+// 条件预加载
+func GetUserWithActiveOrders(db *gorm.DB, userID uint) (*User, error) {
+    var user User
+    err := db.Preload("Orders", "status = ?", "active").
+        First(&user, userID).Error
+    return &user, err
+}
+
+// 嵌套预加载
+func GetUserWithOrderItems(db *gorm.DB, userID uint) (*User, error) {
+    var user User
+    err := db.Preload("Orders").
+        Preload("Orders.Items").
+        Preload("Orders.Items.Product").
+        First(&user, userID).Error
+    return &user, err
+}
+
+// 自定义预加载
+func GetUserWithLatestOrders(db *gorm.DB, userID uint) (*User, error) {
+    var user User
+    err := db.Preload("Orders", func(db *gorm.DB) *gorm.DB {
+        return db.Order("created_at DESC").Limit(5)
+    }).First(&user, userID).Error
+    return &user, err
+}
+
+// 选择性预加载
+func GetUserSelectivePreload(db *gorm.DB, userID uint, includes []string) (*User, error) {
+    var user User
+    query := db.Model(&User{})
+    
+    for _, include := range includes {
+        switch include {
+        case "profile":
+            query = query.Preload("Profile")
+        case "orders":
+            query = query.Preload("Orders")
+        case "recent_orders":
+            query = query.Preload("Orders", func(db *gorm.DB) *gorm.DB {
+                return db.Order("created_at DESC").Limit(10)
+            })
+        case "order_items":
+            query = query.Preload("Orders.Items")
+        }
+    }
+    
+    err := query.First(&user, userID).Error
+    return &user, err
+}
+```
+
+### JOIN 查询优化
+```go
+// 高效的 JOIN 查询
+func GetUsersWithOrderStats(db *gorm.DB) ([]UserOrderStats, error) {
+    type UserOrderStats struct {
+        UserID      uint   `json:"user_id"`
+        Username    string `json:"username"`
+        Email       string `json:"email"`
+        OrderCount  int    `json:"order_count"`
+        TotalAmount int64  `json:"total_amount"`
+    }
+    
+    var results []UserOrderStats
+    err := db.Table("users u").
+        Select("u.id as user_id, u.username, u.email, COALESCE(COUNT(o.id), 0) as order_count, COALESCE(SUM(o.total_amount), 0) as total_amount").
+        Joins("LEFT JOIN orders o ON u.id = o.user_id AND o.status = 'completed'").
+        Where("u.status = ?", 1).
+        Group("u.id, u.username, u.email").
+        Scan(&results).Error
+    
+    return results, err
+}
+
+// 复杂的多表 JOIN
+func GetOrderDetailsWithUserAndProduct(db *gorm.DB, orderID uint) (*OrderDetail, error) {
+    type OrderDetail struct {
+        OrderID     uint   `json:"order_id"`
+        OrderNo     string `json:"order_no"`
+        Username    string `json:"username"`
+        UserEmail   string `json:"user_email"`
+        ProductName string `json:"product_name"`
+        Quantity    int    `json:"quantity"`
+        UnitPrice   int64  `json:"unit_price"`
+        TotalAmount int64  `json:"total_amount"`
+    }
+    
+    var detail OrderDetail
+    err := db.Table("orders o").
+        Select("o.id as order_id, o.order_no, u.username, u.email as user_email, p.name as product_name, oi.quantity, oi.unit_price, o.total_amount").
+        Joins("JOIN users u ON o.user_id = u.id").
+        Joins("JOIN order_items oi ON o.id = oi.order_id").
+        Joins("JOIN products p ON oi.product_id = p.id").
+        Where("o.id = ?", orderID).
+        First(&detail).Error
+    
+    return &detail, err
+}
+
+// 使用子查询优化
+func GetUsersWithLatestOrder(db *gorm.DB) ([]UserWithLatestOrder, error) {
+    type UserWithLatestOrder struct {
+        UserID         uint   `json:"user_id"`
+        Username       string `json:"username"`
+        LatestOrderID  *uint  `json:"latest_order_id"`
+        LatestOrderNo  *string `json:"latest_order_no"`
+        LatestOrderAt  *string `json:"latest_order_at"`
+    }
+    
+    var results []UserWithLatestOrder
+    
+    // 使用窗口函数（MySQL 8.0+）
+    err := db.Raw(`
+        SELECT 
+            u.id as user_id,
+            u.username,
+            lo.id as latest_order_id,
+            lo.order_no as latest_order_no,
+            lo.created_at as latest_order_at
+        FROM users u
+        LEFT JOIN (
+            SELECT *,
+                   ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) as rn
+            FROM orders
+        ) lo ON u.id = lo.user_id AND lo.rn = 1
+        WHERE u.status = 1
+    `).Scan(&results).Error
+    
+    return results, err
+}
+```
+
+## 性能优化策略
+
+### 批量操作优化
+```go
+// 批量插入优化
+func BatchInsertUsers(db *gorm.DB, users []User) error {
+    const batchSize = 1000
+    
+    for i := 0; i < len(users); i += batchSize {
+        end := i + batchSize
+        if end > len(users) {
+            end = len(users)
+        }
+        
+        batch := users[i:end]
+        if err := db.CreateInBatches(batch, batchSize).Error; err != nil {
+            return fmt.Errorf("batch insert failed at index %d: %w", i, err)
+        }
+    }
+    
+    return nil
+}
+
+// 批量更新优化
+func BatchUpdateUserStatus(db *gorm.DB, userIDs []uint, status int) error {
+    // 方法1: 使用 IN 条件批量更新
+    err := db.Model(&User{}).
+        Where("id IN ?", userIDs).
+        Update("status", status).Error
+    
+    if err != nil {
+        return err
+    }
+    
+    // 方法2: 使用 CASE WHEN（适用于不同 ID 设置不同值）
+    /*
+    var cases []string
+    var args []interface{}
+    
+    for id, newStatus := range userStatusMap {
+        cases = append(cases, "WHEN id = ? THEN ?")
+        args = append(args, id, newStatus)
+    }
+    
+    sql := fmt.Sprintf("UPDATE users SET status = CASE %s END WHERE id IN (?)", 
+                       strings.Join(cases, " "))
+    args = append(args, userIDs)
+    
+    err := db.Exec(sql, args...).Error
+    */
+    
+    return err
+}
+
+// 批量查询优化
+func BatchGetUsersByIDs(db *gorm.DB, userIDs []uint) ([]User, error) {
+    if len(userIDs) == 0 {
+        return []User{}, nil
+    }
+    
+    var users []User
+    
+    // 分批查询，避免 IN 条件过长
+    const batchSize = 1000
+    for i := 0; i < len(userIDs); i += batchSize {
+        end := i + batchSize
+        if end > len(userIDs) {
+            end = len(userIDs)
+        }
+        
+        var batchUsers []User
+        err := db.Where("id IN ?", userIDs[i:end]).Find(&batchUsers).Error
+        if err != nil {
+            return nil, err
+        }
+        
+        users = append(users, batchUsers...)
+    }
+    
+    return users, nil
+}
+```
+
+### 索引优化策略
+```go
+// 复合索引使用示例
+type Order struct {
+    base.MysqlBaseModel
+    UserID      uint   `gorm:"index:idx_user_status_created" json:"user_id"`
+    Status      string `gorm:"index:idx_user_status_created;size:20" json:"status"`
+    CreatedAt   string `gorm:"index:idx_user_status_created" json:"created_at"`
+    OrderNo     string `gorm:"uniqueIndex;size:50" json:"order_no"`
+    TotalAmount int64  `json:"total_amount"`
+}
+
+// 利用索引的查询示例
+func GetUserOrdersByStatus(db *gorm.DB, userID uint, status string, page, pageSize int) ([]Order, int64, error) {
+    var orders []Order
+    var total int64
+    
+    // 这个查询会使用 idx_user_status_created 复合索引
+    query := db.Model(&Order{}).
+        Where("user_id = ? AND status = ?", userID, status).
+        Order("created_at DESC")
+    
+    // 获取总数
+    if err := query.Count(&total).Error; err != nil {
+        return nil, 0, err
+    }
+    
+    // 分页查询
+    offset := (page - 1) * pageSize
+    err := query.Limit(pageSize).Offset(offset).Find(&orders).Error
+    
+    return orders, total, err
+}
+
+// 覆盖索引查询（只查询索引包含的字段）
+func GetOrderSummary(db *gorm.DB, userID uint) ([]OrderSummary, error) {
+    type OrderSummary struct {
+        ID        uint   `json:"id"`
+        Status    string `json:"status"`
+        CreatedAt string `json:"created_at"`
+    }
+    
+    var summaries []OrderSummary
+    
+    // 只选择索引包含的字段，可以使用覆盖索引
+    err := db.Model(&Order{}).
+        Select("id, status, created_at").
+        Where("user_id = ?", userID).
+        Order("created_at DESC").
+        Scan(&summaries).Error
+    
+    return summaries, err
+}
+```
+
+### 查询缓存策略
+```go
+import (
+    "encoding/json"
+    "time"
+    "github.com/go-redis/redis/v8"
+)
+
+type CachedQuery struct {
+    db    *gorm.DB
+    redis *redis.Client
+}
+
+func NewCachedQuery(db *gorm.DB, redis *redis.Client) *CachedQuery {
+    return &CachedQuery{db: db, redis: redis}
+}
+
+// 缓存查询结果
+func (cq *CachedQuery) GetUserWithCache(userID uint) (*User, error) {
+    cacheKey := fmt.Sprintf("user:%d", userID)
+    
+    // 尝试从缓存获取
+    cached, err := cq.redis.Get(context.Background(), cacheKey).Result()
+    if err == nil {
+        var user User
+        if err := json.Unmarshal([]byte(cached), &user); err == nil {
+            return &user, nil
+        }
+    }
+    
+    // 缓存未命中，从数据库查询
+    var user User
+    if err := cq.db.First(&user, userID).Error; err != nil {
+        return nil, err
+    }
+    
+    // 写入缓存
+    userJSON, _ := json.Marshal(user)
+    cq.redis.Set(context.Background(), cacheKey, userJSON, 5*time.Minute)
+    
+    return &user, nil
+}
+
+// 缓存列表查询
+func (cq *CachedQuery) GetUserListWithCache(page, pageSize int, filters map[string]interface{}) ([]User, int64, error) {
+    // 生成缓存键
+    filtersJSON, _ := json.Marshal(filters)
+    cacheKey := fmt.Sprintf("users:list:%d:%d:%x", page, pageSize, md5.Sum(filtersJSON))
+    
+    // 尝试从缓存获取
+    type CachedResult struct {
+        Users []User `json:"users"`
+        Total int64  `json:"total"`
+    }
+    
+    cached, err := cq.redis.Get(context.Background(), cacheKey).Result()
+    if err == nil {
+        var result CachedResult
+        if err := json.Unmarshal([]byte(cached), &result); err == nil {
+            return result.Users, result.Total, nil
+        }
+    }
+    
+    // 从数据库查询
+    users, total, err := SearchUsers(cq.db, filters)
+    if err != nil {
+        return nil, 0, err
+    }
+    
+    // 写入缓存
+    result := CachedResult{Users: users, Total: total}
+    resultJSON, _ := json.Marshal(result)
+    cq.redis.Set(context.Background(), cacheKey, resultJSON, 2*time.Minute)
+    
+    return users, total, nil
+}
+
+// 缓存失效策略
+func (cq *CachedQuery) InvalidateUserCache(userID uint) error {
+    cacheKey := fmt.Sprintf("user:%d", userID)
+    return cq.redis.Del(context.Background(), cacheKey).Err()
+}
+
+func (cq *CachedQuery) InvalidateUserListCache() error {
+    // 删除所有用户列表缓存
+    pattern := "users:list:*"
+    keys, err := cq.redis.Keys(context.Background(), pattern).Result()
+    if err != nil {
+        return err
+    }
+    
+    if len(keys) > 0 {
+        return cq.redis.Del(context.Background(), keys...).Err()
+    }
+    
+    return nil
+}
+```
+
+## 事务管理最佳实践
+
+### 事务封装
+```go
+type TransactionManager struct {
+    db *gorm.DB
+}
+
+func NewTransactionManager(db *gorm.DB) *TransactionManager {
+    return &TransactionManager{db: db}
+}
+
+// 事务执行器
+func (tm *TransactionManager) Execute(fn func(*gorm.DB) error) error {
+    return tm.db.Transaction(func(tx *gorm.DB) error {
+        return fn(tx)
+    })
+}
+
+// 带重试的事务
+func (tm *TransactionManager) ExecuteWithRetry(fn func(*gorm.DB) error, maxRetries int) error {
+    var lastErr error
+    
+    for i := 0; i <= maxRetries; i++ {
+        err := tm.Execute(fn)
+        if err == nil {
+            return nil
+        }
+        
+        lastErr = err
+        
+        // 检查是否是可重试的错误（如死锁）
+        if !isRetryableError(err) {
+            break
+        }
+        
+        // 指数退避
+        if i < maxRetries {
+            time.Sleep(time.Duration(1<<uint(i)) * 100 * time.Millisecond)
+        }
+    }
+    
+    return lastErr
+}
+
+func isRetryableError(err error) bool {
+    errStr := err.Error()
+    // MySQL 死锁错误
+    if strings.Contains(errStr, "Deadlock found") {
+        return true
+    }
+    // 连接超时等临时错误
+    if strings.Contains(errStr, "connection timeout") {
+        return true
+    }
+    return false
+}
+
+// 嵌套事务处理
+func (tm *TransactionManager) NestedExecute(tx *gorm.DB, fn func(*gorm.DB) error) error {
+    // 如果已经在事务中，直接执行
+    if tx != nil {
+        return fn(tx)
+    }
+    
+    // 否则开启新事务
+    return tm.Execute(fn)
+}
+
+// 使用示例：复杂业务事务
+func (tm *TransactionManager) CreateOrderWithInventory(orderData OrderData) error {
+    return tm.ExecuteWithRetry(func(tx *gorm.DB) error {
+        // 1. 创建订单
+        order := Order{
+            UserID:      orderData.UserID,
+            OrderNo:     generateOrderNo(),
+            TotalAmount: orderData.TotalAmount,
+            Status:      "pending",
+        }
+        
+        if err := tx.Create(&order).Error; err != nil {
+            return fmt.Errorf("创建订单失败: %w", err)
+        }
+        
+        // 2. 创建订单项并扣减库存
+        for _, item := range orderData.Items {
+            // 检查库存
+            var product Product
+            if err := tx.Where("id = ?", item.ProductID).First(&product).Error; err != nil {
+                return fmt.Errorf("产品不存在: %w", err)
+            }
+            
+            if product.Stock < item.Quantity {
+                return fmt.Errorf("产品 %s 库存不足", product.Name)
+            }
+            
+            // 扣减库存（使用乐观锁）
+            result := tx.Model(&product).
+                Where("id = ? AND stock >= ?", item.ProductID, item.Quantity).
+                Update("stock", gorm.Expr("stock - ?", item.Quantity))
+            
+            if result.Error != nil {
+                return fmt.Errorf("更新库存失败: %w", result.Error)
+            }
+            
+            if result.RowsAffected == 0 {
+                return fmt.Errorf("产品 %s 库存不足或已被其他订单占用", product.Name)
+            }
+            
+            // 创建订单项
+            orderItem := OrderItem{
+                OrderID:   order.ID,
+                ProductID: item.ProductID,
+                Quantity:  item.Quantity,
+                UnitPrice: product.Price,
+            }
+            
+            if err := tx.Create(&orderItem).Error; err != nil {
+                return fmt.Errorf("创建订单项失败: %w", err)
+            }
+        }
+        
+        // 3. 更新用户统计
+        if err := tx.Model(&User{}).
+            Where("id = ?", orderData.UserID).
+            Update("order_count", gorm.Expr("order_count + 1")).Error; err != nil {
+            return fmt.Errorf("更新用户统计失败: %w", err)
+        }
+        
+        return nil
+    }, 3)
+}
+```
+
+### 分布式事务处理
+```go
+// 分布式事务协调器
+type DistributedTransaction struct {
+    participants []TransactionParticipant
+}
+
+type TransactionParticipant interface {
+    Prepare() error
+    Commit() error
+    Rollback() error
+}
+
+// 数据库事务参与者
+type DatabaseParticipant struct {
+    db *gorm.DB
+    fn func(*gorm.DB) error
+    tx *gorm.DB
+}
+
+func (dp *DatabaseParticipant) Prepare() error {
+    dp.tx = dp.db.Begin()
+    return dp.fn(dp.tx)
+}
+
+func (dp *DatabaseParticipant) Commit() error {
+    return dp.tx.Commit().Error
+}
+
+func (dp *DatabaseParticipant) Rollback() error {
+    return dp.tx.Rollback().Error
+}
+
+// Redis 事务参与者
+type RedisParticipant struct {
+    redis *redis.Client
+    ops   []redis.Cmder
+}
+
+func (rp *RedisParticipant) Prepare() error {
+    // Redis 使用 MULTI/EXEC 实现事务
+    pipe := rp.redis.TxPipeline()
+    for _, op := range rp.ops {
+        pipe.Process(context.Background(), op)
+    }
+    _, err := pipe.Exec(context.Background())
+    return err
+}
+
+func (rp *RedisParticipant) Commit() error {
+    // Redis 事务在 Prepare 阶段已经提交
+    return nil
+}
+
+func (rp *RedisParticipant) Rollback() error {
+    // Redis 需要执行补偿操作
+    return rp.executeCompensation()
+}
+
+func (rp *RedisParticipant) executeCompensation() error {
+    // 实现补偿逻辑
+    return nil
+}
+
+// 2PC 协议实现
+func (dt *DistributedTransaction) Execute() error {
+    // Phase 1: Prepare
+    for _, participant := range dt.participants {
+        if err := participant.Prepare(); err != nil {
+            // 准备失败，回滚所有已准备的参与者
+            dt.rollbackAll()
+            return fmt.Errorf("prepare phase failed: %w", err)
+        }
+    }
+    
+    // Phase 2: Commit
+    for _, participant := range dt.participants {
+        if err := participant.Commit(); err != nil {
+            // 提交失败，尝试回滚（可能部分成功）
+            dt.rollbackRemaining(participant)
+            return fmt.Errorf("commit phase failed: %w", err)
+        }
+    }
+    
+    return nil
+}
+
+func (dt *DistributedTransaction) rollbackAll() {
+    for _, participant := range dt.participants {
+        participant.Rollback()
+    }
+}
+
+func (dt *DistributedTransaction) rollbackRemaining(failed TransactionParticipant) {
+    for _, participant := range dt.participants {
+        if participant != failed {
+            participant.Rollback()
+        }
+    }
+}
+```
+
+## 数据库监控和调试
+
+### 查询性能监控
+```go
+import (
+    "time"
+    "log"
+    "gorm.io/gorm/logger"
+)
+
+// 自定义日志记录器
+type PerformanceLogger struct {
+    logger.Interface
+    slowThreshold time.Duration
+}
+
+func NewPerformanceLogger(slowThreshold time.Duration) *PerformanceLogger {
+    return &PerformanceLogger{
+        Interface:     logger.Default,
+        slowThreshold: slowThreshold,
+    }
+}
+
+func (l *PerformanceLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
+    elapsed := time.Since(begin)
+    sql, rows := fc()
+    
+    if elapsed > l.slowThreshold {
+        log.Printf("SLOW QUERY [%v] %s [%d rows affected]", elapsed, sql, rows)
+    }
+    
+    // 调用原始 logger
+    l.Interface.Trace(ctx, begin, fc, err)
+}
+
+// 查询统计收集器
+type QueryStats struct {
+    TotalQueries   int64         `json:"total_queries"`
+    SlowQueries    int64         `json:"slow_queries"`
+    AverageTime    time.Duration `json:"average_time"`
+    MaxTime        time.Duration `json:"max_time"`
+    ErrorCount     int64         `json:"error_count"`
+    QueryTypes     map[string]int64 `json:"query_types"`
+    mutex          sync.RWMutex
+}
+
+func (qs *QueryStats) RecordQuery(queryType string, duration time.Duration, isError bool) {
+    qs.mutex.Lock()
+    defer qs.mutex.Unlock()
+    
+    qs.TotalQueries++
+    
+    if duration > 1*time.Second {
+        qs.SlowQueries++
+    }
+    
+    if duration > qs.MaxTime {
+        qs.MaxTime = duration
+    }
+    
+    if isError {
+        qs.ErrorCount++
+    }
+    
+    if qs.QueryTypes == nil {
+        qs.QueryTypes = make(map[string]int64)
+    }
+    qs.QueryTypes[queryType]++
+    
+    // 计算平均时间（简化实现）
+    qs.AverageTime = qs.AverageTime + (duration-qs.AverageTime)/time.Duration(qs.TotalQueries)
+}
+
+// 性能监控中间件
+func (qs *QueryStats) Monitor(db *gorm.DB) *gorm.DB {
+    return db.Callback().Query().After("gorm:query").Register("stats:query", func(db *gorm.DB) {
+        startTime := time.Now()
+        
+        // 获取查询类型
+        queryType := "SELECT"
+        if db.Statement.SQL.String() != "" {
+            if strings.Contains(strings.ToUpper(db.Statement.SQL.String()), "INSERT") {
+                queryType = "INSERT"
+            } else if strings.Contains(strings.ToUpper(db.Statement.SQL.String()), "UPDATE") {
+                queryType = "UPDATE"
+            } else if strings.Contains(strings.ToUpper(db.Statement.SQL.String()), "DELETE") {
+                queryType = "DELETE"
+            }
+        }
+        
+        duration := time.Since(startTime)
+        isError := db.Error != nil
+        
+        qs.RecordQuery(queryType, duration, isError)
+    })
+}
+
+// 获取统计信息
+func (qs *QueryStats) GetStats() QueryStats {
+    qs.mutex.RLock()
+    defer qs.mutex.RUnlock()
+    
+    statsCopy := *qs
+    statsCopy.QueryTypes = make(map[string]int64)
+    for k, v := range qs.QueryTypes {
+        statsCopy.QueryTypes[k] = v
+    }
+    
+    return statsCopy
+}
+```
+
+### 连接池监控
+```go
+// 连接池监控器
+type ConnectionPoolMonitor struct {
+    db       *gorm.DB
+    interval time.Duration
+    stopCh   chan struct{}
+}
+
+func NewConnectionPoolMonitor(db *gorm.DB, interval time.Duration) *ConnectionPoolMonitor {
+    return &ConnectionPoolMonitor{
+        db:       db,
+        interval: interval,
+        stopCh:   make(chan struct{}),
+    }
+}
+
+func (cpm *ConnectionPoolMonitor) Start() {
+    ticker := time.NewTicker(cpm.interval)
+    defer ticker.Stop()
+    
+    for {
+        select {
+        case <-ticker.C:
+            cpm.logStats()
+        case <-cpm.stopCh:
+            return
+        }
+    }
+}
+
+func (cpm *ConnectionPoolMonitor) Stop() {
+    close(cpm.stopCh)
+}
+
+func (cpm *ConnectionPoolMonitor) logStats() {
+    sqlDB, err := cpm.db.DB()
+    if err != nil {
+        log.Printf("获取数据库实例失败: %v", err)
+        return
+    }
+    
+    stats := sqlDB.Stats()
+    
+    log.Printf("连接池统计: 打开=%d, 使用中=%d, 空闲=%d, 等待=%d, 等待时间=%v",
+        stats.OpenConnections,
+        stats.InUse,
+        stats.Idle,
+        stats.WaitCount,
+        stats.WaitDuration,
+    )
+    
+    // 检查异常情况
+    if stats.OpenConnections >= int(stats.MaxOpenConnections*0.9) {
+        log.Printf("警告: 连接池使用率过高 (%d/%d)", stats.OpenConnections, stats.MaxOpenConnections)
+    }
+    
+    if stats.WaitCount > 0 {
+        log.Printf("警告: 有连接等待 (等待数=%d, 总等待时间=%v)", stats.WaitCount, stats.WaitDuration)
+    }
+}
+
+// 健康检查
+func (cpm *ConnectionPoolMonitor) HealthCheck() error {
+    sqlDB, err := cpm.db.DB()
+    if err != nil {
+        return fmt.Errorf("获取数据库实例失败: %w", err)
+    }
+    
+    // 检查连接
+    if err := sqlDB.Ping(); err != nil {
+        return fmt.Errorf("数据库连接失败: %w", err)
+    }
+    
+    // 检查连接池状态
+    stats := sqlDB.Stats()
+    if stats.OpenConnections == 0 {
+        return fmt.Errorf("没有可用的数据库连接")
+    }
+    
+    // 检查连接池是否饱和
+    if stats.OpenConnections >= int(stats.MaxOpenConnections*0.95) {
+        return fmt.Errorf("连接池接近饱和: %d/%d", stats.OpenConnections, stats.MaxOpenConnections)
+    }
+    
+    return nil
+}
+```
+
+## 数据一致性保障
+
+### 乐观锁实现
+```go
+// 版本控制模型
+type VersionedModel struct {
+    base.MysqlBaseModel
+    Version int `gorm:"default:1;not null" json:"version"`
+}
+
+// 乐观锁更新
+func UpdateWithOptimisticLock(db *gorm.DB, model interface{}, updates map[string]interface{}) error {
+    modelValue := reflect.ValueOf(model).Elem()
+    versionField := modelValue.FieldByName("Version")
+    idField := modelValue.FieldByName("ID")
+    
+    if !versionField.IsValid() || !idField.IsValid() {
+        return errors.New("模型必须包含 Version 和 ID 字段")
+    }
+    
+    currentVersion := versionField.Int()
+    id := idField.Uint()
+    
+    // 递增版本号
+    updates["version"] = currentVersion + 1
+    
+    // 执行更新，检查版本号
+    result := db.Model(model).
+        Where("id = ? AND version = ?", id, currentVersion).
+        Updates(updates)
+    
+    if result.Error != nil {
+        return result.Error
+    }
+    
+    if result.RowsAffected == 0 {
+        return errors.New("数据已被其他用户修改，请重试")
+    }
+    
+    // 更新内存中的版本号
+    versionField.SetInt(currentVersion + 1)
+    
+    return nil
+}
+
+// 批量乐观锁更新
+func BatchUpdateWithOptimisticLock(db *gorm.DB, models []interface{}, updates map[string]interface{}) error {
+    return db.Transaction(func(tx *gorm.DB) error {
+        for _, model := range models {
+            if err := UpdateWithOptimisticLock(tx, model, updates); err != nil {
+                return err
+            }
+        }
+        return nil
+    })
+}
+```
+
+### 分布式锁
+```go
+import (
+    "context"
+    "crypto/rand"
+    "encoding/hex"
+    "time"
+    "github.com/go-redis/redis/v8"
+)
+
+// Redis 分布式锁
+type DistributedLock struct {
+    redis     *redis.Client
+    key       string
+    value     string
+    expiration time.Duration
+}
+
+func NewDistributedLock(redis *redis.Client, key string, expiration time.Duration) *DistributedLock {
+    // 生成唯一值
+    bytes := make([]byte, 16)
+    rand.Read(bytes)
+    value := hex.EncodeToString(bytes)
+    
+    return &DistributedLock{
+        redis:      redis,
+        key:        "lock:" + key,
+        value:      value,
+        expiration: expiration,
+    }
+}
+
+// 尝试获取锁
+func (dl *DistributedLock) TryLock(ctx context.Context) (bool, error) {
+    result, err := dl.redis.SetNX(ctx, dl.key, dl.value, dl.expiration).Result()
+    return result, err
+}
+
+// 阻塞获取锁
+func (dl *DistributedLock) Lock(ctx context.Context, timeout time.Duration) error {
+    deadline := time.Now().Add(timeout)
+    
+    for time.Now().Before(deadline) {
+        acquired, err := dl.TryLock(ctx)
+        if err != nil {
+            return err
+        }
+        
+        if acquired {
+            return nil
+        }
+        
+        // 短暂等待后重试
+        select {
+        case <-ctx.Done():
+            return ctx.Err()
+        case <-time.After(10 * time.Millisecond):
+        }
+    }
+    
+    return errors.New("获取锁超时")
+}
+
+// 释放锁
+func (dl *DistributedLock) Unlock(ctx context.Context) error {
+    // 使用 Lua 脚本确保只释放自己的锁
+    script := `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+            return redis.call("del", KEYS[1])
+        else
+            return 0
+        end
+    `
+    
+    result, err := dl.redis.Eval(ctx, script, []string{dl.key}, dl.value).Result()
+    if err != nil {
+        return err
+    }
+    
+    if result.(int64) == 0 {
+        return errors.New("锁已被其他进程释放")
+    }
+    
+    return nil
+}
+
+// 使用分布式锁的示例
+func ProcessOrderWithLock(redis *redis.Client, db *gorm.DB, orderID uint) error {
+    lockKey := fmt.Sprintf("process_order_%d", orderID)
+    lock := NewDistributedLock(redis, lockKey, 30*time.Second)
+    
+    ctx := context.Background()
+    
+    // 获取锁
+    if err := lock.Lock(ctx, 10*time.Second); err != nil {
+        return fmt.Errorf("获取处理锁失败: %w", err)
+    }
+    defer lock.Unlock(ctx)
+    
+    // 执行业务逻辑
+    return db.Transaction(func(tx *gorm.DB) error {
+        var order Order
+        if err := tx.First(&order, orderID).Error; err != nil {
+            return err
+        }
+        
+        if order.Status != "pending" {
+            return errors.New("订单状态不正确")
+        }
+        
+        // 处理订单...
+        order.Status = "processing"
+        return tx.Save(&order).Error
+    })
+}
+```
+
+这个文档涵盖了高级查询模式、性能优化、事务管理、监控调试和数据一致性等关键主题，为开发人员提供了全面的最佳实践指导。
+description:
+globs:
+alwaysApply: false
+---
