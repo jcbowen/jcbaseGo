@@ -545,11 +545,11 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
 ```go
 // 自定义列表返回结构体
 type UserListResult struct {
-    ID       uint   `json:"id"`
-    Username string `json:"username"`
-    Email    string `json:"email"`
-    Status   int    `json:"status"`
-    IsOnline bool   `json:"is_online"` // 计算字段
+    ID       uint   `gorm:"column:id"`
+    Username string `gorm:"column:username"`
+    Email    string `gorm:"column:email"`
+    Status   int    `gorm:"column:status"`
+    IsOnline bool   `gorm:"column:is_online"` // 计算字段
 }
 
 func New() *Index {
