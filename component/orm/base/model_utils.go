@@ -3,6 +3,7 @@ package base
 import (
 	"reflect"
 	"strings"
+	"time"
 )
 
 // getColumnFromTag 从gorm标签中获取列名
@@ -43,8 +44,13 @@ func getSoftDeleteFromTag(tag string) string {
 	return ""
 }
 
-// setFieldIfExist 设置字段值（如果字段存在且可设置）
-func setFieldIfExist(model interface{}, fieldName string, value string) {
+// SetFieldIfExist 设置字段值（如果字段存在且可设置）
+// 支持字符串类型和时间类型字段的自动设置
+// 参数说明：
+//   - model interface{}: 要设置字段值的模型对象
+//   - fieldName string: 字段名称
+//   - value string: 字段值（字符串格式的时间）
+func SetFieldIfExist(model interface{}, fieldName string, value string) {
 	modelValue := reflect.ValueOf(model)
 
 	if modelValue.Kind() == reflect.Ptr {
@@ -54,8 +60,21 @@ func setFieldIfExist(model interface{}, fieldName string, value string) {
 	switch modelValue.Kind() {
 	case reflect.Struct:
 		field := modelValue.FieldByName(fieldName)
-		if field.IsValid() && field.CanSet() && field.Kind() == reflect.String {
-			field.SetString(value)
+		if field.IsValid() && field.CanSet() {
+			// 根据字段类型设置相应的值
+			switch field.Kind() {
+			case reflect.String:
+				// 字符串类型字段，直接设置
+				field.SetString(value)
+			case reflect.Struct:
+				// 检查是否为 time.Time 类型
+				if field.Type().String() == "time.Time" {
+					// 解析时间字符串并设置
+					if timeValue, err := time.Parse("2006-01-02 15:04:05", value); err == nil {
+						field.Set(reflect.ValueOf(timeValue))
+					}
+				}
+			}
 		}
 	case reflect.Map:
 		key := reflect.ValueOf(fieldName)

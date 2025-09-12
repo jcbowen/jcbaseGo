@@ -107,12 +107,12 @@ func (b *MysqlBaseModel) ModelParse(modelType reflect.Type) (tableName string, f
 
 func (b *MysqlBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
 	strTime := time.Now().Format("2006-01-02 15:04:05")
-	setFieldIfExist(tx.Statement.Dest, "CreatedAt", strTime)
-	setFieldIfExist(tx.Statement.Dest, "UpdatedAt", strTime)
+	SetFieldIfExist(tx.Statement.Dest, "CreatedAt", strTime)
+	SetFieldIfExist(tx.Statement.Dest, "UpdatedAt", strTime)
 	return
 }
 
 func (b *MysqlBaseModel) BeforeUpdate(tx *gorm.DB) (err error) {
-	setFieldIfExist(tx.Statement.Dest, "UpdatedAt", time.Now().Format("2006-01-02 15:04:05"))
+	SetFieldIfExist(tx.Statement.Dest, "UpdatedAt", time.Now().Format("2006-01-02 15:04:05"))
 	return
 }

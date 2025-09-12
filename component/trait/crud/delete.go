@@ -181,8 +181,21 @@ func (t *Trait) DeleteCondition(delArr []map[string]interface{}) map[string]inte
 		fieldName = "deleted_at"
 	}
 
-	return map[string]interface{}{
-		fieldName: time.Now().Format("2006-01-02 15:04:05"),
+	// 获取当前时间
+	now := time.Now()
+
+	// 检查模型字段类型，决定返回字符串还是时间类型
+	fieldType := t.getFieldType(fieldName)
+	if fieldType == "time.Time" {
+		// 如果字段是时间类型，返回 time.Time 对象
+		return map[string]interface{}{
+			fieldName: now,
+		}
+	} else {
+		// 如果字段是字符串类型，返回格式化的时间字符串
+		return map[string]interface{}{
+			fieldName: now.Format("2006-01-02 15:04:05"),
+		}
 	}
 }
 

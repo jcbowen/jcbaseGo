@@ -39,17 +39,26 @@ type User struct {
     ID        uint   `gorm:"column:id;primaryKey" json:"id"`
     Name      string `gorm:"column:name;size:100" json:"name"`
 
-    // 方式1: 使用系统默认的 deleted_at 字段
+    // 方式1: 使用系统默认的 deleted_at 字段（字符串类型）
     DeletedAt string `gorm:"column:deleted_at;type:DATETIME;default:NULL" json:"deleted_at"`
 
-    // 方式2: 自定义软删除字段，条件为 IS NULL
+    // 方式1-1: 使用系统默认的 deleted_at 字段（时间类型，推荐）
+    // DeletedAt time.Time `gorm:"column:deleted_at;type:DATETIME;default:NULL" json:"deleted_at"`
+
+    // 方式2: 自定义软删除字段，条件为 IS NULL（字符串类型）
     // IsDeleted string `gorm:"column:is_deleted;type:DATETIME;soft_delete:IS NULL" json:"is_deleted"`
+
+    // 方式2-1: 自定义软删除字段，条件为 IS NULL（时间类型，推荐）
+    // IsDeleted time.Time `gorm:"column:is_deleted;type:DATETIME;soft_delete:IS NULL" json:"is_deleted"`
 
     // 方式3: 使用状态字段作为软删除，条件为 = 1（表示正常状态）
     // Status int `gorm:"column:status;type:INT;soft_delete:= 1" json:"status"`
 
-    // 方式4: 使用特殊默认值的 deleted_at 字段
+    // 方式4: 使用特殊默认值的 deleted_at 字段（字符串类型）
     // DeletedAt string `gorm:"column:deleted_at;type:DATETIME;default:0000-00-00 00:00:00" json:"deleted_at"`
+
+    // 方式4-1: 使用特殊默认值的 deleted_at 字段（时间类型，推荐）
+    // DeletedAt time.Time `gorm:"column:deleted_at;type:DATETIME;default:NULL" json:"deleted_at"`
 }
 ```
 
@@ -66,11 +75,88 @@ type User struct {
 
 4. **特殊默认值**：如果 `deleted_at` 字段的默认值为 `0000-00-00 00:00:00`，系统会自动使用 `= '0000-00-00 00:00:00'` 作为软删除条件
 
+5. **时间字段类型**：系统支持两种时间字段类型：
+   - **字符串类型**：`string` - 向后兼容，现有代码无需修改
+   - **时间类型**：`time.Time` - 推荐使用，提供更好的类型安全性和性能
+   - **混合使用**：同一个模型中可以同时使用字符串和时间类型字段
+
 ### 使用效果
 
 - **查询时**：系统会自动添加软删除条件，只查询未删除的数据
 - **删除时**：执行软删除操作，更新软删除字段的值
 - **显示已删除数据**：通过 `show_deleted=1` 参数可以查看已删除的数据
+
+## 时间字段类型支持
+
+### 概述
+
+jcbaseGo 现在支持两种时间字段类型，提供完全的向后兼容性：
+
+- **字符串类型**：`string` - 向后兼容，现有代码无需修改
+- **时间类型**：`time.Time` - 推荐使用，提供更好的类型安全性和性能
+
+### 字符串类型示例
+
+```go
+type User struct {
+    base.MysqlBaseModel
+    ID        uint   `gorm:"column:id;primaryKey" json:"id"`
+    Name      string `gorm:"column:name;size:100" json:"name"`
+    CreatedAt string `gorm:"column:created_at;type:DATETIME" json:"created_at"`
+    UpdatedAt string `gorm:"column:updated_at;type:DATETIME" json:"updated_at"`
+    DeletedAt string `gorm:"column:deleted_at;type:DATETIME;default:NULL" json:"deleted_at"`
+}
+```
+
+### 时间类型示例（推荐）
+
+```go
+import "time"
+
+type User struct {
+    base.MysqlBaseModel
+    ID        uint      `gorm:"column:id;primaryKey" json:"id"`
+    Name      string    `gorm:"column:name;size:100" json:"name"`
+    CreatedAt time.Time `gorm:"column:created_at;type:DATETIME" json:"created_at"`
+    UpdatedAt time.Time `gorm:"column:updated_at;type:DATETIME" json:"updated_at"`
+    DeletedAt time.Time `gorm:"column:deleted_at;type:DATETIME;default:NULL" json:"deleted_at"`
+}
+```
+
+### 混合类型示例
+
+```go
+type User struct {
+    base.MysqlBaseModel
+    ID        uint      `gorm:"column:id;primaryKey" json:"id"`
+    Name      string    `gorm:"column:name;size:100" json:"name"`
+    CreatedAt time.Time `gorm:"column:created_at;type:DATETIME" json:"created_at"` // 时间类型
+    UpdatedAt string    `gorm:"column:updated_at;type:DATETIME" json:"updated_at"` // 字符串类型
+    DeletedAt time.Time `gorm:"column:deleted_at;type:DATETIME;default:NULL" json:"deleted_at"` // 时间类型
+}
+```
+
+### 时间字段类型优势
+
+#### 使用 `time.Time` 类型的优势：
+1. **类型安全**：编译时检查，避免时间格式错误
+2. **更好的性能**：无需字符串解析和格式化
+3. **丰富的API**：支持时间计算、比较等操作
+4. **标准化**：符合 Go 语言最佳实践
+
+#### 向后兼容性：
+- 现有使用字符串类型的代码继续正常工作
+- 可以逐步迁移，无需一次性修改所有代码
+- 新旧类型可以在同一个项目中并存
+
+### 迁移指南
+
+详细的迁移指南和示例代码请参考：
+- `example/time_field_migration/README.md` - 完整迁移指南
+- `example/time_field_migration/string_type/` - 字符串类型示例
+- `example/time_field_migration/time_type/` - 时间类型示例
+- `example/time_field_migration/mixed_type/` - 混合类型示例
+- `example/time_field_migration/migration/` - 完整迁移示例
 
 ## 使用示例
 

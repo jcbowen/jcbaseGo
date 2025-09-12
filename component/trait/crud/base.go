@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -374,4 +375,48 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 //   - mapData map[string]any: 获取到的GPC数据映射
 func (t *Trait) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 	return t.BaseControllerTrait.GetSafeMapGPC(key...)
+}
+
+// getFieldType 获取模型字段的类型
+// 参数说明：
+//   - fieldName string: 字段名称
+//
+// 返回值：
+//   - string: 字段类型字符串，如 "string"、"time.Time" 等
+func (t *Trait) getFieldType(fieldName string) string {
+	if t.Model == nil {
+		return "string" // 默认返回字符串类型
+	}
+
+	modelType := reflect.TypeOf(t.Model)
+	if modelType.Kind() == reflect.Ptr {
+		modelType = modelType.Elem()
+	}
+
+	// 遍历模型字段查找指定字段
+	for i := 0; i < modelType.NumField(); i++ {
+		field := modelType.Field(i)
+
+		// 检查字段名是否匹配（忽略大小写）
+		if strings.EqualFold(field.Name, fieldName) {
+			return field.Type.String()
+		}
+
+		// 检查 gorm 标签中的列名
+		gormTag := field.Tag.Get("gorm")
+		if gormTag != "" {
+			// 解析 gorm 标签获取列名
+			tags := strings.Split(gormTag, ";")
+			for _, tag := range tags {
+				if strings.HasPrefix(tag, "column:") {
+					columnName := strings.TrimPrefix(tag, "column:")
+					if columnName == fieldName {
+						return field.Type.String()
+					}
+				}
+			}
+		}
+	}
+
+	return "string" // 默认返回字符串类型
 }
