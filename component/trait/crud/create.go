@@ -89,7 +89,7 @@ func (t *Trait) CreateFormData() (modelValue interface{}, mapData map[string]any
 //   - map[string]any: 处理后的表单数据映射
 //   - error: 处理过程中的错误信息
 func (t *Trait) CreateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
-	callResults := t.callCustomMethod("SaveBefore", modelValue, mapData)
+	callResults := t.callCustomMethod("SaveBefore", modelValue, mapData, nil)
 	modelValue = callResults[0]
 	mapData = callResults[1].(map[string]any)
 	var err error
