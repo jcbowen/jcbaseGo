@@ -1,6 +1,7 @@
 package crud
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"reflect"
@@ -259,6 +260,22 @@ func (t *Trait) BindMapToStruct(mapData map[string]any, modelValue interface{}) 
 // 返回值：
 //   - error: 设置过程中的错误信息
 func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
+	// 如果传入值为nil，直接设置零值并返回，避免反射panic
+	if val == nil {
+		fieldVal.Set(reflect.Zero(fieldVal.Type()))
+		return nil
+	}
+	// 统一处理指针类型：如果目标是指针，则创建元素并对元素赋值
+	if fieldVal.Kind() == reflect.Ptr {
+		// 如果还未分配，先创建一个新的元素
+		if fieldVal.IsNil() {
+			newElem := reflect.New(fieldVal.Type().Elem())
+			fieldVal.Set(newElem)
+		}
+		// 对指针指向的元素赋值
+		return t.setValue(fieldVal.Elem(), val)
+	}
+
 	switch fieldVal.Kind() {
 	case reflect.String:
 		strVal := helper.Convert{Value: val}.ToString()
@@ -272,9 +289,41 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 	case reflect.Float32, reflect.Float64:
 		floatVal := helper.Convert{Value: val}.ToFloat64()
 		fieldVal.SetFloat(floatVal)
+	case reflect.Bool:
+		// 处理布尔类型，兼容多种输入：bool、字符串、数字等
+		boolVal := false
+		switch v := val.(type) {
+		case bool:
+			boolVal = v
+		case string:
+			s := strings.TrimSpace(strings.ToLower(v))
+			switch s {
+			case "1", "true", "yes", "y", "on":
+				boolVal = true
+			case "0", "false", "no", "n", "off", "":
+				boolVal = false
+			default:
+				// 尝试按数字解析
+				boolVal = helper.Convert{Value: v}.ToInt64() != 0
+			}
+		case int, int8, int16, int32, int64:
+			boolVal = helper.Convert{Value: v}.ToInt64() != 0
+		case uint, uint8, uint16, uint32, uint64:
+			boolVal = helper.Convert{Value: v}.ToUint64() != 0
+		case float32, float64:
+			boolVal = helper.Convert{Value: v}.ToFloat64() != 0
+		default:
+			// 其他类型统一按字符串或数字再判断
+			boolVal = helper.Convert{Value: v}.ToInt64() != 0
+		}
+		fieldVal.SetBool(boolVal)
 	case reflect.Map:
 		// 检查输入val是否为map类型
 		valReflected := reflect.ValueOf(val)
+		if !valReflected.IsValid() {
+			fieldVal.Set(reflect.Zero(fieldVal.Type()))
+			return nil
+		}
 		if valReflected.Kind() == reflect.Map {
 			valType := valReflected.Type()
 			fieldType := fieldVal.Type()
@@ -302,44 +351,149 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 				fieldVal.Set(reflect.Zero(fieldType))
 			}
 		} else {
-			log.Printf("Expected map type for field, got %s\n", valReflected.Type())
-			// 不是map类型，设置为nil
+			if valReflected.IsValid() {
+				log.Printf("Expected map type for field, got %s\n", valReflected.Kind())
+			}
+			// 不是map类型，设置为零值
 			fieldVal.Set(reflect.Zero(fieldVal.Type()))
 		}
 	case reflect.Slice:
-		// 处理slice类型
+		// 处理 slice 类型，增强兼容：支持 []map -> []struct，JSON 字符串 -> slice
+		fieldType := fieldVal.Type()
 		valReflected := reflect.ValueOf(val)
+		if !valReflected.IsValid() {
+			fieldVal.Set(reflect.Zero(fieldVal.Type()))
+			return nil
+		}
+
+		// 如果传入的是字符串，尝试按 JSON 反序列化
+		if valReflected.Kind() == reflect.String {
+			newSlice := reflect.MakeSlice(fieldType, 0, 0)
+			// 使用一个同类型的临时切片来接收
+			tmpPtr := reflect.New(fieldType)
+			tmpPtr.Elem().Set(newSlice)
+			if err := json.Unmarshal([]byte(valReflected.String()), tmpPtr.Interface()); err == nil {
+				fieldVal.Set(tmpPtr.Elem())
+				return nil
+			}
+		}
+
 		if valReflected.Kind() == reflect.Slice {
 			valType := valReflected.Type()
-			fieldType := fieldVal.Type()
-
+			// 元素类型完全可赋值，直接设置
 			if valType.Elem().AssignableTo(fieldType.Elem()) {
 				fieldVal.Set(valReflected)
-			} else if valType.Elem().Kind() == reflect.Interface && fieldType.Elem().Kind() == reflect.String {
-				// 如果slice中的元素是interface{}，而目标类型是string，则进行转换
-				convertedSlice := reflect.MakeSlice(fieldType, valReflected.Len(), valReflected.Cap())
+				return nil
+			}
+
+			// 如果目标元素是 struct 或 *struct，尝试把每个元素的 map 映射为 struct
+			destElemType := fieldType.Elem()
+			isPtrElem := false
+			if destElemType.Kind() == reflect.Ptr && destElemType.Elem().Kind() == reflect.Struct {
+				isPtrElem = true
+				destElemType = destElemType.Elem()
+			}
+			if destElemType.Kind() == reflect.Struct {
+				converted := reflect.MakeSlice(fieldType, 0, valReflected.Len())
+				for i := 0; i < valReflected.Len(); i++ {
+					ele := valReflected.Index(i).Interface()
+					// 接受 map[string]any 或 map[any]any
+					m, ok := ele.(map[string]interface{})
+					if !ok {
+						if mv, ok2 := ele.(map[interface{}]interface{}); ok2 {
+							m = make(map[string]interface{}, len(mv))
+							for k, v := range mv {
+								m[helper.Convert{Value: k}.ToString()] = v
+							}
+						} else {
+							// 不支持的元素，跳过或置零
+							continue
+						}
+					}
+
+					// 创建目标元素
+					var elemVal reflect.Value
+					if isPtrElem {
+						elemVal = reflect.New(destElemType)
+						if err := t.assignMapToStruct(elemVal.Elem(), m); err != nil {
+							return err
+						}
+						converted = reflect.Append(converted, elemVal)
+					} else {
+						elemVal = reflect.New(destElemType).Elem()
+						if err := t.assignMapToStruct(elemVal, m); err != nil {
+							return err
+						}
+						converted = reflect.Append(converted, elemVal)
+					}
+				}
+				fieldVal.Set(converted)
+				return nil
+			}
+
+			// 兼容 interface{} -> string 的转换场景
+			if valType.Elem().Kind() == reflect.Interface && fieldType.Elem().Kind() == reflect.String {
+				convertedSlice := reflect.MakeSlice(fieldType, valReflected.Len(), valReflected.Len())
 				for i := 0; i < valReflected.Len(); i++ {
 					strVal := helper.Convert{Value: valReflected.Index(i).Interface()}.ToString()
 					convertedSlice.Index(i).SetString(strVal)
 				}
 				fieldVal.Set(convertedSlice)
-			} else {
-				log.Printf("Slice element type mismatch: expected %s elements but got %s elements\n", fieldType.Elem(), valType.Elem())
-				fieldVal.Set(reflect.Zero(fieldType))
+				return nil
 			}
-		} else {
-			log.Printf("Expected slice type for field, got %s\n", valReflected.Type())
-			fieldVal.Set(reflect.Zero(fieldVal.Type()))
-		}
-	case reflect.Struct:
-		valReflected := reflect.ValueOf(val)
-		if valReflected.Kind() != reflect.Struct {
-			log.Printf("Expected struct type for assignment but got %s\n", valReflected.Type())
-			fieldVal.Set(reflect.Zero(fieldVal.Type())) // 设置为零值
-			return nil                                  // 返回 nil，不中断程序
+
+			log.Printf("Slice element type mismatch: expected %s elements but got %s elements\n", fieldType.Elem(), valType.Elem())
+			fieldVal.Set(reflect.Zero(fieldType))
+			return nil
 		}
 
-		// 遍历结构体中的每个字段
+		if valReflected.IsValid() {
+			log.Printf("Expected slice type for field, got %s\n", valReflected.Kind())
+		}
+		fieldVal.Set(reflect.Zero(fieldVal.Type()))
+		return nil
+	case reflect.Struct:
+		valReflected := reflect.ValueOf(val)
+		// 1) 如果传入 map，则按字段名/JSON标签进行映射
+		if valReflected.Kind() == reflect.Map {
+			// 先把 map[any]any 统一转换为 map[string]any
+			var m map[string]interface{}
+			if mv, ok := val.(map[string]interface{}); ok {
+				m = mv
+			} else if mv2, ok2 := val.(map[interface{}]interface{}); ok2 {
+				m = make(map[string]interface{}, len(mv2))
+				for k, v := range mv2 {
+					m[helper.Convert{Value: k}.ToString()] = v
+				}
+			} else {
+				// 其他 map 类型，尝试通过反射读取
+				m = make(map[string]interface{})
+				for _, key := range valReflected.MapKeys() {
+					m[helper.Convert{Value: key.Interface()}.ToString()] = valReflected.MapIndex(key).Interface()
+				}
+			}
+			if err := t.assignMapToStruct(fieldVal, m); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		// 2) 如果传入字符串，尝试 JSON 反序列化
+		if valReflected.Kind() == reflect.String {
+			tmpPtr := reflect.New(fieldVal.Type())
+			if err := json.Unmarshal([]byte(valReflected.String()), tmpPtr.Interface()); err == nil {
+				fieldVal.Set(tmpPtr.Elem())
+				return nil
+			}
+		}
+
+		// 3) 仍是 struct，则按字段名逐个拷贝
+		if valReflected.Kind() != reflect.Struct {
+			log.Printf("Expected struct type for assignment but got %s\n", valReflected.Type())
+			fieldVal.Set(reflect.Zero(fieldVal.Type()))
+			return nil
+		}
+
 		for i := 0; i < fieldVal.NumField(); i++ {
 			field := fieldVal.Type().Field(i)
 			subFieldVal := fieldVal.Field(i)
@@ -348,11 +502,9 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 				log.Printf("Field %s cannot be set. \n", field.Name)
 				continue
 			}
-
-			// 检查val中是否存在此字段
 			subValField := valReflected.FieldByName(field.Name)
 			if !subValField.IsValid() {
-				continue // 或者根据需要处理不存在的字段
+				continue
 			}
 
 			// 递归地为结构体字段赋值
@@ -364,6 +516,54 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 		return errors.New("unsupported field type：" + fieldVal.Kind().String())
 	}
 
+	return nil
+}
+
+// assignMapToStruct 将 map[string]any 映射到结构体字段
+// 支持按照字段名和 `json` 标签匹配，并递归处理嵌套结构体、指针、切片
+func (t *Trait) assignMapToStruct(structVal reflect.Value, data map[string]interface{}) error {
+	structType := structVal.Type()
+	for i := 0; i < structVal.NumField(); i++ {
+		field := structType.Field(i)
+		if !structVal.Field(i).CanSet() {
+			continue
+		}
+
+		// 优先匹配 json 标签
+		jsonTag := field.Tag.Get("json")
+		candidateKeys := []string{}
+		if jsonTag != "" {
+			candidateKeys = append(candidateKeys, strings.Split(jsonTag, ",")[0])
+		}
+		candidateKeys = append(candidateKeys, field.Name)
+
+		var value interface{}
+		found := false
+		for _, k := range candidateKeys {
+			if k == "-" || k == "" {
+				continue
+			}
+			if v, ok := data[k]; ok {
+				value = v
+				found = true
+				break
+			}
+			// 兼容下划线命名
+			lower := strings.ToLower(k)
+			if v, ok := data[lower]; ok {
+				value = v
+				found = true
+				break
+			}
+		}
+		if !found {
+			continue
+		}
+
+		if err := t.setValue(structVal.Field(i), value); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
