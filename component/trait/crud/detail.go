@@ -90,7 +90,8 @@ func (t *Trait) ActionDetail(c *gin.Context) {
 
 	result := reflect.New(modelType).Interface()
 
-	err := query.Where(t.TableAlias+t.PkId+" = ?", id).First(result).Error
+	err := query.Model(reflect.New(reflect.TypeOf(t.Model).Elem()).Interface()).
+		Where(t.TableAlias+t.PkId+" = ?", id).First(result).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			t.Result(errcode.NotExist, "数据不存在或已被删除")
