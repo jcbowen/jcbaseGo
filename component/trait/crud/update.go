@@ -174,6 +174,31 @@ func (t *Trait) UpdateAfter(tx *gorm.DB, modelValue interface{}, originalData in
 // 返回值：
 //   - bool: 处理结果，通常返回true表示成功
 func (t *Trait) UpdateReturn(item interface{}) bool {
-	t.Result(errcode.Success, "ok")
+	var (
+		mapItem map[string]any
+		pkId    uint
+	)
+
+	// 判断是否为指针
+	if reflect.TypeOf(item).Kind() == reflect.Ptr {
+		item = reflect.ValueOf(item).Elem().Interface()
+	}
+
+	// 将 item 转换为 map，方便取值
+	switch reflect.TypeOf(item).Kind() {
+	case reflect.Struct:
+		helper.Json(item).ToMap(&mapItem)
+	default:
+		mapItem = item.(map[string]any)
+	}
+
+	// 获取主键
+	pkIdAny, _ := mapItem[t.PkId]
+	pkId = helper.Convert{Value: pkIdAny}.ToUint()
+
+	t.Result(errcode.Success, "ok", gin.H{
+		t.PkId: pkId,
+	})
+
 	return true
 }
