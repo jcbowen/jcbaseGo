@@ -34,6 +34,9 @@ func (t *Trait) ActionAll(c *gin.Context) {
 
 	query = t.callCustomMethod("AllQuery", query)[0].(*gorm.DB)
 
+	// 设置查询字段
+	query = t.callCustomMethod("AllSelect", query)[0].(*gorm.DB)
+
 	// 获取排序
 	order := t.callCustomMethod("AllOrder")[0]
 	if order != nil {
@@ -78,6 +81,16 @@ func (t *Trait) ActionAll(c *gin.Context) {
 //   - *gorm.DB: 设置了查询条件的查询对象
 func (t *Trait) AllQuery(query *gorm.DB) *gorm.DB {
 	return query
+}
+
+// AllSelect 设置获取所有数据的SELECT字段
+// 参数说明：
+//   - query *gorm.DB: 数据库查询对象
+//
+// 返回值：
+//   - *gorm.DB: 设置了SELECT字段的查询对象
+func (t *Trait) AllSelect(query *gorm.DB) *gorm.DB {
+	return query.Select(t.TableAlias + "*")
 }
 
 // AllOrder 设置获取所有数据的排序规则

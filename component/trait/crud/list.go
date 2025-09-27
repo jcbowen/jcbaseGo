@@ -133,8 +133,7 @@ func (t *Trait) ActionList(c *gin.Context) {
 // 返回值：
 //   - *gorm.DB: 设置了SELECT字段的查询对象
 func (t *Trait) ListSelect(query *gorm.DB) *gorm.DB {
-	// 默认就是查询*，所以这里就没必要单独写query.Select("*")了
-	return query
+	return query.Select(t.TableAlias + "*")
 }
 
 // ListQuery 设置列表查询的WHERE条件和其他查询参数
