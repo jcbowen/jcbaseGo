@@ -124,7 +124,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 
 	// 处理事务结果
 	if err != nil {
-		t.Result(errcode.StorageError, "删除失败："+err.Error())
+		t.Result(errcode.DatabaseError, "删除失败："+err.Error())
 		return
 	}
 
