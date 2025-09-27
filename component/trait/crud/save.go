@@ -1,18 +1,19 @@
 package crud
 
 import (
+	"log"
+	"reflect"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"gorm.io/gorm"
-	"log"
-	"reflect"
 )
 
 // ActionSave 保存数据的主要处理方法（自动判断创建或更新）
 // 参数说明：
 //   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionSave(c *gin.Context) {
-	t.InitCrud(c)
+	t.InitCrud(c, "save")
 	id, _ := t.ExtractPkId()
 
 	if !helper.IsEmptyValue(id) {

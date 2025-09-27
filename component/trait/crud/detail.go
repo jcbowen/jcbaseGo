@@ -14,7 +14,7 @@ import (
 // 参数说明：
 //   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionDetail(c *gin.Context) {
-	t.InitCrud(c)
+	t.InitCrud(c, "detail")
 
 	// detail参数获取回调
 	callResults := t.callCustomMethod("DetailFormData")

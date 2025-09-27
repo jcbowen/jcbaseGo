@@ -16,6 +16,7 @@ import (
 
 type Trait struct {
 	// ----- 基础配置 ----- /
+
 	PkId               string       `default:"id"` // 数据表主键
 	Model              any          // 模型指针
 	ModelTableAlias    string       // 模型表别名
@@ -25,6 +26,8 @@ type Trait struct {
 	Controller         interface{}  // 控制器
 
 	// ----- 初始化时生成 ----- /
+
+	ActionName          string   // Action名称(如: "create", "update", "delete", "detail", "list", "all", "set-value")
 	ModelTableName      string   // 模型表名
 	ModelFields         []string // 模型所有字段
 	SoftDeleteField     string   // 软删除字段名（如: "deleted_at"、"is_deleted" 等）
@@ -33,15 +36,22 @@ type Trait struct {
 	TableAlias          string   // 表别名（仅用于拼接查询语句，配置别名请用ModelTableAlias）
 
 	// ----- 非基础配置 ----- /
+
 	BaseControllerTrait controller.Base
 }
 
 // InitCrud 初始化CRUD，仅当初始化完成才可以使用
 // 参数说明：
 //   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
-func (t *Trait) InitCrud(c *gin.Context) {
+//   - args ...any: 可选的参数列表
+func (t *Trait) InitCrud(c *gin.Context, args ...any) {
 	_ = helper.CheckAndSetDefault(t)
 	t.BaseControllerTrait.GinContext = c
+
+	// 设置ActionName
+	if len(args) > 0 {
+		t.ActionName, _ = args[0].(string)
+	}
 
 	// 设置json响应头
 	c.Set("Content-type", "application/json;charset=utf-8")

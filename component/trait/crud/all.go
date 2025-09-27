@@ -13,7 +13,7 @@ import (
 // 参数说明：
 //   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionAll(c *gin.Context) {
-	t.InitCrud(c)
+	t.InitCrud(c, "all")
 
 	// 获取是否显示已删除数据的参数
 	showDeletedStr := c.DefaultQuery("show_deleted", "0")
