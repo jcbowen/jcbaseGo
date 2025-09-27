@@ -18,6 +18,7 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 
 	// 获取表单数据
 	callResults := t.callCustomMethod("SetValueFormData")
+	modelValue := callResults[0]
 	mapData := callResults[1].(map[string]any)
 	if callResults[2] != nil {
 		err := callResults[2].(error)
@@ -86,6 +87,11 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 		}
 	}
 
+	updatedField := reflect.ValueOf(modelValue).Elem().FieldByName(field)
+	if updatedField.IsValid() && updatedField.CanSet() {
+		updatedField.Set(reflect.ValueOf(value))
+	}
+
 	// 使用GORM的事务方法，自动处理提交和回滚
 	err := t.DBI.GetDb().Transaction(func(tx *gorm.DB) error {
 		// 查询数据
@@ -93,8 +99,8 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 		result := reflect.New(modelType).Interface()
 		query := tx.Table(t.ModelTableName)
 		// 应用软删除条件
-		if helper.InArray("deleted_at", t.ModelFields) {
-			query = query.Where("deleted_at " + t.SoftDeleteCondition)
+		if t.SoftDeleteField != "" && helper.InArray(t.SoftDeleteField, t.ModelFields) {
+			query = query.Where(t.SoftDeleteField + " " + t.SoftDeleteCondition)
 		}
 		err := query.Where(t.PkId+" = ?", id).First(result).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -102,6 +108,17 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 		}
 		if err != nil {
 			return err
+		}
+
+		// 调用 SetValueBefore 钩子进行前置处理（在事务内，查询到原始数据后）
+		callResults = t.callCustomMethod("SetValueBefore", modelValue, mapData, result)
+		modelValue = callResults[0]
+		mapData = callResults[1].(map[string]any)
+		if callResults[2] != nil {
+			err := callResults[2].(error)
+			if err != nil {
+				return err
+			}
 		}
 
 		// 检查值是否发生变化
@@ -117,7 +134,7 @@ func (t *Trait) ActionSetValue(c *gin.Context) {
 		}
 
 		// 调用自定义的SetValueAfter方法进行后置处理
-		callResults = t.callCustomMethod("SetValueAfter", tx, id, field, value)
+		callResults = t.callCustomMethod("SetValueAfter", tx, modelValue)
 		if callResults[0] != nil {
 			err, ok := callResults[0].(error)
 			if ok && err != nil {
@@ -168,28 +185,46 @@ func (t *Trait) SetValueCheckField(field string) error {
 
 // SetValueBefore 设置字段值前的钩子方法，用于数据预处理和验证
 // 参数说明：
-//   - modelValue interface{}: 要设置的模型实例
+//   - modelValue interface{}: 表单数据绑定的模型实例
 //   - mapData map[string]any: 表单数据映射
+//   - originalData interface{}: 数据库中的数据
 //
 // 返回值：
 //   - interface{}: 处理后的模型实例
 //   - map[string]any: 处理后的表单数据映射
 //   - error: 处理过程中的错误信息
-func (t *Trait) SetValueBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
-	return modelValue, mapData, nil
+func (t *Trait) SetValueBefore(modelValue interface{}, mapData map[string]any, originalData interface{}) (interface{}, map[string]any, error) {
+	// 调用通用的 SaveBefore 钩子方法，传入原始数据
+	callResults := t.callCustomMethod("SaveBefore", modelValue, mapData, originalData)
+	modelValue = callResults[0]
+	mapData = callResults[1].(map[string]any)
+	var err error
+	if callResults[2] != nil {
+		err = callResults[2].(error)
+	} else {
+		err = nil
+	}
+
+	return modelValue, mapData, err
 }
 
 // SetValueAfter 设置字段值后的钩子方法，用于后续处理（在事务内执行）
 // 参数说明：
 //   - tx *gorm.DB: 数据库事务对象
-//   - id uint: 被设置的记录ID
-//   - field string: 被设置的字段名
-//   - value any: 设置的值
+//   - modelValue interface{}: 包含设置字段值的模型实例(与其他钩子不同的是，其他钩子的modelValue是处理后的模型实例，而set-value的modelValue是表单数据绑定的模型实例，因为set-value是直接更新指定字段)
 //
 // 返回值：
 //   - error: 处理过程中的错误信息，如果返回错误则会回滚事务
-func (t *Trait) SetValueAfter(tx *gorm.DB, id uint, field string, value any) error {
-	return nil
+func (t *Trait) SetValueAfter(tx *gorm.DB, modelValue interface{}) error {
+	callResults := t.callCustomMethod("SaveAfter", tx, modelValue)
+	var err error
+	if callResults[0] != nil {
+		err = callResults[0].(error)
+	} else {
+		err = nil
+	}
+
+	return err
 }
 
 // SetValueReturn 设置字段值成功后的返回处理方法
