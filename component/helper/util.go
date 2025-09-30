@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/jcbowen/jcbaseGo/component/validator"
 	"log"
 	"math/rand"
 	"net"
@@ -18,6 +17,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/jcbowen/jcbaseGo/component/validator"
 )
 
 // ----- map[string]interface{} 类型相关操作 -----/
@@ -112,9 +113,7 @@ func (a *ArrStr) ArrayValue() (value []string) {
 	if len(a.Arr) == 0 {
 		return
 	}
-	for _, v := range a.Arr {
-		value = append(value, v)
-	}
+	value = append(value, a.Arr...)
 	if a.Sort {
 		sort.Strings(value)
 	}
@@ -907,7 +906,10 @@ func FindAvailablePort(startPort string) string {
 		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err == nil {
 			// 端口可用，关闭监听器并返回端口号
-			listener.Close()
+			err = listener.Close()
+			if err != nil {
+				log.Printf("关闭监听器失败: %v", err)
+			}
 			strPort := strconv.Itoa(port)
 			log.Printf("确认端口[:%s]可用\n", strPort)
 			return strPort
@@ -956,4 +958,83 @@ func BuildYii2RedisCacheKey(key string, args ...string) string {
 	// 否则对 key 进行 MD5 哈希处理，并返回带前缀的哈希值
 	hash := md5.Sum([]byte(key))
 	return keyPrefix + hex.EncodeToString(hash[:])
+}
+
+// CompareVersion 版本号比较（支持x.y.z，降级为数值分段比较，不足段补0；非法段按0处理）
+// 参数：
+//   - a: 版本号A
+//   - b: 版本号B
+//
+// 返回：
+//   - result: 比较结果（1 表示a>b；0表示相等；-1表示a<b）
+//   - level: 差异级别（从1开始，表示第几级版本号差异；0表示无差异）
+func CompareVersion(a string, b string) (result int, level int) {
+	if a == b {
+		return
+	}
+
+	as := splitVersion(a)
+	bs := splitVersion(b)
+
+	// 对齐长度到最大段数
+	n := len(as)
+	if len(bs) > n {
+		n = len(bs)
+	}
+
+	for i := 0; i < n; i++ {
+		ai := 0
+		bi := 0
+		if i < len(as) {
+			ai, _ = strconv.Atoi(as[i])
+		}
+		if i < len(bs) {
+			bi, _ = strconv.Atoi(bs[i])
+		}
+
+		if ai != bi {
+			level = i + 1
+
+			if ai > bi {
+				result = 1
+			} else {
+				result = -1
+			}
+
+			return
+		}
+	}
+
+	// 如果所有段都相同，但长度不同，则认为是多出来的第一级版本号差异
+	if len(as) != len(bs) {
+		// 使用较短版本号长度+1作为差异级别（多出来的第一级）
+		if len(as) > len(bs) {
+			level = len(bs) + 1
+			result = 1
+		} else {
+			level = len(as) + 1
+			result = -1
+		}
+
+		return
+	}
+
+	return
+}
+
+// splitVersion 将版本号以点号拆分，清理空白
+func splitVersion(v string) []string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return []string{"0"}
+	}
+	parts := strings.Split(v, ".")
+	for i := range parts {
+		p := strings.TrimSpace(parts[i])
+		if p == "" {
+			p = "0"
+		}
+		parts[i] = p
+	}
+	return parts
 }
