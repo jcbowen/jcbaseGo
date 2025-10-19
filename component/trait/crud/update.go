@@ -14,16 +14,16 @@ import (
 // 参数说明：
 //   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionUpdate(c *gin.Context) {
-	t.InitCrud(c, "update")
+	ctx := t.InitCrud(c, "update")
 
 	// 获取表单数据
-	callResults := t.callCustomMethod("UpdateFormData")
+	callResults := t.callCustomMethod("UpdateFormData", ctx)
 	modelValue := callResults[0]
 	mapData := callResults[1].(map[string]any)
 	if callResults[2] != nil {
 		err := callResults[2].(error)
 		if err != nil {
-			t.Result(errcode.ParamError, err.Error())
+			ctx.Result(errcode.ParamError, err.Error())
 			return
 		}
 	}
@@ -35,7 +35,7 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 		id = helper.Convert{Value: idStr}.ToUint()
 	}
 	if helper.IsEmptyValue(id) {
-		t.Result(errcode.ParamError, t.PkId+" 不能为空")
+		ctx.Result(errcode.ParamError, t.PkId+" 不能为空")
 		return
 	}
 
@@ -103,28 +103,32 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 	// 处理事务结果
 	if err != nil {
 		if err.Error() == "数据不存在或已被删除" {
-			t.Result(errcode.NotExist, err.Error())
+			ctx.Result(errcode.NotExist, err.Error())
 		} else {
-			t.Result(errcode.DatabaseError, "更新失败："+err.Error())
+			ctx.Result(errcode.DatabaseError, "更新失败："+err.Error())
 		}
 		return
 	}
 
 	// 返回结果
-	t.callCustomMethod("UpdateReturn", modelValue)
+	t.callCustomMethod("UpdateReturn", c, modelValue)
 }
 
 // UpdateFormData 获取更新操作的表单数据
+// 参数说明：
+//   - ctx *Context: 自定义上下文对象
+//
 // 返回值：
 //   - modelValue interface{}: 绑定后的模型实例
 //   - mapData map[string]any: 原始表单数据映射
 //   - err error: 处理过程中的错误信息
-func (t *Trait) UpdateFormData() (modelValue interface{}, mapData map[string]any, err error) {
-	return t.SaveFormData()
+func (t *Trait) UpdateFormData(ctx *Context) (modelValue interface{}, mapData map[string]any, err error) {
+	return t.SaveFormData(ctx)
 }
 
 // UpdateBefore 更新前的钩子方法，用于数据预处理和验证
 // 参数说明：
+//   - ctx *Context: crud上下文对象
 //   - modelValue interface{}: 要更新的模型实例（包含新数据）
 //   - mapData map[string]any: 表单数据映射
 //   - originalData interface{}: 数据库中的原始数据
@@ -133,8 +137,8 @@ func (t *Trait) UpdateFormData() (modelValue interface{}, mapData map[string]any
 //   - interface{}: 处理后的模型实例
 //   - map[string]any: 处理后的表单数据映射
 //   - error: 处理过程中的错误信息
-func (t *Trait) UpdateBefore(modelValue interface{}, mapData map[string]any, originalData interface{}) (interface{}, map[string]any, error) {
-	callResults := t.callCustomMethod("SaveBefore", modelValue, mapData, originalData)
+func (t *Trait) UpdateBefore(ctx *Context, modelValue interface{}, mapData map[string]any, originalData interface{}) (interface{}, map[string]any, error) {
+	callResults := t.callCustomMethod("SaveBefore", ctx, modelValue, mapData, originalData)
 	modelValue = callResults[0]
 	mapData = callResults[1].(map[string]any)
 	var err error
@@ -149,14 +153,15 @@ func (t *Trait) UpdateBefore(modelValue interface{}, mapData map[string]any, ori
 
 // UpdateAfter 更新后的钩子方法，用于后续处理（在事务内执行）
 // 参数说明：
+//   - ctx *Context: crud上下文对象
 //   - tx *gorm.DB: 数据库事务对象
 //   - modelValue interface{}: 已更新的模型实例
 //   - originalData interface{}: 数据库中的原始数据
 //
 // 返回值：
 //   - error: 处理过程中的错误信息，如果返回错误则会回滚事务
-func (t *Trait) UpdateAfter(tx *gorm.DB, modelValue interface{}, originalData interface{}) error {
-	callResults := t.callCustomMethod("SaveAfter", tx, modelValue)
+func (t *Trait) UpdateAfter(ctx *Context, tx *gorm.DB, modelValue interface{}, originalData interface{}) error {
+	callResults := t.callCustomMethod("SaveAfter", ctx, tx, modelValue, originalData)
 	var err error
 	if callResults[0] != nil {
 		err = callResults[0].(error)
@@ -169,11 +174,12 @@ func (t *Trait) UpdateAfter(tx *gorm.DB, modelValue interface{}, originalData in
 
 // UpdateReturn 更新成功后的返回处理方法
 // 参数说明：
+//   - ctx *Context: crud上下文对象
 //   - item interface{}: 更新成功的数据项
 //
 // 返回值：
 //   - bool: 处理结果，通常返回true表示成功
-func (t *Trait) UpdateReturn(item interface{}) bool {
+func (t *Trait) UpdateReturn(ctx *Context, item interface{}) bool {
 	var (
 		mapItem map[string]any
 		pkId    uint
@@ -196,7 +202,7 @@ func (t *Trait) UpdateReturn(item interface{}) bool {
 	pkIdAny, _ := mapItem[t.PkId]
 	pkId = helper.Convert{Value: pkIdAny}.ToUint()
 
-	t.Result(errcode.Success, "ok", gin.H{
+	ctx.Result(errcode.Success, "ok", gin.H{
 		t.PkId: pkId,
 	})
 

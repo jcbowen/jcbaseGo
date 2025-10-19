@@ -13,10 +13,10 @@ import (
 // 参数说明：
 //   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionAll(c *gin.Context) {
-	t.InitCrud(c, "all")
+	ctx := t.InitCrud(c, "all")
 
 	// 获取是否显示已删除数据的参数
-	showDeletedStr := c.DefaultQuery("show_deleted", "0")
+	showDeletedStr := ctx.GinContext.DefaultQuery("show_deleted", "0")
 	showDeleted := helper.Convert{Value: showDeletedStr}.ToBool()
 
 	tableAlias := ""
@@ -32,13 +32,13 @@ func (t *Trait) ActionAll(c *gin.Context) {
 		query = query.Where(t.TableAlias + t.SoftDeleteField + " " + t.SoftDeleteCondition)
 	}
 
-	query = t.callCustomMethod("AllQuery", query)[0].(*gorm.DB)
+	query = t.callCustomMethod("AllQuery", ctx, query)[0].(*gorm.DB)
 
 	// 设置查询字段
-	query = t.callCustomMethod("AllSelect", query)[0].(*gorm.DB)
+	query = t.callCustomMethod("AllSelect", ctx, query)[0].(*gorm.DB)
 
 	// 获取排序
-	order := t.callCustomMethod("AllOrder")[0]
+	order := t.callCustomMethod("AllOrder", ctx)[0]
 	if order != nil {
 		query = query.Order(order)
 	}
@@ -54,7 +54,7 @@ func (t *Trait) ActionAll(c *gin.Context) {
 		return nil
 	}).Error
 	if err != nil {
-		t.Result(errcode.DatabaseError, "FindInBatches："+err.Error())
+		ctx.Result(errcode.DatabaseError, "FindInBatches："+err.Error())
 		return
 	}
 
@@ -62,7 +62,7 @@ func (t *Trait) ActionAll(c *gin.Context) {
 	resultsValue := reflect.ValueOf(results).Elem()
 	for i := 0; i < resultsValue.Len(); i++ {
 		item := resultsValue.Index(i).Addr().Interface()
-		eachResult := t.callCustomMethod("AllEach", item)[0]
+		eachResult := t.callCustomMethod("AllEach", ctx, item)[0]
 		if reflect.TypeOf(eachResult).Kind() == reflect.Ptr {
 			eachResult = reflect.ValueOf(eachResult).Elem().Interface()
 		}
@@ -70,53 +70,60 @@ func (t *Trait) ActionAll(c *gin.Context) {
 	}
 
 	// 返回结果
-	t.callCustomMethod("AllReturn", results)
+	t.callCustomMethod("AllReturn", ctx, results)
 }
 
 // AllQuery 设置获取所有数据的WHERE条件和其他查询参数
 // 参数说明：
+//   - ctx *Context: 上下文对象
 //   - query *gorm.DB: 数据库查询对象
 //
 // 返回值：
 //   - *gorm.DB: 设置了查询条件的查询对象
-func (t *Trait) AllQuery(query *gorm.DB) *gorm.DB {
+func (t *Trait) AllQuery(ctx *Context, query *gorm.DB) *gorm.DB {
 	return query
 }
 
 // AllSelect 设置获取所有数据的SELECT字段
 // 参数说明：
+//   - ctx *Context: 上下文对象
 //   - query *gorm.DB: 数据库查询对象
 //
 // 返回值：
 //   - *gorm.DB: 设置了SELECT字段的查询对象
-func (t *Trait) AllSelect(query *gorm.DB) *gorm.DB {
+func (t *Trait) AllSelect(ctx *Context, query *gorm.DB) *gorm.DB {
 	return query.Select(t.TableAlias + "*")
 }
 
 // AllOrder 设置获取所有数据的排序规则
+// 参数说明：
+//   - ctx *Context: 上下文对象
+//
 // 返回值：
 //   - interface{}: 排序规则，可以是字符串或其他GORM支持的排序格式
-func (t *Trait) AllOrder() interface{} {
+func (t *Trait) AllOrder(ctx *Context) interface{} {
 	return t.TableAlias + t.PkId + " DESC"
 }
 
 // AllEach 对获取的每个数据项进行处理
 // 参数说明：
+//   - ctx *Context: 上下文对象
 //   - item interface{}: 数据列表中的单个数据项
 //
 // 返回值：
 //   - interface{}: 处理后的数据项
-func (t *Trait) AllEach(item interface{}) interface{} {
+func (t *Trait) AllEach(ctx *Context, item interface{}) interface{} {
 	return item
 }
 
 // AllReturn 获取所有数据成功后的返回处理方法
 // 参数说明：
+//   - ctx *Context: 上下文对象
 //   - results interface{}: 查询到的所有数据
 //
 // 返回值：
 //   - bool: 处理结果，通常返回true表示成功
-func (t *Trait) AllReturn(results interface{}) bool {
-	t.Result(errcode.Success, "ok", results)
+func (t *Trait) AllReturn(ctx *Context, results interface{}) bool {
+	ctx.Result(errcode.Success, "ok", results)
 	return true
 }

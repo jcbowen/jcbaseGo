@@ -1,34 +1,54 @@
-package controller
+package crud
 
 import (
 	"encoding/json"
+	"log"
+	"net/http"
+	"reflect"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/security"
 	"github.com/jcbowen/jcbaseGo/errcode"
-	"log"
-	"net/http"
-	"reflect"
 )
 
-type Base struct {
-	GinContext *gin.Context // 请求上下文
+type Context struct {
+	ActionName string       // Action名称(如: "create", "update", "delete", "detail", "list", "all", "set-value")
 	Debug      bool         // 调试模式
+	GinContext *gin.Context // 请求上下文
 }
 
+// NewContextOpt 目前由于配置项没有分离，所以直接用相等，后续有可能会分离
+type NewContextOpt = Context
+
 // ----- 公共方法 ----- /
+
+// NewContext 创建一个新的控制器上下文对象
+// 参数说明：
+//   - opt *NewContextOpt: 上下文选项，包含Gin上下文和调试模式
+//
+// 返回值：
+//   - *Context: 新创建的上下文对象
+func NewContext(opt *NewContextOpt) *Context {
+	ctx := &Context{
+		Debug:      opt.Debug,
+		GinContext: opt.GinContext,
+	}
+	return ctx
+}
 
 // Success 返回成功的响应
 // 这个方法用于简化成功响应的构建，接收可变参数，
 // 并根据参数数量确定响应的data、additionalParams和message字段的值。
 // 参数：
+//   - ginContext *gin.Context: Gin框架的上下文对象
 //   - message string: 返回的消息内容
 //   - data any: 返回的数据
 //   - additionalParams any: 附加数据
 //
 // 仅1个参数时，如果是字符串则作为message输出，否则作为data输出；
 // 更多参数时，第一个参数为data，第二个参数为message，第三个参数为additionalParams；
-func (c Base) Success(args ...any) {
+func (ctx *Context) Success(args ...any) {
 	var (
 		message          = "success"
 		data             any
@@ -54,20 +74,21 @@ func (c Base) Success(args ...any) {
 			message = "ok"
 		}
 	}
-	c.Result(errcode.Success, message, data, additionalParams)
+	ctx.Result(errcode.Success, message, data, additionalParams)
 }
 
 // Failure 返回失败的响应
 // 这个方法用于简化失败响应的构建，接收可变参数
 // 并根据参数数量确定响应的data、message、code字段的值。
 // 参数：
+//   - ginContext *gin.Context: Gin框架的上下文对象
 //   - message string: 返回的消息内容
 //   - data any: 返回的数据
 //   - code int: 错误码
 //
 // 仅1个参数时，如果是字符串则作为message输出，否则作为data输出；
 // 更多参数时，第一个参数为message，第二个参数为data，第三个参数为code；
-func (c Base) Failure(args ...any) {
+func (ctx *Context) Failure(args ...any) {
 	var (
 		code             = errcode.BadRequest
 		message          = "failure"
@@ -90,18 +111,19 @@ func (c Base) Failure(args ...any) {
 		data = args[1]
 		code = args[2].(int)
 	}
-	c.Result(code, message, data, additionalParams)
+	ctx.Result(code, message, data, additionalParams)
 }
 
 // Result 整理结果输出
 // 这个方法用于统一返回API响应结果。接收状态码、消息以及可选的额外参数，
 // 并根据传入的数据类型对结果进行格式化和处理，最终返回JSON格式的响应。
 // 参数：
+//   - ginContext *gin.Context: Gin框架的上下文对象
 //   - code int: 状态码，通常为HTTP状态码。
 //   - msg string: 返回的消息内容。
 //   - data any 选填，主要数据内容，可以是结构体、map、string或slice。
 //   - additionalParams map[string]any 选填，附加参数
-func (c Base) Result(code int, msg string, args ...any) {
+func (ctx *Context) Result(code int, msg string, args ...any) {
 	// 虽然定义的是any，但是约定只能为map/string/[]any
 	var resultData any
 	resultMapData := make(map[string]any)
@@ -138,7 +160,7 @@ func (c Base) Result(code int, msg string, args ...any) {
 		} else if val.Kind() == reflect.String {
 			resultData = data.(string)
 		} else if val.Kind() == reflect.Array || val.Kind() == reflect.Slice {
-			resultData = c.convertToInterfaceSlice(data)
+			resultData = ctx.convertToInterfaceSlice(data)
 		} else {
 			log.Panic("不支持的数据类型：" + val.Kind().String())
 		}
@@ -211,11 +233,11 @@ func (c Base) Result(code int, msg string, args ...any) {
 		}
 	}
 
-	c.GinContext.JSON(http.StatusOK, result)
+	ctx.GinContext.JSON(http.StatusOK, result)
 }
 
 // convertToInterfaceSlice 将特定类型的切片转换为通用的 interface{} 切片
-func (c Base) convertToInterfaceSlice(slice interface{}) []interface{} {
+func (ctx *Context) convertToInterfaceSlice(slice interface{}) []interface{} {
 	v := reflect.ValueOf(slice)
 	if v.Kind() != reflect.Slice {
 		panic("convertToInterfaceSlice: not a slice")
@@ -230,13 +252,13 @@ func (c Base) convertToInterfaceSlice(slice interface{}) []interface{} {
 }
 
 // GetSafeMapGPC 安全获取map类型GPC
-func (c Base) GetSafeMapGPC(key ...string) (mapData map[string]any) {
+func (ctx *Context) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 	mapKey := "all"
 	if len(key) > 0 {
 		mapKey = key[0]
 	}
 
-	gpcInterface, GPCExists := c.GinContext.Get("GPC")
+	gpcInterface, GPCExists := ctx.GinContext.Get("GPC")
 	if !GPCExists {
 		log.Println("GPC data not found")
 		return
@@ -262,7 +284,7 @@ func (c Base) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 		mapData[strKey] = value
 	}
 
-	if c.Debug {
+	if ctx.Debug {
 		log.Printf("mapData: %v\n", mapData)
 	}
 

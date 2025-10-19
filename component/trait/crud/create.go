@@ -13,18 +13,18 @@ import (
 // 参数说明：
 //   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionCreate(c *gin.Context) {
-	t.InitCrud(c, "create")
+	ctx := t.InitCrud(c, "create")
 
 	var err error
 
 	// 获取表单数据
-	callResults := t.callCustomMethod("CreateFormData")
+	callResults := t.callCustomMethod("CreateFormData", c)
 	modelValue := callResults[0]
 	mapData := callResults[1].(map[string]any)
 	if callResults[2] != nil {
 		err = callResults[2].(error)
 		if err != nil {
-			t.Result(errcode.ParamError, err.Error())
+			ctx.Result(errcode.ParamError, err.Error())
 			return
 		}
 	}
@@ -36,7 +36,7 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	if callResults[2] != nil {
 		err = callResults[2].(error)
 		if err != nil {
-			t.Result(errcode.ParamError, err.Error())
+			ctx.Result(errcode.ParamError, err.Error())
 			return
 		}
 	}
@@ -62,25 +62,29 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 
 	// 处理事务结果
 	if err != nil {
-		t.Result(errcode.DatabaseError, "创建失败："+err.Error())
+		ctx.Result(errcode.DatabaseError, "创建失败："+err.Error())
 		return
 	}
 
 	// 返回结果
-	t.callCustomMethod("CreateReturn", modelValue)
+	t.callCustomMethod("CreateReturn", c, modelValue)
 }
 
 // CreateFormData 获取创建操作的表单数据
+// 参数说明：
+//   - ctx *Context: crud上下文对象
+//
 // 返回值：
 //   - modelValue interface{}: 绑定后的模型实例
 //   - mapData map[string]any: 原始表单数据映射
 //   - err error: 处理过程中的错误信息
-func (t *Trait) CreateFormData() (modelValue interface{}, mapData map[string]any, err error) {
-	return t.SaveFormData()
+func (t *Trait) CreateFormData(ctx *Context) (modelValue interface{}, mapData map[string]any, err error) {
+	return t.SaveFormData(ctx)
 }
 
 // CreateBefore 创建前的钩子方法，用于数据预处理和验证
 // 参数说明：
+//   - ctx *Context: crud上下文对象
 //   - modelValue interface{}: 要创建的模型实例
 //   - mapData map[string]any: 表单数据映射
 //
@@ -88,8 +92,8 @@ func (t *Trait) CreateFormData() (modelValue interface{}, mapData map[string]any
 //   - interface{}: 处理后的模型实例
 //   - map[string]any: 处理后的表单数据映射
 //   - error: 处理过程中的错误信息
-func (t *Trait) CreateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
-	callResults := t.callCustomMethod("SaveBefore", modelValue, mapData, nil)
+func (t *Trait) CreateBefore(ctx *Context, modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
+	callResults := t.callCustomMethod("SaveBefore", ctx, modelValue, mapData, nil)
 	modelValue = callResults[0]
 	mapData = callResults[1].(map[string]any)
 	var err error
@@ -104,13 +108,14 @@ func (t *Trait) CreateBefore(modelValue interface{}, mapData map[string]any) (in
 
 // CreateAfter 创建后的钩子方法，用于后续处理（在事务内执行）
 // 参数说明：
+//   - ctx *Context: crud上下文对象
 //   - tx *gorm.DB: 数据库事务对象
 //   - modelValue interface{}: 已创建的模型实例
 //
 // 返回值：
 //   - error: 处理过程中的错误信息，如果返回错误则会回滚事务
-func (t *Trait) CreateAfter(tx *gorm.DB, modelValue interface{}) error {
-	callResults := t.callCustomMethod("SaveAfter", tx, modelValue)
+func (t *Trait) CreateAfter(ctx *Context, tx *gorm.DB, modelValue interface{}) error {
+	callResults := t.callCustomMethod("SaveAfter", ctx, tx, modelValue, nil)
 	var err error
 	if callResults[0] != nil {
 		err = callResults[0].(error)
@@ -123,11 +128,12 @@ func (t *Trait) CreateAfter(tx *gorm.DB, modelValue interface{}) error {
 
 // CreateReturn 创建成功后的返回处理方法
 // 参数说明：
+//   - ctx *Context: 自定义上下文对象
 //   - item any: 创建成功的数据项
 //
 // 返回值：
 //   - bool: 处理结果，通常返回true表示成功
-func (t *Trait) CreateReturn(item any) bool {
+func (t *Trait) CreateReturn(ctx *Context, item any) bool {
 	var (
 		mapItem map[string]any
 		pkId    uint
@@ -150,7 +156,7 @@ func (t *Trait) CreateReturn(item any) bool {
 	pkIdAny, _ := mapItem[t.PkId]
 	pkId = helper.Convert{Value: pkIdAny}.ToUint()
 
-	t.Result(errcode.Success, "ok", gin.H{
+	ctx.Result(errcode.Success, "ok", gin.H{
 		t.PkId: pkId,
 	})
 

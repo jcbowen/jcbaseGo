@@ -15,12 +15,12 @@ import (
 // 参数说明：
 //   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionList(c *gin.Context) {
-	t.InitCrud(c, "list")
+	ctx := t.InitCrud(c, "list")
 
 	// 获取分页参数
-	pageStr := c.DefaultQuery("page", "1")
-	pageSizeStr := c.DefaultQuery("page_size", "10")
-	showDeletedStr := c.DefaultQuery("show_deleted", "0")
+	pageStr := ctx.GinContext.DefaultQuery("page", "1")
+	pageSizeStr := ctx.GinContext.DefaultQuery("page_size", "10")
+	showDeletedStr := ctx.GinContext.DefaultQuery("show_deleted", "0")
 	page := max(helper.Convert{Value: pageStr}.ToInt(), 1)
 	pageSize := helper.Convert{Value: pageSizeStr}.ToInt()
 	showDeleted := helper.Convert{Value: showDeletedStr}.ToBool()
@@ -43,12 +43,12 @@ func (t *Trait) ActionList(c *gin.Context) {
 		query = query.Where(t.TableAlias + t.SoftDeleteField + " " + t.SoftDeleteCondition)
 	}
 
-	callResults := t.callCustomMethod("ListQuery", query)
+	callResults := t.callCustomMethod("ListQuery", ctx, query)
 	query = callResults[0].(*gorm.DB)
 	if callResults[1] != nil {
 		err := callResults[1].(error)
 		if err != nil {
-			t.Result(errcode.ParamError, err.Error())
+			ctx.Result(errcode.ParamError, err.Error())
 			return
 		}
 	}
@@ -59,13 +59,13 @@ func (t *Trait) ActionList(c *gin.Context) {
 		Model(reflect.New(reflect.TypeOf(t.Model).Elem()).Interface()).
 		Count(&total).Error
 	if err != nil {
-		t.Result(http.StatusInternalServerError, err.Error())
+		ctx.Result(http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	// Select不能在Count前，否则会报错
 	// 为了方便，直接传query进去拼接就好
-	query = t.callCustomMethod("ListSelect", query)[0].(*gorm.DB)
+	query = t.callCustomMethod("ListSelect", ctx, query)[0].(*gorm.DB)
 
 	// 动态创建模型实例
 	if t.ListResultStruct == nil {
@@ -87,12 +87,12 @@ func (t *Trait) ActionList(c *gin.Context) {
 	sliceType := reflect.SliceOf(resultStructType)
 	results := reflect.New(sliceType).Interface()
 
-	err = query.Order(t.callCustomMethod("ListOrder")[0]).
+	err = query.Order(t.callCustomMethod("ListOrder", ctx)[0]).
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).
 		Find(results).Error
 	if err != nil {
-		t.Result(http.StatusInternalServerError, err.Error())
+		ctx.Result(http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -102,7 +102,7 @@ func (t *Trait) ActionList(c *gin.Context) {
 	modifiedResults := make([]interface{}, resultsValue.Len())
 	for i := 0; i < resultsValue.Len(); i++ {
 		item := resultsValue.Index(i).Addr().Interface()
-		eachResult := t.callCustomMethod("ListEach", item)[0]
+		eachResult := t.callCustomMethod("ListEach", ctx, item)[0]
 
 		// 处理返回结果
 		if reflect.TypeOf(eachResult).Kind() == reflect.Map {
@@ -118,7 +118,7 @@ func (t *Trait) ActionList(c *gin.Context) {
 	}
 
 	// 返回结果
-	t.callCustomMethod("ListReturn", jcbaseGo.ListData{
+	t.callCustomMethod("ListReturn", ctx, jcbaseGo.ListData{
 		List:     modifiedResults, // 使用新的切片
 		Total:    int(total),
 		Page:     page,
@@ -128,49 +128,56 @@ func (t *Trait) ActionList(c *gin.Context) {
 
 // ListSelect 设置列表查询的SELECT字段
 // 参数说明：
+//   - ctx *Context: 上下文对象
 //   - query *gorm.DB: 数据库查询对象
 //
 // 返回值：
 //   - *gorm.DB: 设置了SELECT字段的查询对象
-func (t *Trait) ListSelect(query *gorm.DB) *gorm.DB {
+func (t *Trait) ListSelect(ctx *Context, query *gorm.DB) *gorm.DB {
 	return query.Select(t.TableAlias + "*")
 }
 
 // ListQuery 设置列表查询的WHERE条件和其他查询参数
 // 参数说明：
+//   - ctx *Context: 上下文对象
 //   - query *gorm.DB: 数据库查询对象
 //
 // 返回值：
 //   - *gorm.DB: 设置了查询条件的查询对象
 //   - error: 处理过程中的错误信息
-func (t *Trait) ListQuery(query *gorm.DB) (*gorm.DB, error) {
+func (t *Trait) ListQuery(ctx *Context, query *gorm.DB) (*gorm.DB, error) {
 	return query, nil
 }
 
 // ListOrder 设置列表查询的排序规则
+// 参数说明：
+//   - ctx *Context: 上下文对象
+//
 // 返回值：
 //   - order interface{}: 排序规则，可以是字符串或其他GORM支持的排序格式
-func (t *Trait) ListOrder() (order interface{}) {
+func (t *Trait) ListOrder(ctx *Context) (order interface{}) {
 	return t.TableAlias + t.PkId + " DESC"
 }
 
 // ListEach 对列表中的每个数据项进行处理
 // 参数说明：
+//   - ctx *Context: 上下文对象
 //   - item interface{}: 列表中的单个数据项
 //
 // 返回值：
 //   - interface{}: 处理后的数据项
-func (t *Trait) ListEach(item interface{}) interface{} {
+func (t *Trait) ListEach(ctx *Context, item interface{}) interface{} {
 	return item
 }
 
 // ListReturn 列表查询成功后的返回处理方法
 // 参数说明：
+//   - ctx *Context: 上下文对象
 //   - listData jcbaseGo.ListData: 包含列表数据和分页信息的结构体
 //
 // 返回值：
 //   - bool: 处理结果，通常返回true表示成功
-func (t *Trait) ListReturn(listData jcbaseGo.ListData) bool {
-	t.Result(200, "ok", listData)
+func (t *Trait) ListReturn(ctx *Context, listData jcbaseGo.ListData) bool {
+	ctx.Result(200, "ok", listData)
 	return true
 }

@@ -14,20 +14,20 @@ import (
 // 参数说明：
 //   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 func (t *Trait) ActionDelete(c *gin.Context) {
-	t.InitCrud(c, "delete")
+	ctx := t.InitCrud(c, "delete")
 
 	// 格式转换
-	mapData := t.GetSafeMapGPC("all")
+	mapData := ctx.GetSafeMapGPC("all")
 
 	// 获取ids参数
 	idsInterface, exists := mapData[t.PkId+"s"]
 	if !exists {
-		t.Result(errcode.ParamError, "参数缺失，请重试")
+		ctx.Result(errcode.ParamError, "参数缺失，请重试")
 		return
 	}
 	ids, ok := idsInterface.([]interface{})
 	if !ok {
-		t.Result(errcode.ParamError, "参数类型错误，请重试")
+		ctx.Result(errcode.ParamError, "参数类型错误，请重试")
 		return
 	}
 
@@ -42,12 +42,12 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	}
 
 	if len(validIds) == 0 {
-		t.Result(errcode.ParamError, "参数缺失，请重试")
+		ctx.Result(errcode.ParamError, "参数缺失，请重试")
 		return
 	}
 
 	// 设置删除数据的select字段
-	fields := t.callCustomMethod("DeleteFields")[0].([]string)
+	fields := t.callCustomMethod("DeleteFields", ctx)[0].([]string)
 	t.checkFieldExistInSelect(fields, t.PkId, "设置删除数据的")
 
 	// 查询要删除的数据
@@ -59,16 +59,16 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 		deleteQuery = deleteQuery.Where(t.SoftDeleteField + " " + t.SoftDeleteCondition)
 	}
 	// 获取删除条件
-	deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
+	deleteQuery = t.callCustomMethod("GetDeleteWhere", ctx, deleteQuery, validIds)[0].(*gorm.DB)
 	err := deleteQuery.Find(&delArr).Error
 
 	if err != nil {
-		t.Result(errcode.DatabaseError, err.Error())
+		ctx.Result(errcode.DatabaseError, err.Error())
 		return
 	}
 
 	if len(delArr) == 0 {
-		t.Result(errcode.NotExist, "当前操作的数据不存在或已被删除")
+		ctx.Result(errcode.NotExist, "当前操作的数据不存在或已被删除")
 		return
 	}
 
@@ -79,11 +79,11 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	}
 
 	// 删除前处理
-	callResults := t.callCustomMethod("DeleteBefore", delArr, delIds)
+	callResults := t.callCustomMethod("DeleteBefore", ctx, delArr, delIds)
 	if callResults[1] != nil {
 		err, ok = callResults[1].(error)
 		if ok && err != nil {
-			t.Result(errcode.ParamError, err.Error())
+			ctx.Result(errcode.ParamError, err.Error())
 			return
 		}
 	}
@@ -94,14 +94,14 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 		// 执行删除
 		if t.SoftDeleteField != "" && helper.InArray(t.SoftDeleteField, t.ModelFields) {
 			// 软删除（更新软删除字段）
-			condition := t.callCustomMethod("DeleteCondition", delArr)[0].(map[string]interface{})
+			condition := t.callCustomMethod("DeleteCondition", ctx, delArr)[0].(map[string]interface{})
 			deleteQuery := tx.Model(t.Model)
-			deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
+			deleteQuery = t.callCustomMethod("GetDeleteWhere", ctx, deleteQuery, validIds)[0].(*gorm.DB)
 			err = deleteQuery.Updates(condition).Error
 		} else {
 			// 真实删除
 			deleteQuery := tx.Model(t.Model)
-			deleteQuery = t.callCustomMethod("GetDeleteWhere", deleteQuery, validIds)[0].(*gorm.DB)
+			deleteQuery = t.callCustomMethod("GetDeleteWhere", ctx, deleteQuery, validIds)[0].(*gorm.DB)
 			err = deleteQuery.Delete(t.Model).Error
 		}
 
@@ -111,7 +111,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 		}
 
 		// 删除后处理
-		callErr := t.callCustomMethod("DeleteAfter", delIds, delArr)[0]
+		callErr := t.callCustomMethod("DeleteAfter", ctx, delIds, delArr)[0]
 		if callErr != nil {
 			err, ok = callErr.(error)
 			if ok && err != nil {
@@ -124,7 +124,7 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 
 	// 处理事务结果
 	if err != nil {
-		t.Result(errcode.DatabaseError, "删除失败："+err.Error())
+		ctx.Result(errcode.DatabaseError, "删除失败："+err.Error())
 		return
 	}
 
@@ -132,47 +132,53 @@ func (t *Trait) ActionDelete(c *gin.Context) {
 	// t.Model.ClearCache()
 
 	// 返回结果
-	t.callCustomMethod("DeleteReturn", delIds, delArr)
+	t.callCustomMethod("DeleteReturn", ctx, delIds, delArr)
 }
 
 // DeleteFields 获取删除操作时需要查询的字段列表
+// 参数说明：
+//   - ctx *Context: crud请求上下文对象
+//
 // 返回值：
 //   - []string: 字段名称列表，默认只包含主键字段
-func (t *Trait) DeleteFields() []string {
+func (t *Trait) DeleteFields(ctx *Context) []string {
 	return []string{t.PkId}
 }
 
 // GetDeleteWhere 构建删除操作的WHERE条件
 // 参数说明：
+//   - ctx *Context: crud请求上下文对象
 //   - deleteQuery *gorm.DB: 数据库查询对象
 //   - ids []interface{}: 要删除的ID列表
 //
 // 返回值：
 //   - *gorm.DB: 添加了WHERE条件的查询对象
-func (t *Trait) GetDeleteWhere(deleteQuery *gorm.DB, ids []interface{}) *gorm.DB {
+func (t *Trait) GetDeleteWhere(ctx *Context, deleteQuery *gorm.DB, ids []interface{}) *gorm.DB {
 	return deleteQuery.Where(t.PkId+" IN ?", ids)
 }
 
 // DeleteBefore 删除前的钩子方法，用于数据预处理和验证
 // 参数说明：
+//   - ctx *Context: crud请求上下文对象
 //   - delArr []map[string]interface{}: 要删除的数据记录列表
 //   - delIds []interface{}: 要删除的ID列表
 //
 // 返回值：
 //   - []interface{}: 处理后的ID列表
 //   - error: 处理过程中的错误信息
-func (t *Trait) DeleteBefore(delArr []map[string]interface{}, delIds []interface{}) ([]interface{}, error) {
+func (t *Trait) DeleteBefore(ctx *Context, delArr []map[string]interface{}, delIds []interface{}) ([]interface{}, error) {
 	// 可以在此处添加一些前置处理逻辑
 	return delIds, nil
 }
 
 // DeleteCondition 获取软删除的条件数据
 // 参数说明：
+//   - ctx *Context: crud请求上下文对象
 //   - delArr []map[string]interface{}: 要删除的数据记录列表
 //
 // 返回值：
 //   - map[string]interface{}: 软删除时要更新的字段和值
-func (t *Trait) DeleteCondition(delArr []map[string]interface{}) map[string]interface{} {
+func (t *Trait) DeleteCondition(ctx *Context, delArr []map[string]interface{}) map[string]interface{} {
 	// 使用配置的软删除字段名
 	fieldName := t.SoftDeleteField
 	if fieldName == "" {
@@ -201,22 +207,24 @@ func (t *Trait) DeleteCondition(delArr []map[string]interface{}) map[string]inte
 
 // DeleteAfter 删除后的钩子方法，用于后续处理（在事务内执行）
 // 参数说明：
+//   - ctx *Context: crud请求上下文对象
 //   - delIds []interface{}: 已删除的ID列表
 //   - delArr []map[string]interface{}: 已删除的数据记录列表
 //
 // 返回值：
 //   - error: 处理过程中的错误信息，如果返回错误则会回滚事务
-func (t *Trait) DeleteAfter(delIds []interface{}, delArr []map[string]interface{}) error {
+func (t *Trait) DeleteAfter(ctx *Context, delIds []interface{}, delArr []map[string]interface{}) error {
 	// 可以在此处添加一些后置处理逻辑
 	return nil
 }
 
 // DeleteReturn 删除成功后的返回处理方法
 // 参数说明：
+//   - ctx *Context: crud请求上下文对象
 //   - delIds []interface{}: 已删除的ID列表
 //   - delArr []map[string]interface{}: 已删除的数据记录列表
-func (t *Trait) DeleteReturn(delIds []interface{}, delArr []map[string]interface{}) {
-	t.Result(errcode.Success, "删除成功", gin.H{
+func (t *Trait) DeleteReturn(ctx *Context, delIds []interface{}, delArr []map[string]interface{}) {
+	ctx.Result(errcode.Success, "删除成功", gin.H{
 		"delIds": delIds,
 	})
 }

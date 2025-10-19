@@ -11,23 +11,32 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/orm"
-	"github.com/jcbowen/jcbaseGo/component/trait/controller"
 )
+
+// ControllerInterface 定义控制器接口
+// 该接口用于规范CRUD控制器必须实现的方法
+// 必选方法：CheckInit - 用于控制器初始化检查
+type ControllerInterface interface {
+	// CheckInit 控制器初始化确认方法
+	// 参数：
+	//   - ctx *Context: crud上下文对象
+	// 功能：在CRUD初始化时调用，用于控制器级别的初始化确认
+	CheckInit(ctx any) *Context
+}
 
 type Trait struct {
 	// ----- 基础配置 ----- /
 
-	PkId               string       `default:"id"` // 数据表主键
-	Model              any          // 模型指针
-	ModelTableAlias    string       // 模型表别名
-	DBI                orm.Instance // 数据库实例
-	ListResultStruct   interface{}  // 列表返回结构体
-	DetailResultStruct interface{}  // 详情返回结构体
-	Controller         interface{}  // 控制器
+	PkId               string              `default:"id"` // 数据表主键
+	Model              any                 // 模型指针
+	ModelTableAlias    string              // 模型表别名
+	DBI                orm.Instance        // 数据库实例
+	ListResultStruct   interface{}         // 列表返回结构体
+	DetailResultStruct interface{}         // 详情返回结构体
+	Controller         ControllerInterface // 控制器
 
 	// ----- 初始化时生成 ----- /
 
-	ActionName          string   // Action名称(如: "create", "update", "delete", "detail", "list", "all", "set-value")
 	ModelTableName      string   // 模型表名
 	ModelFields         []string // 模型所有字段
 	SoftDeleteField     string   // 软删除字段名（如: "deleted_at"、"is_deleted" 等）
@@ -36,32 +45,37 @@ type Trait struct {
 	TableAlias          string   // 表别名（仅用于拼接查询语句，配置别名请用ModelTableAlias）
 
 	// ----- 非基础配置 ----- /
-
-	BaseControllerTrait controller.Base
 }
 
 // InitCrud 初始化CRUD，仅当初始化完成才可以使用
 // 参数说明：
 //   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
 //   - args ...any: 可选的参数列表
-func (t *Trait) InitCrud(c *gin.Context, args ...any) {
+//     -- actionName string: 操作名称（如: "create", "update", "delete", "detail", "list", "all", "set-value"）
+//
+// 返回值：
+//   - *Context: 新创建的上下文对象
+func (t *Trait) InitCrud(ginContext *gin.Context, args ...any) (ctx *Context) {
 	_ = helper.CheckAndSetDefault(t)
-	t.BaseControllerTrait.GinContext = c
+
+	nCtxOpt := &NewContextOpt{
+		GinContext: ginContext,
+	}
 
 	// 设置ActionName
 	if len(args) > 0 {
-		t.ActionName, _ = args[0].(string)
+		nCtxOpt.ActionName, _ = args[0].(string)
 	}
 
-	// 设置json响应头
-	c.Set("Content-type", "application/json;charset=utf-8")
+	// 创建上下文
+	ctx = NewContext(nCtxOpt)
 
-	// 如果控制器中有CheckInit方法，就调用
-	method := reflect.ValueOf(t.Controller).MethodByName("CheckInit")
-	if method.IsValid() {
-		in := make([]reflect.Value, 1)
-		in[0] = reflect.ValueOf(c)
-		method.Call(in)
+	// 设置json响应头
+	ginContext.Set("Content-type", "application/json;charset=utf-8")
+
+	// 调用控制器初始化确认方法
+	if t.Controller != nil {
+		t.Controller.CheckInit(ctx)
 	}
 
 	// 判断模型是否为空
@@ -107,6 +121,7 @@ func (t *Trait) InitCrud(c *gin.Context, args ...any) {
 		t.TableAlias = t.ModelTableAlias
 	}
 	t.TableAlias += "."
+	return
 }
 
 // callCustomMethod 调用自定义方法，如果方法不存在则调用默认方法
@@ -162,63 +177,26 @@ func (t *Trait) callCustomMethod(methodName string, args ...interface{}) (result
 // ----- 公共方法 ----- /
 
 // ExtractPkId 从不同类型的请求中提取主键ID
+// 参数：
+//   - c *gin.Context: Gin框架的上下文对象
+//
 // 返回值：
 //   - pkValue uint: 提取到的主键ID值
 //   - err error: 提取过程中的错误信息
-func (t *Trait) ExtractPkId() (pkValue uint, err error) {
-	gpcInterface, GPCExists := t.BaseControllerTrait.GinContext.Get("GPC")
+func (t *Trait) ExtractPkId(ctx *Context) (pkValue uint, err error) {
+	gpcInterface, GPCExists := ctx.GinContext.Get("GPC")
 	if !GPCExists {
-		return 0, err
+		return 0, errors.New("GPC data not found")
 	}
 	gpc := gpcInterface.(map[string]map[string]any)["all"]
 
 	idStr, ok := gpc[t.PkId]
 	if !ok {
-		return 0, err
+		return 0, errors.New("PkId not found in GPC data")
 	}
 	pkValue = helper.Convert{Value: idStr}.ToUint()
 
 	return
-}
-
-// Failure 返回失败的响应
-// 这个方法用于简化失败响应的构建，接收可变参数
-// 并根据参数数量确定响应的data、message、code字段的值。
-// 参数：
-//   - message string: 返回的消息内容
-//   - data any: 返回的数据
-//   - code int: 错误码
-//
-// 仅1个参数时，如果是字符串则作为message输出，否则作为data输出；
-// 更多参数时，第一个参数为message，第二个参数为data，第三个参数为code；
-func (t *Trait) Failure(args ...any) {
-	t.BaseControllerTrait.Failure(args...)
-}
-
-// Success 返回成功的响应
-// 这个方法用于简化成功响应的构建，接收可变参数，
-// 并根据参数数量确定响应的data、additionalParams和message字段的值。
-// 参数：
-//   - message string: 返回的消息内容
-//   - data any: 返回的数据
-//   - additionalParams any: 附加数据
-//
-// 仅1个参数时，如果是字符串则作为message输出，否则作为data输出；
-// 更多参数时，第一个参数为data，第二个参数为message，第三个参数为additionalParams；
-func (t *Trait) Success(args ...any) {
-	t.BaseControllerTrait.Success(args...)
-}
-
-// Result 整理结果输出
-// 这个方法用于统一返回API响应结果。接收状态码、消息以及可选的额外参数，
-// 并根据传入的数据类型对结果进行格式化和处理，最终返回JSON格式的响应。
-// 参数：
-//   - code int: 状态码，通常为HTTP状态码。
-//   - msg string: 返回的消息内容。
-//   - data any 选填，主要数据内容，可以是结构体、map、string或slice。
-//   - additionalParams map[string]any 选填，附加参数
-func (t *Trait) Result(code int, msg string, args ...any) {
-	t.BaseControllerTrait.Result(code, msg, args...)
 }
 
 // BindMapToStruct 将map数据绑定到struct，并处理类型转换
@@ -575,16 +553,6 @@ func (t *Trait) assignMapToStruct(structVal reflect.Value, data map[string]inter
 		}
 	}
 	return nil
-}
-
-// GetSafeMapGPC 安全获取map类型的GPC数据
-// 参数说明：
-//   - key ...string: 可选的键名，用于指定获取特定的GPC数据类型（如"get", "post", "all"等）
-//
-// 返回值：
-//   - mapData map[string]any: 获取到的GPC数据映射
-func (t *Trait) GetSafeMapGPC(key ...string) (mapData map[string]any) {
-	return t.BaseControllerTrait.GetSafeMapGPC(key...)
 }
 
 // getFieldType 获取模型字段的类型

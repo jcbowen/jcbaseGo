@@ -11,25 +11,28 @@ import (
 
 // ActionSave 保存数据的主要处理方法（自动判断创建或更新）
 // 参数说明：
-//   - c *gin.Context: Gin框架的上下文对象，包含请求和响应信息
+//   - c *gin.Context: Gin框架的上下文对象
 func (t *Trait) ActionSave(c *gin.Context) {
-	t.InitCrud(c, "save")
-	id, _ := t.ExtractPkId()
+	ctx := t.InitCrud(c, "save")
+	id, _ := t.ExtractPkId(ctx)
 
 	if !helper.IsEmptyValue(id) {
-		t.ActionUpdate(c)
+		t.ActionUpdate(ctx.GinContext)
 	} else {
-		t.ActionCreate(c)
+		t.ActionCreate(ctx.GinContext)
 	}
 }
 
 // SaveFormData 获取保存操作的表单数据
+// 参数说明：
+//   - ctx *Context: crud上下文对象
+//
 // 返回值：
 //   - modelValue interface{}: 绑定后的模型实例
 //   - mapData map[string]any: 原始表单数据映射
 //   - err error: 处理过程中的错误信息
-func (t *Trait) SaveFormData() (modelValue interface{}, mapData map[string]any, err error) {
-	mapData = t.GetSafeMapGPC("all")
+func (t *Trait) SaveFormData(ctx *Context) (modelValue interface{}, mapData map[string]any, err error) {
+	mapData = ctx.GetSafeMapGPC("all")
 
 	// 动态创建模型实例
 	modelType := reflect.TypeOf(t.Model).Elem()
@@ -50,23 +53,29 @@ func (t *Trait) SaveFormData() (modelValue interface{}, mapData map[string]any, 
 
 // SaveBefore 保存前
 // 参数说明：
-// - modelValue: 要保存的模型数据
-// - mapData: 表单数据映射
-// - originalData: 原始数据（仅在更新操作时提供，创建操作时为nil）
-func (t *Trait) SaveBefore(modelValue interface{}, mapData map[string]any, originalData ...interface{}) (interface{}, map[string]any, error) {
+//   - ctx *Context: crud上下文对象
+//   - modelValue interface{}: 要保存的模型数据
+//   - mapData map[string]any: 表单数据映射
+//   - originalData ...interface{}: 原始数据（仅在更新操作时提供，创建操作时为nil）
+//
+// 返回值：
+//   - modelValue interface{}: 处理后的模型实例
+//   - mapData map[string]any: 处理后的表单数据映射
+//   - err error: 处理过程中的错误信息
+func (t *Trait) SaveBefore(ctx *Context, modelValue interface{}, mapData map[string]any, originalData ...interface{}) (interface{}, map[string]any, error) {
 	// 可以在此处添加一些前置处理逻辑
-	// 如果是更新操作，可以通过 len(originalData) > 0 && originalData[0] != nil 来判断并获取原始数据
 	return modelValue, mapData, nil
 }
 
 // SaveAfter 保存后的钩子方法，用于后续处理（在事务内执行）
 // 参数说明：
+//   - ctx *Context: crud上下文对象
 //   - tx *gorm.DB: 数据库事务对象
 //   - modelValue interface{}: 已保存的模型实例
 //
 // 返回值：
 //   - error: 处理过程中的错误信息，如果返回错误则会回滚事务
-func (t *Trait) SaveAfter(tx *gorm.DB, modelValue interface{}) error {
+func (t *Trait) SaveAfter(ctx *Context, tx *gorm.DB, modelValue interface{}) error {
 	// 可以在此处添加一些后置处理逻辑
 	return nil
 }
