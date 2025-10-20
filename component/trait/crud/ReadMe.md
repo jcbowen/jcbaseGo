@@ -241,7 +241,7 @@ systemGroup.Use(middleware.LoginRequired())
 
 ```golang
 // 创建前的数据验证
-func (i *Index) CreateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
+func (i *Index) CreateBefore(ctx *crud.Context, modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
     user := modelValue.(*userModel.Account)
 
     // 验证用户名是否已存在
@@ -258,7 +258,7 @@ func (i *Index) CreateBefore(modelValue interface{}, mapData map[string]any) (in
 }
 
 // 更新前的数据验证（可以访问原始数据）
-func (i *Index) UpdateBefore(modelValue interface{}, mapData map[string]any, originalData interface{}) (interface{}, map[string]any, error) {
+func (i *Index) UpdateBefore(ctx *crud.Context, modelValue interface{}, mapData map[string]any, originalData interface{}) (interface{}, map[string]any, error) {
     user := modelValue.(*userModel.Account)
     original := originalData.(*userModel.Account)
 
@@ -271,7 +271,7 @@ func (i *Index) UpdateBefore(modelValue interface{}, mapData map[string]any, ori
 }
 
 // 列表数据处理
-func (i *Index) ListEach(item interface{}) interface{} {
+func (i *Index) ListEach(ctx *crud.Context, item interface{}) interface{} {
     user := item.(*userModel.Account)
     // 隐藏敏感信息
     user.Password = ""
@@ -279,7 +279,7 @@ func (i *Index) ListEach(item interface{}) interface{} {
 }
 
 // 自定义查询条件
-func (i *Index) ListQuery(query *gorm.DB) (*gorm.DB, error) {
+func (i *Index) ListQuery(ctx *crud.Context, query *gorm.DB) (*gorm.DB, error) {
     // 只显示启用的用户
     return query.Where("status = ?", 1), nil
 }
@@ -318,7 +318,7 @@ FormData → 查询原始数据 → UpdateBefore → [事务开始] → 更新�
 - **使用方式**: 通过`len(originalData) > 0 && originalData[0] != nil`判断是否为更新操作
 
 ```golang
-func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, originalData ...interface{}) (interface{}, map[string]any, error) {
+func (i *Index) SaveBefore(ctx *crud.Context, modelValue interface{}, mapData map[string]any, originalData ...interface{}) (interface{}, map[string]any, error) {
     if len(originalData) > 0 && originalData[0] != nil {
         // 更新操作 - 可以访问原始数据
         original := originalData[0].(*userModel.Account)
@@ -396,6 +396,8 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
 
 ##### CreateFormData
 - **功能**: 获取创建操作的表单数据
+- **参数**:
+  - `ctx *Context` - crud上下文对象
 - **返回值**:
   - `modelValue interface{}` - 绑定后的模型实例
   - `mapData map[string]any` - 原始表单数据映射
@@ -404,6 +406,7 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
 ##### CreateBefore (钩子方法)
 - **功能**: 创建前的钩子方法，用于数据预处理和验证
 - **参数**:
+  - `ctx *Context` - crud上下文对象
   - `modelValue interface{}` - 要创建的模型实例
   - `mapData map[string]any` - 表单数据映射
 - **返回值**:
@@ -414,27 +417,33 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
 ##### CreateAfter (钩子方法)
 - **功能**: 创建后的钩子方法，用于后续处理（在事务内执行）
 - **参数**:
+  - `ctx *Context` - crud上下文对象
   - `tx *gorm.DB` - 数据库事务对象
   - `modelValue interface{}` - 已创建的模型实例
 - **返回值**: `error` - 处理过程中的错误信息，如果返回错误则会回滚事务
 
 ##### CreateReturn
 - **功能**: 创建成功后的返回处理方法
-- **参数**: `item any` - 创建成功的数据项
+- **参数**:
+  - `ctx *Context` - crud上下文对象
+  - `item any` - 创建成功的数据项
 - **返回值**: `bool` - 处理结果，通常返回true表示成功
 
 #### 更新操作钩子
 
 ##### UpdateFormData
 - **功能**: 获取更新操作的表单数据
+- **参数**:
+  - `ctx *Context` - crud上下文对象
 - **返回值**:
   - `modelValue interface{}` - 绑定后的模型实例
   - `mapData map[string]any` - 原始表单数据映射
   - `err error` - 处理过程中的错误信息
 
-##### UpdateBefore (钩子方法) ⭐ 已优化
+##### UpdateBefore (钩子方法) 
 - **功能**: 更新前的钩子方法，用于数据预处理和验证
 - **参数**:
+  - `ctx *Context` - crud上下文对象
   - `modelValue interface{}` - 要更新的模型实例（包含新数据）
   - `mapData map[string]any` - 表单数据映射
   - `originalData interface{}` - 数据库中的原始数据
@@ -446,24 +455,31 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
 ##### UpdateAfter (钩子方法)
 - **功能**: 更新后的钩子方法，用于后续处理（在事务内执行）
 - **参数**:
+  - `ctx *Context` - crud上下文对象
   - `tx *gorm.DB` - 数据库事务对象
   - `modelValue interface{}` - 已更新的模型实例
+  - `originalData interface{}` - 数据库中的原始数据
 - **返回值**: `error` - 处理过程中的错误信息，如果返回错误则会回滚事务
 
 ##### UpdateReturn
 - **功能**: 更新成功后的返回处理方法
-- **参数**: `item interface{}` - 更新成功的数据项
+- **参数**:
+  - `ctx *Context` - crud上下文对象
+  - `item interface{}` - 更新成功的数据项
 - **返回值**: `bool` - 处理结果，通常返回true表示成功
 
 #### 删除操作钩子
 
 ##### DeleteFields
 - **功能**: 获取删除操作时需要查询的字段列表
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
 - **返回值**: `[]string` - 字段名称列表，默认只包含主键字段
 
 ##### GetDeleteWhere
 - **功能**: 构建删除操作的WHERE条件
 - **参数**:
+  - `ctx *Context` - crud请求上下文对象
   - `deleteQuery *gorm.DB` - 数据库查询对象
   - `ids []interface{}` - 要删除的ID列表
 - **返回值**: `*gorm.DB` - 添加了WHERE条件的查询对象
@@ -471,6 +487,7 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
 ##### DeleteBefore (钩子方法)
 - **功能**: 删除前的钩子方法，用于数据预处理和验证
 - **参数**:
+  - `ctx *Context` - crud请求上下文对象
   - `delArr []map[string]interface{}` - 要删除的数据记录列表
   - `delIds []interface{}` - 要删除的ID列表
 - **返回值**:
@@ -479,12 +496,15 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
 
 ##### DeleteCondition
 - **功能**: 获取软删除的条件数据
-- **参数**: `delArr []map[string]interface{}` - 要删除的数据记录列表
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `delArr []map[string]interface{}` - 要删除的数据记录列表
 - **返回值**: `map[string]interface{}` - 软删除时要更新的字段和值
 
-##### DeleteAfter (钩子方法)
-- **功能**: 删除后的钩子方法，用于后续处理（在事务内执行）
+##### DeleteAfter
+- **功能**: 删除操作后的处理方法（在事务内执行）
 - **参数**:
+  - `ctx *Context` - crud请求上下文对象
   - `delIds []interface{}` - 已删除的ID列表
   - `delArr []map[string]interface{}` - 已删除的数据记录列表
 - **返回值**: `error` - 处理过程中的错误信息，如果返回错误则会回滚事务
@@ -492,57 +512,111 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
 ##### DeleteReturn
 - **功能**: 删除成功后的返回处理方法
 - **参数**:
+  - `ctx *Context` - crud请求上下文对象
   - `delIds []interface{}` - 已删除的ID列表
   - `delArr []map[string]interface{}` - 已删除的数据记录列表
+- **返回值**: `bool` - 处理结果，通常返回true表示成功
 
 #### 查询操作钩子
 
 ##### ListSelect
 - **功能**: 设置列表查询的SELECT字段
-- **参数**: `query *gorm.DB` - 数据库查询对象
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `query *gorm.DB` - 数据库查询对象
 - **返回值**: `*gorm.DB` - 设置了SELECT字段的查询对象
 
 ##### ListQuery
 - **功能**: 设置列表查询的WHERE条件和其他查询参数
-- **参数**: `query *gorm.DB` - 数据库查询对象
-- **返回值**:
-  - `*gorm.DB` - 设置了查询条件的查询对象
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `query *gorm.DB` - 数据库查询对象
+- **返回值**: `*gorm.DB` - 设置了查询条件的查询对象
   - `error` - 处理过程中的错误信息
 
 ##### ListOrder
 - **功能**: 设置列表查询的排序规则
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
 - **返回值**: `interface{}` - 排序规则，可以是字符串或其他GORM支持的排序格式
 
 ##### ListEach
-- **功能**: 对列表中的每个数据项进行处理
-- **参数**: `item interface{}` - 列表中的单个数据项
+- **功能**: 对列表中的每个数据项进行处理（如添加计算字段或隐藏敏感信息）
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `item interface{}` - 列表中的单个数据项
 - **返回值**: `interface{}` - 处理后的数据项
 
 ##### ListReturn
 - **功能**: 列表查询成功后的返回处理方法
-- **参数**: `listData jcbaseGo.ListData` - 包含列表数据和分页信息的结构体
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `listData jcbaseGo.ListData` - 包含列表数据和分页信息的结构体
+- **返回值**: `bool` - 处理结果，通常返回true表示成功
+
+#### All 操作钩子
+
+##### AllQuery
+- **功能**: 设置获取所有数据的WHERE条件和其他查询参数
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `query *gorm.DB` - 数据库查询对象
+- **返回值**: `*gorm.DB` - 设置了查询条件的查询对象
+
+##### AllSelect
+- **功能**: 设置获取所有数据的SELECT字段
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `query *gorm.DB` - 数据库查询对象
+- **返回值**: `*gorm.DB` - 设置了SELECT字段的查询对象
+
+##### AllOrder
+- **功能**: 设置获取所有数据的排序规则
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+- **返回值**: `interface{}` - 排序规则，可以是字符串或其他GORM支持的排序格式
+
+##### AllEach
+- **功能**: 对获取的每个数据项进行处理
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `item interface{}` - 数据列表中的单个数据项
+- **返回值**: `interface{}` - 处理后的数据项
+
+##### AllReturn
+- **功能**: 获取所有数据成功后的返回处理方法
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `results interface{}` - 查询到的所有数据
 - **返回值**: `bool` - 处理结果，通常返回true表示成功
 
 ##### DetailSelect
 - **功能**: 设置详情查询的SELECT字段
-- **参数**: `query *gorm.DB` - 数据库查询对象
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `query *gorm.DB` - 数据库查询对象
 - **返回值**: `*gorm.DB` - 设置了SELECT字段的查询对象
 
 ##### DetailQuery
 - **功能**: 设置详情查询的WHERE条件和其他查询参数
 - **参数**:
+  - `ctx *Context` - crud请求上下文对象
   - `query *gorm.DB` - 数据库查询对象
   - `mapData map[string]any` - 请求参数映射
 - **返回值**: `*gorm.DB` - 设置了查询条件的查询对象
 
 ##### Detail
-- **功能**: 对详情数据进行处理
-- **参数**: `item interface{}` - 查询到的详情数据
+- **功能**: 详情查询成功后的数据处理方法
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `item interface{}` - 查询到的详情数据
 - **返回值**: `interface{}` - 处理后的详情数据
 
 ##### DetailReturn
 - **功能**: 详情查询成功后的返回处理方法
-- **参数**: `detail interface{}` - 详情数据
+- **参数**:
+  - `ctx *Context` - crud请求上下文对象
+  - `detail interface{}` - 处理后的详情数据
 - **返回值**: `bool` - 处理结果，通常返回true表示成功
 
 #### 保存操作钩子
@@ -550,6 +624,7 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
 ##### SaveBefore (钩子方法) ⭐ 已优化
 - **功能**: 保存前的钩子方法，用于数据预处理和验证
 - **参数**:
+  - `ctx *Context` - crud上下文对象
   - `modelValue interface{}` - 要保存的模型数据
   - `mapData map[string]any` - 表单数据映射
   - `originalData ...interface{}` - 原始数据（仅在更新操作时提供，创建操作时为nil）
@@ -558,12 +633,60 @@ func (i *Index) SaveBefore(modelValue interface{}, mapData map[string]any, origi
   - `map[string]any` - 处理后的表单数据映射
   - `error` - 处理过程中的错误信息
 
-##### SaveAfter (钩子方法)
-- **功能**: 保存后的钩子方法，用于后续处理（在事务内执行）
+##### SaveAfter
+- **功能**: 保存操作后的处理方法（在事务内执行）
 - **参数**:
+  - `ctx *Context` - crud上下文对象
   - `tx *gorm.DB` - 数据库事务对象
-  - `modelValue interface{}` - 已保存的模型实例
+  - `modelValue interface{}` - 保存后的模型实例
 - **返回值**: `error` - 处理过程中的错误信息，如果返回错误则会回滚事务
+
+#### 设置字段值钩子
+
+##### SetValueFormData
+- **功能**: 获取设置字段值操作的表单数据
+- **参数**:
+  - `ctx *Context` - crud上下文对象
+- **返回值**:
+  - `modelValue interface{}` - 绑定后的模型实例
+  - `mapData map[string]any` - 原始表单数据映射
+  - `error` - 处理过程中的错误信息
+
+##### SetValueCheckField
+- **功能**: 验证传入的字段名是否有效
+- **参数**:
+  - `ctx *Context` - crud上下文对象
+  - `field string` - 要验证的字段名
+- **返回值**: `error` - 验证失败时的错误信息
+
+##### SetValueBefore
+- **功能**: 设置字段值前的钩子方法，用于数据预处理和验证
+- **参数**:
+  - `ctx *Context` - crud上下文对象
+  - `modelValue interface{}` - 表单数据绑定的模型实例
+  - `mapData map[string]any` - 表单数据映射
+  - `originalData interface{}` - 数据库中的数据
+- **返回值**:
+  - `interface{}` - 处理后的模型实例
+  - `map[string]any` - 处理后的表单数据映射
+  - `error` - 处理过程中的错误信息
+
+##### SetValueAfter
+- **功能**: 设置字段值后的钩子方法，用于后续处理（在事务内执行）
+- **参数**:
+  - `ctx *Context` - crud上下文对象
+  - `tx *gorm.DB` - 数据库事务对象
+  - `modelValue interface{}` - 包含设置字段值的模型实例
+- **返回值**: `error` - 处理过程中的错误信息，如果返回错误则会回滚事务
+
+##### SetValueReturn
+- **功能**: 设置字段值成功后的返回处理方法
+- **参数**:
+  - `ctx *Context` - crud上下文对象
+  - `value interface{}` - 设置的值
+  - `field string` - 设置的字段名
+  - `id uint` - 被设置的记录ID
+- **返回值**: `bool` - 处理结果，通常返回true表示成功
 
 ## 最佳实践
 
@@ -658,7 +781,7 @@ if err == nil {
 ### 5. 错误处理
 
 ```golang
-func (i *Index) CreateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
+func (i *Index) CreateBefore(ctx *crud.Context, modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
     // 数据验证
     if err := i.validateData(modelValue); err != nil {
         return nil, nil, err // 返回错误会中断操作
@@ -671,7 +794,7 @@ func (i *Index) CreateBefore(modelValue interface{}, mapData map[string]any) (in
 ### 6. 日志记录
 
 ```golang
-func (i *Index) CreateAfter(tx *gorm.DB, modelValue interface{}) error {
+func (i *Index) CreateAfter(ctx *crud.Context, tx *gorm.DB, modelValue interface{}) error {
     user := modelValue.(*userModel.Account)
 
     // 记录操作日志
@@ -682,3 +805,57 @@ func (i *Index) CreateAfter(tx *gorm.DB, modelValue interface{}) error {
 ```
 
 所有钩子方法都支持在继承的控制器中重写，以实现自定义的业务逻辑。
+### ControllerInterface（控制器接口）
+
+- 必选方法：`CheckInit(ctx any) *crud.Context`
+- 参数：
+  - `ctx any`: 控制器上下文对象，支持 `*crud.Context` 或 `*gin.Context`
+- 返回：
+  - `*crud.Context`: 确认后的 CRUD 上下文对象
+- 作用：
+  - 在 CRUD 初始化时调用，用于控制器级别的初始化确认与上下文准备
+  - 可在此方法中设置调试模式、注入公共参数、执行权限校验等
+
+### CheckInit 初始化确认方法（示例）
+
+```golang
+import (
+    "github.com/gin-gonic/gin"
+    "github.com/jcbowen/jcbaseGo/component/trait/crud"
+    "officeAutomation/library"
+)
+
+// CheckInit 控制器初始化确认方法
+// 参数：
+//   - ctx any: crud上下文对象(*crud.Context或者*gin.Context,不同的传入，处理不同的逻辑)
+//
+// 返回：
+//   - *crud.Context: 确认后的crud上下文对象
+//
+// 功能：在CRUD初始化时调用，用于控制器级别的初始化确认
+func (i *Index) CheckInit(ctx any) *crud.Context {
+    var (
+        crudCtx *crud.Context
+        ok      bool
+    )
+    // 确认crud上下文对象是否为*crud.Context类型
+    if crudCtx, ok = ctx.(*crud.Context); ok {
+        // 根据运行模式设置调试标识（使用项目库中的模式）
+        crudCtx.Debug = library.Mode == "debug"
+    } else if ginCtx, ok := ctx.(*gin.Context); ok {
+        // 传入的是 *gin.Context 时，构建一个新的 CRUD 上下文
+        crudCtx = crud.NewContext(&crud.NewContextOpt{
+            ActionName: "custom",
+            GinContext: ginCtx,
+            Debug:      library.Mode == "debug",
+        })
+    }
+
+    return crudCtx
+}
+```
+
+说明：
+- 入参可兼容 `*crud.Context` 与 `*gin.Context` 两种类型，便于在不同场景下复用。
+- 可在此方法中设置全局或控制器级别的调试信息、权限校验、公共上下文数据等。
+- 当入参为 `*gin.Context` 时，会创建一个新的 `*crud.Context` 以便后续流程统一使用。

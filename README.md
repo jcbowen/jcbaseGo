@@ -151,6 +151,7 @@ import (
     "github.com/jcbowen/jcbaseGo/component/orm/base"
     "github.com/jcbowen/jcbaseGo/component/orm/mysql"
     "github.com/jcbowen/jcbaseGo/component/trait/crud"
+    "officeAutomation/library"
 )
 
 // User 用户模型
@@ -198,8 +199,37 @@ func NewUserController() *UserController {
     return controller
 }
 
+// CheckInit 控制器初始化确认方法
+// 参数：
+//   - ctx any: crud上下文对象(*crud.Context或者*gin.Context,不同的传入，处理不同的逻辑)
+//
+// 返回：
+//   - *crud.Context: 确认后的crud上下文对象
+//
+// 功能：在CRUD初始化时调用，用于控制器级别的初始化确认
+func (uc *UserController) CheckInit(ctx any) *crud.Context {
+    var (
+        crudCtx *crud.Context
+        ok      bool
+    )
+    // 确认crud上下文对象是否为*crud.Context类型
+    if crudCtx, ok = ctx.(*crud.Context); ok {
+        // 根据运行模式设置调试标识（示例用 Gin 模式）
+        crudCtx.Debug = library.Mode == "debug"
+    } else if ginCtx, ok := ctx.(*gin.Context); ok {
+        // 传入的是 *gin.Context 时，构建一个新的 CRUD 上下文
+        crudCtx = crud.NewContext(&crud.NewContextOpt{
+            ActionName: "custom",
+            GinContext: ginCtx,
+            Debug:      library.Mode == "debug",
+        })
+    }
+
+    return crudCtx
+}
+
 // CreateBefore 创建前的数据验证
-func (uc *UserController) CreateBefore(modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
+func (uc *UserController) CreateBefore(ctx *crud.Context, modelValue interface{}, mapData map[string]any) (interface{}, map[string]any, error) {
     user := modelValue.(*User)
     
     // 检查用户名是否已存在
@@ -213,7 +243,7 @@ func (uc *UserController) CreateBefore(modelValue interface{}, mapData map[strin
 }
 
 // ListEach 列表数据处理
-func (uc *UserController) ListEach(item interface{}) interface{} {
+func (uc *UserController) ListEach(ctx *crud.Context, item interface{}) interface{} {
     user := item.(*User)
     // 可以在这里添加计算字段或隐藏敏感信息
     return user

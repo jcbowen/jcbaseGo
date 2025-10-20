@@ -19,7 +19,7 @@ import (
 type ControllerInterface interface {
 	// CheckInit 控制器初始化确认方法
 	// 参数：
-	//   - ctx *Context: crud上下文对象
+	//   - ctx any: crud上下文对象(*crud.Context或者*gin.Context,不同的传入，处理不同的逻辑)
 	// 功能：在CRUD初始化时调用，用于控制器级别的初始化确认
 	CheckInit(ctx any) *Context
 }
