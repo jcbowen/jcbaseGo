@@ -4,6 +4,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -15,10 +16,11 @@ import (
 // SM4 SM4加解密结构体
 // 提供SM4对称加密算法的加解密功能
 type SM4 struct {
-	Text string `json:"text" default:""`                // 待加密/解密的文本
-	Key  string `json:"key" default:"jcbase.sm4_key__"` // 加密密钥，必须为16字节
-	Iv   string `json:"iv" default:"jcbase.sm4_iv___"`  // 初始化向量，必须为16字节
-	Mode string `json:"mode" default:"CBC"`             // 加密模式：CBC、GCM、CFB、OFB、CTR
+	Text     string `json:"text" default:""`                // 待加密/解密的文本内容，实际加密或解密操作将基于该文本进行
+	Key      string `json:"key" default:"jcbase.sm4_key__"` // 加密密钥，SM4算法要求密钥长度必须为16字节，用于加密和解密数据
+	Iv       string `json:"iv" default:"jcbase.sm4_iv___"`  // 初始化向量（Initialization Vector），SM4算法要求IV长度必须为16字节，用于增强加密安全性
+	Mode     string `json:"mode" default:"CBC"`             // 加密模式，可选值包括：CBC、GCM、CFB、OFB、CTR，指定加密操作使用的具体模式
+	Encoding string `json:"encoding" default:"Std"`         // 输出/输入编码格式，可选值包括：Std（标准Base64）、Raw（无填充Base64）、RawURL（URL安全无填充Base64）、Hex（十六进制）
 }
 
 // EncryptCBC 使用CBC模式加密数据
@@ -50,7 +52,7 @@ func (s SM4) EncryptCBC(cipherText *string) error {
 	mode := cipher.NewCBCEncrypter(block, ivBytes)
 	mode.CryptBlocks(cipherByteArr, plainText)
 
-	*cipherText = base64.StdEncoding.EncodeToString(cipherByteArr)
+	*cipherText = s.encodeBytes(cipherByteArr)
 	return nil
 }
 
@@ -75,9 +77,9 @@ func (s SM4) DecryptCBC(plaintext *string) error {
 		return fmt.Errorf("创建SM4密码器失败: %w", err)
 	}
 
-	cipherBytes, err := base64.StdEncoding.DecodeString(s.Text)
+	cipherBytes, err := s.decodeString(s.Text)
 	if err != nil {
-		return fmt.Errorf("Base64解码失败: %w", err)
+		return fmt.Errorf("密文解码失败: %w", err)
 	}
 
 	if len(cipherBytes) < sm4.BlockSize {
@@ -131,7 +133,7 @@ func (s SM4) EncryptGCM(cipherText *string) error {
 
 	// 将nonce和密文组合后进行base64编码
 	result := append(nonce, cipherBytes...)
-	*cipherText = base64.StdEncoding.EncodeToString(result)
+	*cipherText = s.encodeBytes(result)
 	return nil
 }
 
@@ -159,9 +161,9 @@ func (s SM4) DecryptGCM(plaintext *string) error {
 	}
 
 	// 解码base64数据
-	data, err := base64.StdEncoding.DecodeString(s.Text)
+	data, err := s.decodeString(s.Text)
 	if err != nil {
-		return fmt.Errorf("Base64解码失败: %w", err)
+		return fmt.Errorf("密文解码失败: %w", err)
 	}
 
 	nonceSize := sm4gcm.NonceSize()
@@ -237,4 +239,30 @@ func validateSM4Iv(iv string) error {
 		return fmt.Errorf("SM4初始化向量长度必须为%d字节，当前长度: %d", sm4.BlockSize, len(iv))
 	}
 	return nil
+}
+
+func (s SM4) encodeBytes(b []byte) string {
+	switch s.Encoding {
+	case "Raw":
+		return base64.RawStdEncoding.EncodeToString(b)
+	case "RawURL":
+		return base64.RawURLEncoding.EncodeToString(b)
+	case "Hex":
+		return hex.EncodeToString(b)
+	default:
+		return base64.StdEncoding.EncodeToString(b)
+	}
+}
+
+func (s SM4) decodeString(str string) ([]byte, error) {
+	switch s.Encoding {
+	case "Raw":
+		return base64.RawStdEncoding.DecodeString(str)
+	case "RawURL":
+		return base64.RawURLEncoding.DecodeString(str)
+	case "Hex":
+		return hex.DecodeString(str)
+	default:
+		return base64.StdEncoding.DecodeString(str)
+	}
 }
