@@ -24,6 +24,7 @@ type NewContextOpt = Context
 // ----- 公共方法 ----- /
 
 // NewContext 创建一个新的控制器上下文对象
+// 这个方法用于初始化一个新的上下文对象，包含Gin上下文和调试模式。
 // 参数说明：
 //   - opt *NewContextOpt: 上下文选项，包含Gin上下文和调试模式
 //
@@ -237,6 +238,13 @@ func (ctx *Context) Result(code int, msg string, args ...any) {
 }
 
 // convertToInterfaceSlice 将特定类型的切片转换为通用的 interface{} 切片
+// 这个方法用于将任意类型的切片转换为 []interface{} 类型，
+// 这在需要将不同类型的切片合并到一个统一处理的场景中非常有用。
+// 参数：
+//   - slice interface{}: 任意类型的切片，必须是切片类型。
+//
+// 返回值：
+//   - []interface{}: 转换后的通用接口切片。
 func (ctx *Context) convertToInterfaceSlice(slice interface{}) []interface{} {
 	v := reflect.ValueOf(slice)
 	if v.Kind() != reflect.Slice {
@@ -251,7 +259,15 @@ func (ctx *Context) convertToInterfaceSlice(slice interface{}) []interface{} {
 	return interfaceSlice
 }
 
-// GetSafeMapGPC 安全获取map类型GPC
+// GetSafeMapGPC 安全获取map类型GPC数据
+// 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取map[string]any类型的数据。
+// 它首先检查GPC是否存在，然后根据提供的键（默认为"all"）获取对应的数据。
+// 如果键不存在或类型断言失败，会返回空map。
+// 参数：
+//   - key ...string: 可选参数，指定要获取的GPC键，枚举值为"query", "header", "cookie", "data"，"all"。如果为空，默认使用"all"。
+//
+// 返回值：
+//   - mapData map[string]any: 安全获取到的map[string]any类型数据。
 func (ctx *Context) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 	mapKey := "all"
 	if len(key) > 0 {
