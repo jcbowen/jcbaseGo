@@ -1,6 +1,7 @@
 package security
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -297,6 +298,143 @@ func TestSM4_IvValidation(t *testing.T) {
 			err := validateSM4Iv(tt.iv)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateSM4Iv() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSM4_EncodingOptionsCBC(t *testing.T) {
+	isHexLower := func(s string) bool {
+		if len(s)%2 != 0 { // hex should be even length
+			return false
+		}
+		for _, c := range s {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+				return false
+			}
+		}
+		return true
+	}
+
+	cases := []struct {
+		name     string
+		encoding string
+	}{
+		{name: "Std Base64", encoding: "Std"},
+		{name: "Raw Base64 (no padding)", encoding: "Raw"},
+		{name: "RawURL Base64 (url-safe no padding)", encoding: "RawURL"},
+		{name: "Hex", encoding: "Hex"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sm4Instance := SM4{
+				Text:     "Hello, SM4 CBC with Encoding!",
+				Key:      "1234567890123456",
+				Iv:       "abcdefghijklmnop",
+				Mode:     "CBC",
+				Encoding: tc.encoding,
+			}
+
+			var cipherText string
+			if err := sm4Instance.EncryptCBC(&cipherText); err != nil {
+				t.Fatalf("EncryptCBC error: %v", err)
+			}
+			if cipherText == "" {
+				t.Fatalf("EncryptCBC produced empty cipher text")
+			}
+
+			switch tc.encoding {
+			case "Raw":
+				if strings.Contains(cipherText, "=") {
+					t.Errorf("Raw encoding should not contain '=', got: %s", cipherText)
+				}
+			case "RawURL":
+				if strings.ContainsAny(cipherText, "+/=") {
+					t.Errorf("RawURL encoding should not contain '+', '/', '='; got: %s", cipherText)
+				}
+			case "Hex":
+				if !isHexLower(cipherText) {
+					t.Errorf("Hex encoding should be lowercase hex without symbols, got: %s", cipherText)
+				}
+			}
+
+			// Decrypt using same encoding
+			sm4Instance.Text = cipherText
+			var plain string
+			if err := sm4Instance.DecryptCBC(&plain); err != nil {
+				t.Fatalf("DecryptCBC error: %v", err)
+			}
+			if plain != "Hello, SM4 CBC with Encoding!" {
+				t.Errorf("DecryptCBC mismatch, want %q, got %q", "Hello, SM4 CBC with Encoding!", plain)
+			}
+		})
+	}
+}
+
+func TestSM4_EncodingOptionsGCM(t *testing.T) {
+	isHexLower := func(s string) bool {
+		if len(s)%2 != 0 {
+			return false
+		}
+		for _, c := range s {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+				return false
+			}
+		}
+		return true
+	}
+
+	cases := []struct {
+		name     string
+		encoding string
+	}{
+		{name: "Std Base64", encoding: "Std"},
+		{name: "Raw Base64 (no padding)", encoding: "Raw"},
+		{name: "RawURL Base64 (url-safe no padding)", encoding: "RawURL"},
+		{name: "Hex", encoding: "Hex"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sm4Instance := SM4{
+				Text:     "Hello, SM4 GCM with Encoding!",
+				Key:      "1234567890123456",
+				Mode:     "GCM",
+				Encoding: tc.encoding,
+			}
+
+			var cipherText string
+			if err := sm4Instance.EncryptGCM(&cipherText); err != nil {
+				t.Fatalf("EncryptGCM error: %v", err)
+			}
+			if cipherText == "" {
+				t.Fatalf("EncryptGCM produced empty cipher text")
+			}
+
+			switch tc.encoding {
+			case "Raw":
+				if strings.Contains(cipherText, "=") {
+					t.Errorf("Raw encoding should not contain '=', got: %s", cipherText)
+				}
+			case "RawURL":
+				if strings.ContainsAny(cipherText, "+/=") {
+					t.Errorf("RawURL encoding should not contain '+', '/', '='; got: %s", cipherText)
+				}
+			case "Hex":
+				if !isHexLower(cipherText) {
+					t.Errorf("Hex encoding should be lowercase hex without symbols, got: %s", cipherText)
+				}
+			}
+
+			// Decrypt using same encoding
+			sm4Instance.Text = cipherText
+			var plain string
+			if err := sm4Instance.DecryptGCM(&plain); err != nil {
+				t.Fatalf("DecryptGCM error: %v", err)
+			}
+			if plain != "Hello, SM4 GCM with Encoding!" {
+				t.Errorf("DecryptGCM mismatch, want %q, got %q", "Hello, SM4 GCM with Encoding!", plain)
 			}
 		})
 	}
