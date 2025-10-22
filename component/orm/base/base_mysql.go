@@ -44,17 +44,26 @@ func (b *MysqlBaseModel) ModelParse(modelType reflect.Type) (tableName string, f
 	dbConfigStr := os.Getenv("jc_mysql_" + b.GetConfigAlias(model))
 	helper.Json(dbConfigStr).ToStruct(&dbConfig)
 
-	// 获取表前缀
-	prefix := dbConfig.TablePrefix
+	// 自定义表名
+	if tn, ok := model.(interface{ TableName() string }); ok && tn.TableName() != "" {
+		tableName = tn.TableName()
+	} else {
+		// 获取表前缀
+		prefix := dbConfig.TablePrefix
+		if pfxCtrl, ok := model.(interface{ TablePrefix() string }); ok && pfxCtrl.TablePrefix() != "" {
+			prefix = pfxCtrl.TablePrefix()
+		}
 
-	// 转换为小写字母并添加下划线
-	convertModelName := helper.NewStr(modelType.Name()).ConvertCamelToSnake()
+		// 转换为小写字母并添加下划线
+		convertModelName := helper.NewStr(modelType.Name()).ConvertCamelToSnake()
 
-	if !dbConfig.SingularTable {
-		convertModelName += "s"
+		if !dbConfig.SingularTable {
+			convertModelName += "s"
+		}
+
+		// 拼接数据表名称
+		tableName = prefix + convertModelName
 	}
-
-	tableName = prefix + convertModelName
 
 	// ----- 获取数据表所有字段 ----- /
 	fields = []string{}
