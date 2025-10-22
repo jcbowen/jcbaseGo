@@ -702,6 +702,7 @@ func isEmptyStruct(value reflect.Value) bool {
 }
 
 // CheckAndSetDefault 检查结构体中的字段是否为空，如果为空则设置为默认值
+// 常见问题：如果发现默认值赋值失败，但是又没有出现报错，可以看看是不是传递的指针的指针
 func CheckAndSetDefault(i interface{}) error {
 	// 获取结构体反射值
 	val := reflect.ValueOf(i)
