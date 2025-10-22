@@ -30,7 +30,7 @@ func (t *Trait) ActionList(c *gin.Context) {
 		pageSize = 1000
 	}
 
-	tableAlias := ""
+	var tableAlias string
 	if t.ModelTableAlias != "" {
 		tableAlias = " " + t.ModelTableAlias
 	}
@@ -55,10 +55,9 @@ func (t *Trait) ActionList(c *gin.Context) {
 
 	// 获取总数
 	total := int64(0)
-	err := query.
+	if err := query.
 		Model(reflect.New(reflect.TypeOf(t.Model).Elem()).Interface()).
-		Count(&total).Error
-	if err != nil {
+		Count(&total).Error; err != nil {
 		ctx.Result(http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -87,7 +86,7 @@ func (t *Trait) ActionList(c *gin.Context) {
 	sliceType := reflect.SliceOf(resultStructType)
 	results := reflect.New(sliceType).Interface()
 
-	err = query.Order(t.callCustomMethod("ListOrder", ctx)[0]).
+	err := query.Order(t.callCustomMethod("ListOrder", ctx)[0]).
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).
 		Find(results).Error

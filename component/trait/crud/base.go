@@ -115,7 +115,7 @@ func (t *Trait) InitCrud(ginContext *gin.Context, args ...any) (ctx *Context) {
 	// 设置操作时间
 	t.OperateTime = time.Now().Format("2006-01-02 15:04:05")
 
-	// 存放表别名到上下文，方便查询时调用
+	// 存放表别名（以点号结尾）到上下文，方便补充到字段前
 	t.TableAlias = t.ModelTableName
 	if t.ModelTableAlias != "" {
 		t.TableAlias = t.ModelTableAlias
