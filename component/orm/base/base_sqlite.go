@@ -50,7 +50,7 @@ func (b *SqliteBaseModel) ModelParse(modelType reflect.Type) (tableName string, 
 	} else {
 		// 获取表前缀
 		prefix := dbConfig.TablePrefix
-		if pfxCtrl, ok := model.(interface{ TablePrefix() string }); ok && pfxCtrl.TablePrefix() != "" {
+		if pfxCtrl, ok := model.(interface{ TablePrefix() string }); ok {
 			prefix = pfxCtrl.TablePrefix()
 		}
 
