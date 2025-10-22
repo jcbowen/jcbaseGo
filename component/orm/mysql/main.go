@@ -176,55 +176,36 @@ func (c *Instance) Error() []error {
 }
 
 // FindPageOptions 定义分页查询选项，语义与 CRUD list 保持一致；
-// 对齐 CRUD list 的参数设计
-//   - Page: 页码，默认 1
-//   - PageSize: 分页大小，默认 10，最大 1000
-//   - AsMap: 是否以 map 形式返回（等价于 PHP 的 asArray），默认 true
-//   - ShowDeleted: 是否显示软删除数据，默认 false
-//   - TableAlias: 表别名，用于构建查询与 Select 字段
-//   - Order: 排序规则，默认按 `alias.id DESC` 或 `id DESC`
-//   - Select: 自定义 Select 字段，默认 `alias.*` 或 `*`
-//   - GetQuery: 可选的查询构建回调（等价 PHP 的 query 回调）
-//   - ListSelect: 可选，仿照 CRUD 的 ListSelect，对 Count 之后的 query 进行 Select 拼接
-//   - ListOrder: 可选，仿照 CRUD 的 ListOrder，动态返回排序值
-//   - ListEach: 可选，仿照 CRUD 的 ListEach，逐条处理列表项
-//   - ListReturn: 可选，仿照 CRUD 的 ListReturn，在返回前对整体结果进行处理
-//   - ResultStruct: 可选，仿照 CRUD 的 ListResultStruct，结构体结果类型覆盖（AsMap=false 时生效）
-//   - Model: 模型实例（强烈建议传入，用于解析表名/字段/软删除逻辑）。
-//     说明：Go 的嵌入式方法在运行期无法反射到外层结构体类型，
-//     因此需要通过此字段传入实际模型实例以解析表名与软删除配置；
-//     若不传将退化为仅使用 `Select`/`Order` 的通用查询，无法自动软删除过滤。
 type FindPageOptions struct {
-	Page        int
-	PageSize    int
-	AsMap       bool
-	ShowDeleted bool
-	TableAlias  string
-	Order       interface{}
-	Select      string
+	// 查询配置
+	Page        int  `default:"1"`     // 页码，默认 1
+	PageSize    int  `default:"10"`    // 分页大小，默认 10，最大 1000
+	ShowDeleted bool `default:"false"` // 是否显示软删除数据，默认 false
+
+	// 模型配置
+	PkId            string `default:"id"` // 主键字段名，默认 "id"
+	ModelTableAlias string `default:""`   // 模型表别名，默认为表名
 
 	// 回调
-	GetQuery   func(*gorm.DB) *gorm.DB
-	ListSelect func(*gorm.DB) *gorm.DB
-	ListOrder  func() interface{}
-	ListEach   func(interface{}) interface{}
-	ListReturn func(jcbaseGo.ListData) jcbaseGo.ListData
-
-	// 结果类型覆盖（用于非 map 返回时）
-	ResultStruct interface{}
+	ListQuery  func(*gorm.DB) *gorm.DB                   // 可选，自定义查询回调
+	ListSelect func(*gorm.DB) *gorm.DB                   // 可选，自定义查询字段回调
+	ListOrder  func() interface{}                        // 可选，自定义排序回调
+	ListEach   func(interface{}) interface{}             // 可选，自定义遍历回调
+	ListReturn func(jcbaseGo.ListData) jcbaseGo.ListData // 可选，自定义返回回调
 }
 
 // FindForPage 按分页选项查询并返回列表数据；
-// - 支持软删除过滤（默认隐藏），当传入 Model 可自动解析软删除字段与条件；
-// - 支持 Select/Order 与多个回调（ListSelect/ListOrder/ListEach/ListReturn）；
-// - 当 AsMap=true 返回 []map 形式；否则按模型或 ResultStruct 指定的结构体类型返回。
 func (c *Instance) FindForPage(model interface{}, options *FindPageOptions) (jcbaseGo.ListData, error) {
 	if model == nil {
 		return jcbaseGo.ListData{}, fmt.Errorf("FindForPage: model 不能为空")
 	}
+
 	// 默认参数
 	if options == nil {
-		options = &FindPageOptions{Page: 1, PageSize: 10, AsMap: true}
+		options = &FindPageOptions{}
+	}
+	if err := helper.CheckAndSetDefault(options); err != nil {
+		jcbaseGo.PanicIfError(err)
 	}
 
 	page := options.Page
@@ -245,118 +226,103 @@ func (c *Instance) FindForPage(model interface{}, options *FindPageOptions) (jcb
 	}
 
 	// 解析表与软删除配置
-	b := &base.MysqlBaseModel{}
-	tableName, fields, softDeleteField, softDeleteCondition := b.ModelParse(modelType)
+	var (
+		fields                                          []string
+		tableName, softDeleteField, softDeleteCondition string
+	)
+	if modelParseProvider, ok := model.(interface {
+		ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string)
+	}); ok {
+		tableName, fields, softDeleteField, softDeleteCondition = modelParseProvider.ModelParse(modelType)
+	} else {
+		// panic("FindForPage: model 未实现 ModelParse 方法，或返回空表名")
+		b := &base.MysqlBaseModel{}
+		tableName, fields, softDeleteField, softDeleteCondition = b.ModelParse(modelType)
+	}
 
-	// 别名与前缀
-	tableAlias := ""
-	if options.TableAlias != "" {
-		tableAlias = " " + options.TableAlias
+	// 表别名（以空格开头），方便补充到查询条件时表后
+	var tableAliasStartWidthSpace string
+	if options.ModelTableAlias != "" {
+		tableAliasStartWidthSpace = " " + options.ModelTableAlias
 	}
-	aliasPrefix := ""
-	if options.TableAlias != "" {
-		aliasPrefix = options.TableAlias + "."
+
+	// 表别名（以点号结尾），方便补充到字段前
+	tableAliasEndWidthPoint := tableName
+	if options.ModelTableAlias != "" {
+		tableAliasEndWidthPoint = options.ModelTableAlias
 	}
+	tableAliasEndWidthPoint += "."
 
 	// 初始查询
-	query := c.GetDb().Table(tableName + tableAlias)
+	query := c.GetDb().Table(tableName + tableAliasStartWidthSpace)
 
 	// 软删除条件
 	if !options.ShowDeleted && softDeleteField != "" && helper.InArray(softDeleteField, fields) {
-		query = query.Where(aliasPrefix + softDeleteField + " " + softDeleteCondition)
+		query = query.Where(tableAliasEndWidthPoint + softDeleteField + " " + softDeleteCondition)
 	}
 
-	// 自定义查询回调（仿 ListQuery）
-	if options.GetQuery != nil {
-		query = options.GetQuery(query)
+	// 自定义查询回调
+	if options.ListQuery != nil {
+		query = options.ListQuery(query)
 	}
 
 	// 统计总数
 	total := int64(0)
-	if err := query.Model(reflect.New(modelType).Interface()).Count(&total).Error; err != nil {
+	if err := query.
+		Model(reflect.New(modelType).Interface()).
+		Count(&total).Error; err != nil {
 		return jcbaseGo.ListData{}, err
 	}
 
-	// Select（仿 ListSelect）
+	// 自定义查询
 	if options.ListSelect != nil {
 		query = options.ListSelect(query)
-	} else if options.Select != "" {
-		query = query.Select(options.Select)
 	} else {
-		if options.TableAlias != "" {
-			query = query.Select(options.TableAlias + ".*")
-		} else {
-			query = query.Select("*")
-		}
+		query = query.Select(tableAliasEndWidthPoint + "*")
 	}
 
-	// Order（仿 ListOrder）
-	order := options.Order
+	// 自定义排序
+	var order any
 	if options.ListOrder != nil {
 		order = options.ListOrder()
-	}
-	if order == nil {
-		if options.TableAlias != "" {
-			order = options.TableAlias + ".id DESC"
-		} else {
-			order = "id DESC"
-		}
+	} else {
+		order = tableAliasEndWidthPoint + options.PkId + " DESC"
 	}
 
 	// 查询结果
 	var resultList []interface{}
-	if options.AsMap {
-		// 返回 map
-		var slice []map[string]interface{}
-		if err := query.Order(order).Offset((page - 1) * pageSize).Limit(pageSize).Find(&slice).Error; err != nil {
-			return jcbaseGo.ListData{}, err
-		}
-		resultList = make([]interface{}, len(slice))
-		for i := 0; i < len(slice); i++ {
-			var out interface{}
-			if options.ListEach != nil {
-				out = options.ListEach(slice[i])
-			} else {
-				out = slice[i]
-			}
-			if out != nil && reflect.TypeOf(out).Kind() == reflect.Ptr {
-				out = reflect.ValueOf(out).Elem().Interface()
-			}
-			resultList[i] = out
-		}
-	} else {
-		// 结果结构体类型（仿 ListResultStruct）
-		resultType := modelType
-		if options.ResultStruct != nil {
-			resultStructType := reflect.TypeOf(options.ResultStruct)
-			if resultStructType.Kind() == reflect.Ptr {
-				resultStructType = resultStructType.Elem()
-			}
-			if resultStructType.Kind() == reflect.Struct {
-				resultType = resultStructType
-			}
-		}
 
-		// 返回结构体
-		sliceType := reflect.SliceOf(resultType)
-		resultsPtr := reflect.New(sliceType)
-		if err := query.Order(order).Offset((page - 1) * pageSize).Limit(pageSize).Find(resultsPtr.Interface()).Error; err != nil {
-			return jcbaseGo.ListData{}, err
+	// 结果结构体类型
+	resultType := modelType
+	if options.ListReturn != nil {
+		resultStructType := reflect.TypeOf(options.ListReturn)
+		if resultStructType.Kind() == reflect.Ptr {
+			resultStructType = resultStructType.Elem()
 		}
-		resultsVal := resultsPtr.Elem()
-		resultList = make([]interface{}, resultsVal.Len())
-		for i := 0; i < resultsVal.Len(); i++ {
-			if options.ListEach != nil {
-				itemPtr := resultsVal.Index(i).Addr().Interface()
-				out := options.ListEach(itemPtr)
-				if out != nil && reflect.TypeOf(out).Kind() == reflect.Ptr {
-					resultList[i] = reflect.ValueOf(out).Elem().Interface()
-				} else {
-					resultList[i] = out
-				}
+		if resultStructType.Kind() == reflect.Struct {
+			resultType = resultStructType
+		}
+	}
+
+	// 返回结构体
+	sliceType := reflect.SliceOf(resultType)
+	resultsPtr := reflect.New(sliceType)
+	if err := query.Order(order).Offset((page - 1) * pageSize).Limit(pageSize).Find(resultsPtr.Interface()).Error; err != nil {
+		return jcbaseGo.ListData{}, err
+	}
+	resultsVal := resultsPtr.Elem()
+	resultList = make([]interface{}, resultsVal.Len())
+	for i := 0; i < resultsVal.Len(); i++ {
+		if options.ListEach != nil {
+			itemPtr := resultsVal.Index(i).Addr().Interface()
+			out := options.ListEach(itemPtr)
+			if out != nil && reflect.TypeOf(out).Kind() == reflect.Ptr {
+				resultList[i] = reflect.ValueOf(out).Elem().Interface()
 			} else {
-				resultList[i] = resultsVal.Index(i).Interface()
+				resultList[i] = out
 			}
+		} else {
+			resultList[i] = resultsVal.Index(i).Interface()
 		}
 	}
 
@@ -366,9 +332,10 @@ func (c *Instance) FindForPage(model interface{}, options *FindPageOptions) (jcb
 		Page:     page,
 		PageSize: pageSize,
 	}
-	// ListReturn（仿钩子）
+
 	if options.ListReturn != nil {
 		listData = options.ListReturn(listData)
 	}
+
 	return listData, nil
 }
