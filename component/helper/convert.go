@@ -201,6 +201,48 @@ func (c Convert) ToInt64() int64 {
 	}
 }
 
+// ToInt8 将变量转为int8类型
+func (c Convert) ToInt8() int8 {
+	if c.Value == nil {
+		return 0
+	}
+
+	switch v := c.Value.(type) {
+	case int8:
+		return v
+	case int, int16, int32, int64:
+		i := reflect.ValueOf(v).Int()
+		if i < int64(math.MinInt8) || i > int64(math.MaxInt8) {
+			return 0
+		}
+		return int8(i)
+	case uint, uint8, uint16, uint32, uint64:
+		u := reflect.ValueOf(v).Uint()
+		if u > uint64(math.MaxInt8) {
+			return 0
+		}
+		return int8(u)
+	case float32, float64:
+		f := reflect.ValueOf(v).Float()
+		if f > float64(math.MaxInt8) || f < float64(math.MinInt8) {
+			return 0
+		}
+		return int8(f)
+	case string:
+		i, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			log.Println("Error parsing int8 from string:", err)
+			return 0
+		}
+		if i < int64(math.MinInt8) || i > int64(math.MaxInt8) {
+			return 0
+		}
+		return int8(i)
+	default:
+		return 0
+	}
+}
+
 // ToUint 将变量转为uint类型
 func (c Convert) ToUint() uint {
 	newValue, ok := c.ToNumber()
