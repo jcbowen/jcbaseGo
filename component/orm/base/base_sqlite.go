@@ -82,10 +82,26 @@ func (b *SqliteBaseModel) ModelParse(modelType reflect.Type) (tableName string, 
 		if columnName != "" {
 			fields = append(fields, columnName)
 
-			// 检查是否有 soft_delete 标签，优先使用自定义软删除配置
-			if softDeleteTag := getSoftDeleteFromTag(gormTag); softDeleteTag != "" {
+			// 检查是否有 soft_delete 标签，支持仅标记不带值
+			if hasSoftDeleteTag(gormTag) {
 				softDeleteField = columnName
-				softDeleteCondition = softDeleteTag
+				cond := getSoftDeleteFromTag(gormTag)
+				if cond != "" {
+					softDeleteCondition = cond
+				} else {
+					defaultValue := getDefaultFromTag(gormTag)
+					if defaultValue != "" {
+						if strings.EqualFold(defaultValue, "NULL") {
+							softDeleteCondition = "IS NULL"
+						} else if defaultValue == "0000-00-00 00:00:00" || strings.Contains(gormTag, "default:0000-00-00 00:00:00") {
+							softDeleteCondition = "= '0000-00-00 00:00:00'"
+						} else {
+							softDeleteCondition = "= '" + defaultValue + "'"
+						}
+					} else {
+						softDeleteCondition = "IS NULL"
+					}
+				}
 			} else if columnName == "deleted_at" {
 				// 记录 deleted_at 字段信息（系统默认的软删除字段）
 				deletedAtField = columnName

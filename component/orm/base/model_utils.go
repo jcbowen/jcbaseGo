@@ -40,8 +40,23 @@ func getSoftDeleteFromTag(tag string) string {
 		if strings.HasPrefix(t, "soft_delete:") {
 			return strings.TrimPrefix(t, "soft_delete:")
 		}
+		// 支持无值标记 soft_delete
+		if t == "soft_delete" {
+			return ""
+		}
 	}
 	return ""
+}
+
+// hasSoftDeleteTag 检查是否存在 soft_delete 标签（支持无值）
+func hasSoftDeleteTag(tag string) bool {
+	tags := strings.Split(tag, ";")
+	for _, t := range tags {
+		if t == "soft_delete" || strings.HasPrefix(t, "soft_delete:") {
+			return true
+		}
+	}
+	return false
 }
 
 // SetFieldIfExist 设置字段值（如果字段存在且可设置）
