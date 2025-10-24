@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/emmansun/gmsm/sm4"
 	"github.com/jcbowen/jcbaseGo/component/helper"
+	"github.com/tjfoc/gmsm/sm4"
 )
 
 // SM4 SM4加解密结构体

@@ -6,12 +6,12 @@ toolchain go1.23.4
 
 require (
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
-	github.com/emmansun/gmsm v0.30.1
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/pkg/sftp v1.13.6
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.55
+	github.com/tjfoc/gmsm v1.4.1
 	golang.org/x/crypto v0.37.0
 	gopkg.in/ini.v1 v1.67.0
 	gorm.io/driver/mysql v1.4.1
