@@ -326,4 +326,13 @@ func customExample2() {
 	} else {
 		fmt.Printf("  加密结果: %s\n", cipherText)
 	}
+
+	sm4.Text = cipherText
+	var plainText string
+	err = sm4.Decrypt(&plainText)
+	if err != nil {
+		fmt.Printf("  解密失败: %v\n", err)
+	} else {
+		fmt.Printf("  解密结果: %s\n", plainText)
+	}
 }
