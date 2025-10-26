@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -15,38 +14,56 @@ type Base struct {
 // Cors 开放所有接口的OPTIONS方法
 func (b Base) Cors() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		method := c.Request.Method               //请求方法
-		origin := c.Request.Header.Get("Origin") //请求头部
-		var headerKeys []string                  // 声明请求头keys
-		for k := range c.Request.Header {
-			headerKeys = append(headerKeys, k)
-		}
-		headerStr := strings.Join(headerKeys, ", ")
-		if headerStr != "" {
-			headerStr = fmt.Sprintf("Access-Control-Allow-Origin, Access-Control-Allow-Headers, %s", headerStr)
-		} else {
-			headerStr = "Access-Control-Allow-Origin, Access-Control-Allow-Headers"
-		}
+		method := c.Request.Method
+		origin := c.Request.Header.Get("Origin")
+
+		// 让缓存正确区分不同的跨域预检
+		c.Header("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
+
+		// Origin 处理：回显具体来源以支持凭证；无来源则为 *
 		if origin != "" {
-			c.Header("Access-Control-Allow-Origin", origin)                                                          // 动态设置允许的域名
-			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD, CONNECT, TRACE") //允许所有方法
-			c.Header("Access-Control-Allow-Headers", "*")                                                            //允许所有请求头
-			c.Header("Access-Control-Expose-Headers", "*")                                                           //允许所有响应头
-			c.Header("Access-Control-Max-Age", "172800")                                                             // 缓存请求信息 单位为秒
-			c.Header("Access-Control-Allow-Credentials", "true")                                                     // 跨域请求是否需要带cookie信息 默认设置为true
-			// c.Set("Content-type", "application/json;charset=utf-8")                                                                                                                                             // 设置返回格式是json（已调整到crud包的基础文件中）
-
-			// 添加 CSP 头部
-			// c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';")
+			c.Header("Access-Control-Allow-Origin", origin)
+		} else {
+			c.Header("Access-Control-Allow-Origin", "*")
 		}
 
-		//放行所有OPTIONS方法
+		// 允许的方法
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+
+		// === 自定义允许的请求头 ===
+		defaultAllowHeaders := "Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, X-Environment, X-Version, X-Request-Time, X-Api-Key, X-Resource-Version, JcClient, Referer, User-Agent, sec-ch-ua, sec-ch-ua-mobile, sec-ch-ua-platform"
+		reqHeaders := strings.TrimSpace(c.Request.Header.Get("Access-Control-Request-Headers"))
+		if reqHeaders != "" {
+			// 返回客户端请求的头部，同时附加我们的默认列表（允许重复，浏览器会忽略）
+			c.Header("Access-Control-Allow-Headers", reqHeaders+", "+defaultAllowHeaders)
+		} else {
+			c.Header("Access-Control-Allow-Headers", defaultAllowHeaders)
+		}
+
+		// 暴露的响应头（加入常用与自定义，便于前端读取）
+		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Authorization, X-Environment, X-Version, X-Request-Time, X-Api-Key, X-Resource-Version, JcClient")
+
+		// 预检缓存时间
+		c.Header("Access-Control-Max-Age", "172800")
+
+		// 仅当存在具体的 Origin 时允许携带凭证（与 * 不兼容）
+		if origin != "" {
+			c.Header("Access-Control-Allow-Credentials", "true")
+		}
+
+		// 允许私有网络的跨域（Chrome 新增，按需支持）
+		if c.Request.Header.Get("Access-Control-Request-Private-Network") == "true" {
+			c.Header("Access-Control-Allow-Private-Network", "true")
+		}
+
+		// 放行所有 OPTIONS 预检请求
 		if method == http.MethodOptions {
-			c.JSON(http.StatusOK, "Options Request!")
+			c.AbortWithStatus(http.StatusNoContent)
+			return
 		}
 
-		// 处理请求
-		c.Next() // 处理请求
+		// 处理后续请求
+		c.Next()
 	}
 }
 
