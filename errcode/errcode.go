@@ -11,20 +11,42 @@ const (
 	// Unknown 未知错误
 	Unknown = 1
 
-	//----- 客户端错误 ----- /
+	//----- 客户端错误 -----
 
 	// BadRequest 请求无效或格式错误
 	BadRequest = 400
 	// Unauthorized 未授权
 	Unauthorized = 401
+	// PaymentRequired 需要支付
+	PaymentRequired = 402
 	// Forbidden 服务器理解请求但拒绝执行
 	Forbidden = 403
 	// NotFound 请求的资源不存在
 	NotFound = 404
 	// MethodNotAllowed 请求方法不被允许
 	MethodNotAllowed = 405
+	// RequestTimeout 请求超时
+	RequestTimeout = 408
 	// Conflict 请求与服务器的状态冲突
 	Conflict = 409
+	// PreconditionRequired 前置条件未满足
+	PreconditionRequired = 428
+	// UnprocessableEntity 参数校验失败/语义错误
+	UnprocessableEntity = 422
+	// TooManyRequests 请求过多（限流）
+	TooManyRequests = 429
+
+	//----- 服务端错误 -----
+	// InternalServerError 服务器内部错误
+	InternalServerError = 500
+	// NotImplemented 未实现
+	NotImplemented = 501
+	// BadGateway 网关错误
+	BadGateway = 502
+	// ServiceUnavailable 服务不可用
+	ServiceUnavailable = 503
+	// GatewayTimeout 网关超时
+	GatewayTimeout = 504
 
 	// SuccessResponse 响应成功
 	SuccessResponse = Success
@@ -53,10 +75,18 @@ const (
 	// LoginInvalid 登录失效
 	LoginInvalid = 9002004
 	// InvalidToken 无效的token
-	InvalidToken = 9002028
+	InvalidToken = 9002040
+	// TokenExpired token已过期
+	TokenExpired = 9002041
+	// TokenRevoked token已被注销
+	TokenRevoked = 9002042
+	// SessionExpired 会话已过期
+	SessionExpired = 9002043
+	// InsufficientScope 授权范围不足
+	InsufficientScope = 9002044
 	// NoPermission 无权访问
 	// @deprecated 请使用 NoPermissionEdit
-	NoPermission = 9002011
+	NoPermission = NoPermissionEdit
 	// NoPermissionVisit 无权访问
 	NoPermissionVisit = 9002005
 	// NoPermissionEdit 无权编辑
@@ -74,7 +104,7 @@ const (
 	// ParamEmpty 部分参数为空
 	ParamEmpty = 9002008 // @deprecated 请使用 ParamError
 	// EXISTED 已存在
-	EXISTED = 9002011
+	EXISTED = 9002019
 	// NotExist 不存在或已被删除
 	NotExist = 9002012
 	// ConflictWithExisting 和已有数据冲突
@@ -122,16 +152,42 @@ const (
 	NoBindPhone = 9002033
 	// NoBindEmail 没有绑定邮箱
 	NoBindEmail = 9002034
+	// NoSetPassword 没有设置密码
+	NoSetPassword = 9002035
+	// NoSetPayPassword 没有设置支付密码
+	NoSetPayPassword = 9002036
 	// NoBindWechat 没有绑定微信
 	NoBindWechat = 9002037
 	// NoBindWechatMiniProgram 没有绑定微信小程序
 	NoBindWechatMiniProgram = 9002038
 	// NoBindAlipay 没有绑定支付宝
 	NoBindAlipay = 9002039
-	// NoSetPassword 没有设置密码
-	NoSetPassword = 9002035
-	// NoSetPayPassword 没有设置支付密码
-	NoSetPayPassword = 9002036
+
+	//----- 前端交互提示/确认 -----
+	// ConfirmationRequired 需要用户确认（弹窗确认）
+	ConfirmationRequired = 9002200
+	// DangerousActionConfirm 危险操作需二次确认
+	DangerousActionConfirm = 9002201
+	// ActionRequired 需要用户执行操作（如补充信息）
+	ActionRequired = 9002202
+	// VerificationRequired 需要验证（短信/邮箱验证码）
+	VerificationRequired = 9002203
+	// CaptchaRequired 需要图形验证码
+	CaptchaRequired = 9002204
+	// MFARequired 需要二次认证（如 2FA）
+	MFARequired = 9002205
+	// ConsentRequired 需要同意隐私/条款
+	ConsentRequired = 9002206
+	// PendingApproval 待审批
+	PendingApproval = 9002207
+	// PendingReview 待人工审核
+	PendingReview = 9002208
+	// RiskCheckRequired 需风控确认
+	RiskCheckRequired = 9002209
+	// RedirectRequired 需要跳转继续流程
+	RedirectRequired = 9002210
+	// RetryWith 需补充参数并重试
+	RetryWith = 9002211
 
 	// StorageError 数据存储错误
 	StorageError = 9003001
@@ -191,7 +247,7 @@ const (
 	// NoPreAction 未进行前置活动 9005000
 	NoPreAction = 9005000
 	// NoNextAction 未进行后置活动 9006000
-	NoNextAction = 9005001
+	NoNextAction = 9006000
 
 	// Other 其他错误
 	Other = 9999999
