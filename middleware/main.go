@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"bytes"
 	"encoding/xml"
 	"io"
 	"log"
@@ -213,8 +214,18 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 		case "text/xml", "application/xml":
 			// 支持微信开放平台等XML格式请求
 			if c.Request.ContentLength > 0 {
+				// 读取原始数据，避免消耗body
+				bodyData, err := c.GetRawData()
+				if err != nil {
+					log.Println("GetRawData error:", err)
+					break
+				}
+
+				// 重置body，确保后续处理可以读取
+				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyData))
+
 				result := make(map[string]any)
-				decoder := xml.NewDecoder(c.Request.Body)
+				decoder := xml.NewDecoder(bytes.NewReader(bodyData))
 
 				// 解析XML到通用的map结构
 				for {
