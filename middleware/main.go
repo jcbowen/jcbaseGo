@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"encoding/xml"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -204,9 +206,47 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 				}
 
 				// 处理文件上传字段
-				for key, _ := range c.Request.MultipartForm.File {
+				for key := range c.Request.MultipartForm.File {
 					formDataMap[key], _ = c.FormFile(key)
 				}
+			}
+		case "text/xml", "application/xml":
+			// 支持微信开放平台等XML格式请求
+			if c.Request.ContentLength > 0 {
+				result := make(map[string]any)
+				decoder := xml.NewDecoder(c.Request.Body)
+
+				// 解析XML到通用的map结构
+				for {
+					token, err := decoder.Token()
+					if err == io.EOF {
+						break
+					}
+					if err != nil {
+						log.Println("XML token error:", err)
+						break
+					}
+
+					switch se := token.(type) {
+					case xml.StartElement:
+						// 处理开始元素，跳过根元素
+						if se.Name.Local == "xml" {
+							continue
+						}
+
+						// 读取元素内容作为字符串
+						var content string
+						err = decoder.DecodeElement(&content, &se)
+						if err != nil {
+							log.Println("XML decode error:", err)
+							continue
+						}
+
+						// 将元素名和内容添加到结果中
+						result[se.Name.Local] = content
+					}
+				}
+				formDataMap = result
 			}
 		default:
 			if c.ContentType() != "" {

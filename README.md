@@ -15,6 +15,7 @@
 - **🔄 升级工具**: Git 代码自动升级，支持回滚和备份
 - **🔗 TLS 配置**: 完整的 TLS/SSL 证书管理
 - **🐘 PHP 集成**: 内置 PHP 解释器，支持混合开发
+- **🔗 中间件支持**: 跨域(CORS)、真实IP获取、请求参数解析(支持 JSON、表单、multipart、XML 格式)
 
 ## 📦 安装
 
@@ -1005,6 +1006,57 @@ if err != nil {
 }
 ```
 
+### 🔗 中间件支持 (middleware/)
+
+#### 功能特性
+- **跨域支持 (CORS)**: 完整的 CORS 配置，支持预检请求和凭证
+- **真实 IP 获取**: 正确处理代理服务器后的真实客户端 IP
+- **请求参数解析 (SetGPC)**: 自动解析请求参数到 Gin 上下文
+
+#### 支持的 Content-Type
+- **application/json**: JSON 格式数据解析
+- **application/x-www-form-urlencoded**: 表单数据解析
+- **multipart/form-data**: 文件上传表单解析
+- **text/xml**: XML 格式数据解析（支持微信开放平台等场景）
+- **application/xml**: XML 格式数据解析
+
+#### 使用示例
+```go
+import "github.com/jcbowen/jcbaseGo/middleware"
+
+func main() {
+    r := gin.Default()
+    
+    // 使用中间件
+    base := middleware.Base{}
+    r.Use(base.Cors())      // 跨域支持
+    r.Use(base.RealIP())    // 真实 IP 获取
+    r.Use(base.SetGPC())    // 请求参数解析
+    
+    // 路由定义
+    r.POST("/api/wechat", func(c *gin.Context) {
+        // 自动解析 XML 请求体（微信开放平台格式）
+        formData := c.MustGet("formData").(map[string]any)
+        
+        // 获取微信消息参数
+        toUserName := formData["ToUserName"].(string)
+        fromUserName := formData["FromUserName"].(string)
+        msgType := formData["MsgType"].(string)
+        
+        // 处理微信消息...
+        c.XML(200, gin.H{
+            "ToUserName": fromUserName,
+            "FromUserName": toUserName,
+            "CreateTime": time.Now().Unix(),
+            "MsgType": "text",
+            "Content": "收到消息",
+        })
+    })
+    
+    r.Run(":8080")
+}
+```
+
 ### 🐘 PHP 集成 (php/)
 
 #### PHP 解释器特性
@@ -1332,24 +1384,8 @@ docs(README): 更新 CRUD 使用文档
 4. 推送到分支 (`git push origin feature/amazing-feature`)
 5. 创建 Pull Request
 
-## 📋 更新日志
 
-### v1.0.0 (2024-01-01)
-- ✨ 初始版本发布
-- 🔐 安全组件 (SM4/AES 加密)
-- 🗄️ 数据库 ORM (MySQL/SQLite)
-- 📧 邮件服务组件
-- 📁 附件管理组件
-- 🛠️ 工具函数集合
-- 💾 Redis 缓存组件
-- ✅ 数据验证组件
 
-### 即将发布
-- 🔄 分布式锁支持
-- 📊 性能监控组件
-- 🔍 全文搜索支持
-- 🌐 国际化支持
-- 📱 移动端 API 适配
 
 ## 📄 许可证
 
