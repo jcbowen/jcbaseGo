@@ -362,17 +362,11 @@ func (ds *DatabaseStorage) generateURLHash(url string) string {
 
 // GetStats 获取存储统计信息
 func (ds *DatabaseStorage) GetStats() (map[string]interface{}, error) {
-	stats := map[string]interface{}{
-		"storage_type": "database",
-		"table_name":   ds.tableName,
-	}
-
 	// 计算总数
 	var total int64
 	if err := ds.db.Table(ds.tableName).Count(&total).Error; err != nil {
 		return nil, fmt.Errorf("计算总数失败: %v", err)
 	}
-	stats["total_entries"] = total
 
 	// 计算错误率
 	var errorCount int64
@@ -380,16 +374,29 @@ func (ds *DatabaseStorage) GetStats() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("计算错误数失败: %v", err)
 	}
 
+	// 计算平均响应时间
+	var avgDuration int64
+	if err := ds.db.Table(ds.tableName).Select("AVG(duration)").Row().Scan(&avgDuration); err != nil {
+		avgDuration = 0
+	}
+
+	// 统一字段名，移除重复的total_entries字段
+	stats := map[string]interface{}{
+		"total_requests": total,        // 总请求数
+		"storage_size":   "N/A",        // 存储大小（数据库存储难以精确计算，显示为N/A）
+		"max_size":       ds.maxSize,   // 最大存储条目数
+		"storage_type":   "database",   // 存储类型
+		"table_name":     ds.tableName, // 数据表名
+	}
+
+	// 添加错误统计信息
 	if total > 0 {
 		stats["error_rate"] = float64(errorCount) / float64(total)
 		stats["error_count"] = errorCount
 	}
 
-	// 计算平均响应时间
-	var avgDuration int64
-	if err := ds.db.Table(ds.tableName).Select("AVG(duration)").Row().Scan(&avgDuration); err == nil {
-		stats["avg_duration"] = time.Duration(avgDuration)
-	}
+	// 添加平均响应时间
+	stats["avg_duration"] = time.Duration(avgDuration)
 
 	return stats, nil
 }

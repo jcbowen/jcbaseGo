@@ -367,11 +367,6 @@ func (fs *FileStorage) GetStats() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	stats := map[string]interface{}{
-		"total_files":  len(files),
-		"storage_path": fs.basePath,
-	}
-
 	// 计算文件总大小
 	var totalSize int64
 	for _, file := range files {
@@ -382,8 +377,14 @@ func (fs *FileStorage) GetStats() (map[string]interface{}, error) {
 		totalSize += info.Size()
 	}
 
-	stats["total_size"] = totalSize
-	stats["total_size_human"] = fs.formatFileSize(totalSize)
+	// 统一字段名，移除重复的total_entries字段
+	stats := map[string]interface{}{
+		"total_requests": len(files),                   // 总请求数
+		"storage_size":   fs.formatFileSize(totalSize), // 存储大小（格式化显示）
+		"max_size":       fs.maxSize,                   // 最大存储条目数
+		"storage_type":   "file",                       // 存储类型
+		"storage_path":   fs.basePath,                  // 存储路径
+	}
 
 	return stats, nil
 }

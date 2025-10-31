@@ -26,10 +26,11 @@ const indexTemplate = `<!DOCTYPE html>
         .filter-form button { background: #3498db; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
         
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px 1fr 80px 100px 120px 100px; gap: 10px; font-weight: bold; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px 1fr 80px 100px 120px 100px; gap: 10px; align-items: center; }
+        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px minmax(200px, 1fr) 80px 100px 120px 100px; gap: 10px; font-weight: bold; }
+        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px minmax(200px, 1fr) 80px 100px 120px 100px; gap: 10px; align-items: center; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
+        .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
         .method { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
         .method-get { background: #d4edda; color: #155724; }
         .method-post { background: #d1ecf1; color: #0c5460; }
@@ -44,11 +45,18 @@ const indexTemplate = `<!DOCTYPE html>
         .actions a { color: #3498db; text-decoration: none; margin-right: 10px; }
         .actions a:hover { text-decoration: underline; }
         
-        .pagination { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
-        .pagination a, .pagination span { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; }
+        .pagination { display: flex; justify-content: center; gap: 5px; margin-top: 20px; flex-wrap: wrap; }
+        .pagination a, .pagination span { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; min-width: 40px; text-align: center; }
         .pagination a:hover { background: #f8f9fa; }
         .pagination .current { background: #3498db; color: white; border-color: #3498db; }
         .pagination .disabled { color: #999; cursor: not-allowed; }
+        .pagination .ellipsis { padding: 8px 6px; color: #999; }
+        
+        @media (max-width: 768px) {
+            .pagination { gap: 3px; }
+            .pagination a, .pagination span { padding: 6px 8px; min-width: 36px; font-size: 14px; }
+            .pagination .ellipsis { padding: 6px 4px; }
+        }
         
         .search-box { margin-bottom: 20px; }
         .search-box form { display: flex; gap: 10px; }
@@ -152,7 +160,7 @@ const indexTemplate = `<!DOCTYPE html>
         {{if .Pagination}}
         <div class="pagination">
             {{if .Pagination.HasPrev}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}">上一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">上一页</a>
             {{else}}
             <span class="disabled">上一页</span>
             {{end}}
@@ -161,17 +169,48 @@ const indexTemplate = `<!DOCTYPE html>
             {{$totalPages := .Pagination.TotalPages}}
             {{$basePath := .BasePath}}
             {{$pageSize := .Pagination.PageSize}}
+            {{$filters := .Filters}}
             
-            {{range $i := seq 1 $totalPages}}
-            {{if eq $i $page}}
-            <span class="current">{{$i}}</span>
+            {{/* 智能分页显示逻辑 */}}
+            {{if le $totalPages 7}}
+                {{/* 总页数小于等于7时，显示所有页码 */}}
+                {{range $i := seq 1 $totalPages}}
+                {{if eq $i $page}}
+                <span class="current">{{$i}}</span>
+                {{else}}
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
+                {{end}}
+                {{end}}
             {{else}}
-            <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}">{{$i}}</a>
-            {{end}}
+                {{/* 总页数大于7时，使用智能分页 */}}
+                {{if gt $page 4}}
+                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">1</a>
+                    {{if gt $page 5}}
+                    <span class="ellipsis">...</span>
+                    {{end}}
+                {{end}}
+                
+                {{/* 显示当前页附近的页码 */}}
+                {{$start := max 1 (sub $page 2)}}
+                {{$end := min $totalPages (add $page 2)}}
+                {{range $i := seq $start $end}}
+                {{if eq $i $page}}
+                <span class="current">{{$i}}</span>
+                {{else}}
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
+                {{end}}
+                {{end}}
+                
+                {{if lt $page (sub $totalPages 3)}}
+                    {{if lt $page (sub $totalPages 4)}}
+                    <span class="ellipsis">...</span>
+                    {{end}}
+                    <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$totalPages}}</a>
+                {{end}}
             {{end}}
             
             {{if .Pagination.HasNext}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}">下一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">下一页</a>
             {{else}}
             <span class="disabled">下一页</span>
             {{end}}
@@ -190,6 +229,22 @@ const indexTemplate = `<!DOCTYPE html>
                 result.push(i);
             }
             return result;
+        }
+        
+        function max(a, b) {
+            return a > b ? a : b;
+        }
+        
+        function min(a, b) {
+            return a < b ? a : b;
+        }
+        
+        function sub(a, b) {
+            return a - b;
+        }
+        
+        function add(a, b) {
+            return a + b;
         }
     </script>
 </body>
@@ -291,7 +346,8 @@ const detailTemplate = `<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <a href="{{.BasePath}}/list" class="back-link">← 返回日志列表</a>
+        <a href="javascript:history.back()" class="back-link" id="back-link">← 返回上一页</a>
+        <a href="{{.BasePath}}/list" class="back-link" id="fallback-link" style="display: none;">← 返回日志列表</a>
         
         <div class="header">
             <h1>{{.Title}}</h1>
@@ -421,6 +477,32 @@ const detailTemplate = `<!DOCTYPE html>
     </div>
     
     <script>
+        // 页面加载时检查历史记录
+        document.addEventListener('DOMContentLoaded', function() {
+            const backLink = document.getElementById('back-link');
+            const fallbackLink = document.getElementById('fallback-link');
+            
+            // 检查是否有历史记录可以返回
+            if (history.length <= 1) {
+                // 没有历史记录，显示备用链接
+                backLink.style.display = 'none';
+                fallbackLink.style.display = 'inline-block';
+            }
+            
+            // 为返回链接添加点击事件处理
+            backLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // 尝试返回上一页
+                if (history.length > 1) {
+                    history.back();
+                } else {
+                    // 如果没有历史记录，跳转到列表页
+                    window.location.href = '{{.BasePath}}/list';
+                }
+            });
+        });
+        
         function lower(str) {
             return str ? str.toLowerCase() : '';
         }
@@ -466,8 +548,8 @@ const searchTemplate = `<!DOCTYPE html>
         .search-box button { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
         
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px 1fr 80px 100px 120px 100px; gap: 10px; font-weight: bold; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px 1fr 80px 100px 120px 100px; gap: 10px; align-items: center; }
+        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px minmax(200px, 1fr) 80px 100px 120px 100px; gap: 10px; font-weight: bold; }
+        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px minmax(200px, 1fr) 80px 100px 120px 100px; gap: 10px; align-items: center; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
         .method { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }

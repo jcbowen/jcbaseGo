@@ -269,10 +269,32 @@ func (ms *MemoryStorage) GetStats() (map[string]interface{}, error) {
 	defer ms.mutex.RUnlock()
 
 	stats := map[string]interface{}{
-		"total_entries": len(ms.entries),
-		"max_size":      ms.maxSize,
-		"storage_type":  "memory",
+		"total_requests": len(ms.entries), // 总请求数
+		"max_size":       ms.maxSize,
+		"storage_type":   "memory",
 	}
+
+	// 计算存储大小（估算）
+	var storageSize int64
+	for _, entry := range ms.entries {
+		// 估算每个条目的存储大小
+		entrySize := int64(len(entry.ID) + len(entry.URL) + len(entry.Method) +
+			len(entry.RequestBody) + len(entry.ResponseBody) + len(entry.Error) +
+			len(entry.UserAgent) + len(entry.ClientIP))
+
+		// 估算请求头和响应头的大小
+		for key, value := range entry.RequestHeaders {
+			entrySize += int64(len(key) + len(value))
+		}
+		for key, value := range entry.ResponseHeaders {
+			entrySize += int64(len(key) + len(value))
+		}
+
+		storageSize += entrySize
+	}
+
+	// 转换为KB
+	stats["storage_size"] = fmt.Sprintf("%.2f KB", float64(storageSize)/1024)
 
 	// 计算平均响应时间
 	if len(ms.entries) > 0 {
