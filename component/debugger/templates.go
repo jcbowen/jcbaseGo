@@ -362,6 +362,8 @@ const detailTemplate = `<!DOCTYPE html>
         .log-fields { display: flex; flex-wrap: wrap; gap: 8px; }
         .log-field { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 11px; color: #495057; }
         
+        .section:last-child { margin-bottom: 0; }
+        
         @media (max-width: 768px) {
             .basic-info { grid-template-columns: 1fr; }
             .headers-table, .params-table { font-size: 12px; }
@@ -468,29 +470,16 @@ const detailTemplate = `<!DOCTYPE html>
                     </table>
                 </div>
                 {{end}}
-            </div>
-            
-            <!-- 请求体和响应体 -->
-            <div class="section">
-                <h2>请求和响应</h2>
-                <div class="tab-container">
-                    <div class="tabs">
-                        <div class="tab active" onclick="showTab('request')">请求体</div>
-                        <div class="tab" onclick="showTab('response')">响应体</div>
-                    </div>
-                    
-                    <div id="request" class="tab-content active">
-                        <div class="json-viewer">
-                            <pre>{{.Entry.RequestBody | html}}</pre>
-                        </div>
-                    </div>
-                    
-                    <div id="response" class="tab-content">
-                        <div class="json-viewer">
-                            <pre>{{.Entry.ResponseBody | html}}</pre>
-                        </div>
+                
+                <!-- 请求体 -->
+                {{if .Entry.RequestBody}}
+                <div style="margin-top: 15px;">
+                    <h3>请求体</h3>
+                    <div class="json-viewer">
+                        <pre>{{.Entry.RequestBody | html}}</pre>
                     </div>
                 </div>
+                {{end}}
             </div>
             
             <!-- Logger日志 -->
@@ -501,19 +490,32 @@ const detailTemplate = `<!DOCTYPE html>
                     {{range .Entry.LoggerLogs}}
                     <div class="log-item">
                         <div class="log-header">
-                            <span class="log-timestamp">{{.Timestamp.Format "2006-01-02 15:04:05.000"}}</span>
-                            <span class="log-level level-{{.Level}}">{{.Level}}</span>
-                        </div>
+                        <span class="log-level level-{{.Level}}">{{.Level}}</span>
+                        <span class="log-timestamp">{{.Timestamp.Format "2006-01-02 15:04:05.000"}}</span>
+                    </div>
                         <div class="log-message">{{.Message}}</div>
                         {{if .Fields}}
                         <div class="log-fields">
                             {{range $key, $value := .Fields}}
+                            {{/* 过滤掉在基本信息区域已经展示过的字段 */}}
+                            {{if and (ne $key "level") (ne $key "message") (ne $key "timestamp") (ne $key "request_id") (ne $key "method") (ne $key "url") (ne $key "client_ip")}}
                             <span class="log-field">{{$key}}: {{$value}}</span>
+                            {{end}}
                             {{end}}
                         </div>
                         {{end}}
                     </div>
                     {{end}}
+                </div>
+            </div>
+            {{end}}
+            
+            <!-- 响应体 -->
+            {{if .Entry.ResponseBody}}
+            <div class="section">
+                <h2>响应信息</h2>
+                <div class="json-viewer">
+                    <pre>{{.Entry.ResponseBody | html}}</pre>
                 </div>
             </div>
             {{end}}
@@ -555,24 +557,6 @@ const detailTemplate = `<!DOCTYPE html>
         
         function lower(str) {
             return str ? str.toLowerCase() : '';
-        }
-        
-        function showTab(tabName) {
-            // 隐藏所有标签内容
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // 移除所有标签的激活状态
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // 显示选中的标签内容
-            document.getElementById(tabName).classList.add('active');
-            
-            // 激活选中的标签
-            event.target.classList.add('active');
         }
     </script>
 </body>
