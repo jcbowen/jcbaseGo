@@ -344,7 +344,7 @@ const detailTemplate = `<!DOCTYPE html>
                     </div>
                 </div>
                 
-                {{if .Entry.Headers}}
+                {{if .Entry.RequestHeaders}}
                 <div style="margin-top: 15px;">
                     <h3>请求头</h3>
                     <table class="headers-table">
@@ -355,7 +355,7 @@ const detailTemplate = `<!DOCTYPE html>
                             </tr>
                         </thead>
                         <tbody>
-                            {{range $key, $value := .Entry.Headers}}
+                            {{range $key, $value := .Entry.RequestHeaders}}
                             <tr>
                                 <td>{{$key}}</td>
                                 <td>{{$value}}</td>
