@@ -14,7 +14,7 @@ const indexTemplate = `<!DOCTYPE html>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
         .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
         .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .header h1 { color: #2c3e50; margin-bottom: 10px; }
+        .header h1 { color: #2c3e50; margin-bottom: 10px; font-size: 24px; word-break: break-word; }
         .header .stats { display: flex; gap: 20px; flex-wrap: wrap; }
         .stat-item { background: #f8f9fa; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #3498db; }
         .stat-item .label { font-size: 12px; color: #666; }
@@ -328,8 +328,27 @@ const detailTemplate = `<!DOCTYPE html>
         
         .headers-table, .params-table { width: 100%; border-collapse: collapse; }
         .headers-table th, .params-table th { background: #f8f9fa; padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
-        .headers-table td, .params-table td { padding: 10px; border-bottom: 1px solid #eee; }
+        .headers-table td, .params-table td { 
+            padding: 10px; 
+            border-bottom: 1px solid #eee; 
+            max-width: 300px; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            white-space: nowrap; 
+            position: relative;
+        }
+        .headers-table td:hover, .params-table td:hover {
+            overflow: visible;
+            white-space: normal;
+            background: #fff;
+            z-index: 10;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
         .headers-table tr:last-child td, .params-table tr:last-child td { border-bottom: none; }
+        
+        /* 表格容器，支持水平滚动 */
+        .table-container { overflow-x: auto; margin-top: 15px; }
+        .table-container table { min-width: 600px; }
         
         .json-viewer { background: #f8f9fa; border: 1px solid #eee; border-radius: 4px; padding: 15px; max-height: 400px; overflow: auto; font-family: 'Courier New', monospace; font-size: 12px; }
         .json-viewer pre { margin: 0; white-space: pre-wrap; }
@@ -365,9 +384,43 @@ const detailTemplate = `<!DOCTYPE html>
         .section:last-child { margin-bottom: 0; }
         
         @media (max-width: 768px) {
-            .basic-info { grid-template-columns: 1fr; }
-            .headers-table, .params-table { font-size: 12px; }
-            .log-header { flex-direction: column; align-items: flex-start; gap: 5px; }
+            .container { padding: 15px; }
+            .header { padding: 20px; }
+            .header h1 { font-size: 20px; }
+            .section { padding: 15px; }
+            .section h2 { font-size: 18px; }
+            .section h3 { font-size: 16px; }
+            .basic-info { grid-template-columns: 1fr; gap: 12px; }
+            .info-label { font-size: 14px; }
+            .info-value { font-size: 15px; }
+            .headers-table, .params-table { font-size: 14px; }
+            .headers-table th, .params-table th,
+            .headers-table td, .params-table td { padding: 10px; }
+            .json-viewer { padding: 12px; font-size: 13px; }
+            .log-header { flex-direction: column; align-items: flex-start; gap: 6px; }
+            .log-item { padding: 12px; }
+            .log-message { font-size: 15px; }
+            .log-fields { gap: 6px; }
+            .log-field { font-size: 12px; padding: 2px 6px; }
+        }
+        
+        @media (max-width: 480px) {
+            .container { padding: 10px; }
+            .header { padding: 15px; margin-bottom: 15px; }
+            .header h1 { font-size: 18px; }
+            .section { padding: 12px; }
+            .section h2 { font-size: 16px; }
+            .section h3 { font-size: 15px; }
+            .basic-info { gap: 10px; }
+            .info-label { font-size: 13px; }
+            .info-value { font-size: 14px; }
+            .headers-table, .params-table { font-size: 13px; }
+            .headers-table th, .params-table th,
+            .headers-table td, .params-table td { padding: 8px; }
+            .json-viewer { padding: 10px; font-size: 12px; max-height: 300px; }
+            .log-item { padding: 10px; margin-bottom: 10px; }
+            .log-message { font-size: 14px; }
+            .log-field { font-size: 11px; }
         }
     </style>
 </head>
@@ -430,44 +483,48 @@ const detailTemplate = `<!DOCTYPE html>
                 {{if .Entry.RequestHeaders}}
                 <div style="margin-top: 15px;">
                     <h3>请求头</h3>
-                    <table class="headers-table">
-                        <thead>
-                            <tr>
-                                <th>名称</th>
-                                <th>值</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {{range $key, $value := .Entry.RequestHeaders}}
-                            <tr>
-                                <td>{{$key}}</td>
-                                <td>{{$value}}</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="table-container">
+                        <table class="headers-table">
+                            <thead>
+                                <tr>
+                                    <th>名称</th>
+                                    <th>值</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range $key, $value := .Entry.RequestHeaders}}
+                                <tr>
+                                    <td>{{$key}}</td>
+                                    <td>{{$value}}</td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
                 {{end}}
                 
                 {{if .Entry.QueryParams}}
                 <div style="margin-top: 15px;">
                     <h3>查询参数</h3>
-                    <table class="params-table">
-                        <thead>
-                            <tr>
-                                <th>参数名</th>
-                                <th>值</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {{range $key, $value := .Entry.QueryParams}}
-                            <tr>
-                                <td>{{$key}}</td>
-                                <td>{{$value}}</td>
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
+                    <div class="table-container">
+                        <table class="params-table">
+                            <thead>
+                                <tr>
+                                    <th>参数名</th>
+                                    <th>值</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range $key, $value := .Entry.QueryParams}}
+                                <tr>
+                                    <td>{{$key}}</td>
+                                    <td>{{$value}}</td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
                 {{end}}
                 
