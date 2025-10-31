@@ -764,6 +764,14 @@ func CheckAndSetDefault(i interface{}) error {
 				field.SetFloat(defaultVal)
 			}
 		}
+
+		// 如果字段是time.Duration类型，则设置默认值
+		if field.Type() == reflect.TypeOf(time.Duration(0)) && field.Int() == 0 {
+			duration, err := time.ParseDuration(tag)
+			if err == nil {
+				field.SetInt(int64(duration))
+			}
+		}
 	}
 
 	return nil
