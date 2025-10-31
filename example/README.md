@@ -50,8 +50,14 @@ example/
 │   │   └── main.go
 │   └── aes/                    # AES 加密示例
 │       └── main.go
-└── validator/                  # 数据验证组件示例
+├── validator/                  # 数据验证组件示例
     └── main.go
+├── debugger/                   # 调试器组件示例
+    ├── README.md               # 调试器使用说明
+    ├── basic_usage.go         # 基本使用示例
+    ├── file_storage.go        # 文件存储示例
+    ├── controller_usage.go    # 控制器使用示例
+    └── config_examples.go     # 配置示例
 ```
 
 ## 运行示例
@@ -103,6 +109,12 @@ go run example/attachment/upload/main.go
 
 # 运行 FTP 上传示例
 go run example/attachment/ftp/main.go
+
+# 运行调试器组件示例
+go run example/debugger/basic_usage.go
+go run example/debugger/file_storage.go
+go run example/debugger/controller_usage.go
+go run example/debugger/config_examples.go
 ```
 
 ## 示例说明
@@ -119,6 +131,12 @@ go run example/attachment/ftp/main.go
 ### 数据库 ORM (orm/)
 - **mysql**: MySQL 数据库操作示例，包含 CRUD、事务等操作
 - **sqlite**: SQLite 数据库操作示例（待补充）
+
+### 调试器组件 (debugger/)
+- **basic_usage.go**: 基本使用示例，展示内存存储器的简单配置，包含GIN框架集成和基本路由
+- **file_storage.go**: 文件存储示例，展示持久化存储和高级配置，支持日志文件管理
+- **controller_usage.go**: 控制器使用示例，展示Web界面管理功能，提供调试器Web界面
+- **config_examples.go**: 配置示例，展示各种构造函数和配置选项，包含6种不同的配置方式
 
 ### 其他组件
 - **mailer**: 邮件发送功能示例
@@ -160,4 +178,4 @@ go run example/attachment/ftp/main.go
 - 代码符合项目的编码规范
 - 包含适当的中文注释
 - 提供完整的错误处理
-- 测试通过后再提交 
+- 测试通过后再提交

@@ -38,14 +38,12 @@ go get -u github.com/gin-gonic/gin
 
 我们提供了多种便捷构造函数，使用更加简单直观：
 
-##### 1. 使用便捷构造函数
-
 ```go
 package main
 
 import (
 	"github.com/gin-gonic/gin"
-	"your-project/component/debugger"
+	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
 func main() {
@@ -155,38 +153,6 @@ config := &debugger.Config{
 
 // 使用自定义配置
 dbg, err := debugger.New(config)
-if err != nil {
-	panic(err)
-}
-
-router.Use(dbg.Middleware())
-```
-
-## 详细使用指南
-
-### 配置选项
-
-调试器支持丰富的配置选项，推荐使用新的配置方式：
-
-#### 新的配置方式（推荐）
-
-```go
-// 方式1：使用便捷构造函数（最简单）
-dbg, err := debugger.NewSimpleDebugger()
-
-// 方式2：使用内存存储器（开发环境）
-dbg, err := debugger.NewWithMemoryStorage(1000)
-
-// 方式3：使用文件存储器（生产环境）
-dbg, err := debugger.NewWithFileStorage("/var/log/debug_logs", 5000)
-
-// 方式4：使用自定义存储器
-customStorage, _ := debugger.NewMemoryStorage(150)
-dbg, err := debugger.NewWithCustomStorage(customStorage)
-
-// 方式5：生产环境配置
-dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs", 1000)
-
 if err != nil {
 	panic(err)
 }
@@ -398,7 +364,7 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
-	"your-project/component/debugger"
+	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
 func main() {
@@ -430,7 +396,7 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
-	"your-project/component/debugger"
+	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
 func main() {
@@ -460,7 +426,7 @@ package main
 
 import (
 	"github.com/gin-gonic/gin"
-	"your-project/component/debugger"
+	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
 func main() {
@@ -515,10 +481,18 @@ Gin控制器提供以下功能：
 
 ### 示例代码
 
-查看 `example_controller.go` 文件获取完整的示例代码，包括：
-- 基础控制器使用示例
-- 高级控制器配置示例
-- 数据库存储集成示例
+项目提供了完整的示例代码，位于 `example/debugger/` 目录下：
+
+- **`basic_usage.go`** - 基础使用示例，包含GIN框架集成和基本路由
+- **`file_storage.go`** - 文件存储使用示例，支持日志文件管理
+- **`controller_usage.go`** - 控制器使用示例，提供调试器Web界面
+- **`config_examples.go`** - 配置示例，包含6种不同的配置方式
+
+运行示例代码：
+```bash
+cd example/debugger/
+go run basic_usage.go
+```
 
 ## Web管理界面
 
