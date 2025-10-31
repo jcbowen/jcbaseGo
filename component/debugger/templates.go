@@ -313,18 +313,39 @@ const detailTemplate = `<!DOCTYPE html>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
         .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
         .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .header h1 { color: #2c3e50; margin-bottom: 10px; }
+        .header h1 { color: #2c3e50; margin-bottom: 10px; word-break: break-word; }
         .back-link { color: #3498db; text-decoration: none; margin-bottom: 10px; display: inline-block; }
         .back-link:hover { text-decoration: underline; }
         
-        .detail-sections { display: grid; gap: 20px; }
+        .detail-sections { display: flex; flex-direction: column; gap: 20px; }
         .section { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .section h2 { color: #2c3e50; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
         
-        .basic-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-        .info-item { display: flex; flex-direction: column; }
-        .info-label { font-size: 12px; color: #666; margin-bottom: 5px; }
-        .info-value { font-size: 14px; color: #333; word-break: break-all; }
+        .basic-info { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
+            gap: 16px; 
+            align-items: start;
+        }
+        .info-item { 
+            display: flex; 
+            flex-direction: column; 
+            min-height: 60px;
+        }
+        .info-label { 
+            font-size: 13px; 
+            color: #666; 
+            margin-bottom: 6px; 
+            font-weight: 600;
+            line-height: 1.3;
+        }
+        .info-value { 
+            font-size: 14px; 
+            color: #333; 
+            word-break: break-word;
+            line-height: 1.4;
+            flex: 1;
+        }
         
         .headers-table, .params-table { width: 100%; border-collapse: collapse; }
         .headers-table th, .params-table th { background: #f8f9fa; padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
@@ -332,23 +353,31 @@ const detailTemplate = `<!DOCTYPE html>
             padding: 10px; 
             border-bottom: 1px solid #eee; 
             max-width: 300px; 
-            overflow: hidden; 
-            text-overflow: ellipsis; 
-            white-space: nowrap; 
-            position: relative;
+            overflow: visible; 
+            white-space: normal; 
+            word-break: break-word;
+            line-height: 1.4;
         }
-        .headers-table td:hover, .params-table td:hover {
-            overflow: visible;
-            white-space: normal;
-            background: #fff;
-            z-index: 10;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        .headers-table td:first-child, .params-table td:first-child {
+            font-weight: 600;
+            background: #f8f9fa;
+            min-width: 120px;
         }
         .headers-table tr:last-child td, .params-table tr:last-child td { border-bottom: none; }
         
         /* 表格容器，支持水平滚动 */
-        .table-container { overflow-x: auto; margin-top: 15px; }
-        .table-container table { min-width: 600px; }
+        .table-container { 
+            overflow-x: auto; 
+            margin-top: 15px; 
+            border: 1px solid #eee;
+            border-radius: 4px;
+            max-width: 100%;
+        }
+        .table-container table { 
+            min-width: 600px; 
+            width: 100%;
+            margin: 0;
+        }
         
         .json-viewer { background: #f8f9fa; border: 1px solid #eee; border-radius: 4px; padding: 15px; max-height: 400px; overflow: auto; font-family: 'Courier New', monospace; font-size: 12px; }
         .json-viewer pre { margin: 0; white-space: pre-wrap; }
@@ -360,10 +389,16 @@ const detailTemplate = `<!DOCTYPE html>
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         
-        .method-badge, .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .method-badge, .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block; min-width: 50px; text-align: center; }
         .method-get { background: #d4edda; color: #155724; }
         .method-post { background: #d1ecf1; color: #0c5460; }
+        .method-put { background: #fff3cd; color: #856404; }
+        .method-delete { background: #f8d7da; color: #721c24; }
+        .method-patch { background: #e2e3e5; color: #383d41; }
+        .method-head { background: #d1ecf1; color: #0c5460; }
+        .method-options { background: #e2e3e5; color: #383d41; }
         .status-2xx { background: #d4edda; color: #155724; }
+        .status-3xx { background: #d1ecf1; color: #0c5460; }
         .status-4xx { background: #f8d7da; color: #721c24; }
         .status-5xx { background: #f5c6cb; color: #721c24; }
         
@@ -385,42 +420,89 @@ const detailTemplate = `<!DOCTYPE html>
         
         @media (max-width: 768px) {
             .container { padding: 15px; }
-            .header { padding: 20px; }
-            .header h1 { font-size: 20px; }
+            .header { padding: 15px; }
+            .header h1 { font-size: 20px; margin-bottom: 15px; }
             .section { padding: 15px; }
-            .section h2 { font-size: 18px; }
-            .section h3 { font-size: 16px; }
+            .section h2 { font-size: 18px; margin-bottom: 12px; }
+            .section h3 { font-size: 16px; margin-bottom: 10px; }
             .basic-info { grid-template-columns: 1fr; gap: 12px; }
-            .info-label { font-size: 14px; }
-            .info-value { font-size: 15px; }
-            .headers-table, .params-table { font-size: 14px; }
+            .info-item { margin-bottom: 8px; }
+            .info-label { font-size: 13px; font-weight: 600; }
+            .info-value { font-size: 14px; line-height: 1.4; }
+            .headers-table, .params-table { font-size: 13px; }
             .headers-table th, .params-table th,
-            .headers-table td, .params-table td { padding: 10px; }
-            .json-viewer { padding: 12px; font-size: 13px; }
+            .headers-table td, .params-table td { 
+                padding: 8px 10px; 
+                white-space: normal; 
+                word-break: break-word;
+                line-height: 1.4;
+            }
+            .headers-table td:first-child, .params-table td:first-child {
+                font-weight: 600;
+                background: #f8f9fa;
+                min-width: 100px;
+            }
+            .json-viewer { padding: 10px; font-size: 12px; max-height: 300px; }
             .log-header { flex-direction: column; align-items: flex-start; gap: 6px; }
-            .log-item { padding: 12px; }
-            .log-message { font-size: 15px; }
-            .log-fields { gap: 6px; }
-            .log-field { font-size: 12px; padding: 2px 6px; }
+            .log-item { padding: 10px; margin-bottom: 8px; }
+            .log-message { font-size: 14px; line-height: 1.4; }
+            .log-fields { gap: 4px; }
+            .log-field { font-size: 11px; padding: 2px 6px; }
+            
+            /* 移动端表格容器优化 */
+            .table-container {
+                margin-top: 10px;
+                border: 1px solid #ddd;
+            }
+            .table-container table {
+                min-width: 500px;
+            }
         }
         
         @media (max-width: 480px) {
             .container { padding: 10px; }
-            .header { padding: 15px; margin-bottom: 15px; }
-            .header h1 { font-size: 18px; }
+            .header { padding: 12px; margin-bottom: 15px; }
+            .header h1 { font-size: 18px; margin-bottom: 12px; }
             .section { padding: 12px; }
-            .section h2 { font-size: 16px; }
-            .section h3 { font-size: 15px; }
-            .basic-info { gap: 10px; }
-            .info-label { font-size: 13px; }
-            .info-value { font-size: 14px; }
-            .headers-table, .params-table { font-size: 13px; }
+            .section h2 { font-size: 16px; margin-bottom: 10px; }
+            .section h3 { font-size: 14px; margin-bottom: 8px; }
+            .basic-info { gap: 8px; }
+            .info-item { margin-bottom: 6px; }
+            .info-label { font-size: 12px; font-weight: 600; }
+            .info-value { font-size: 13px; line-height: 1.4; }
+            .headers-table, .params-table { font-size: 12px; }
             .headers-table th, .params-table th,
-            .headers-table td, .params-table td { padding: 8px; }
-            .json-viewer { padding: 10px; font-size: 12px; max-height: 300px; }
-            .log-item { padding: 10px; margin-bottom: 10px; }
-            .log-message { font-size: 14px; }
-            .log-field { font-size: 11px; }
+            .headers-table td, .params-table td { 
+                padding: 6px 8px; 
+                white-space: normal; 
+                word-break: break-word;
+                line-height: 1.4;
+            }
+            .headers-table td:first-child, .params-table td:first-child {
+                font-weight: 600;
+                background: #f8f9fa;
+                min-width: 80px;
+            }
+            .json-viewer { padding: 8px; font-size: 11px; max-height: 250px; }
+            .log-item { padding: 8px; margin-bottom: 8px; }
+            .log-message { font-size: 13px; line-height: 1.4; }
+            .log-field { font-size: 10px; padding: 1px 4px; }
+            
+            /* 超小屏幕表格优化 */
+            .table-container {
+                margin-top: 8px;
+                border: 1px solid #ddd;
+            }
+            .table-container table {
+                min-width: 400px;
+            }
+            
+            /* 超小屏幕方法徽章优化 */
+            .method-badge, .status-badge { 
+                padding: 3px 6px; 
+                font-size: 11px; 
+                min-width: 40px;
+            }
         }
     </style>
 </head>
@@ -453,7 +535,7 @@ const detailTemplate = `<!DOCTYPE html>
                     </div>
                     <div class="info-item">
                         <div class="info-label">状态码</div>
-                        <div class="info-value status-badge status-{{if ge .Entry.StatusCode 200}}{{if lt .Entry.StatusCode 300}}2xx{{else if lt .Entry.StatusCode 400}}3xx{{else if lt .Entry.StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.Entry.StatusCode}}</div>
+                        <div class="info-value status-badge status-{{if ge .Entry.StatusCode 200}}{{if lt .Entry.StatusCode 300}}2xx{{else if lt .Entry.StatusCode 400}}3xx{{else if lt .Entry.StatusCode 500}}4xx{{else}}5xx{{end}}{{else}}4xx{{end}}">{{.Entry.StatusCode}}</div>
                     </div>
                     <div class="info-item">
                         <div class="info-label">耗时</div>
@@ -631,7 +713,7 @@ const searchTemplate = `<!DOCTYPE html>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
         .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
         .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .header h1 { color: #2c3e50; margin-bottom: 10px; }
+        .header h1 { color: #2c3e50; margin-bottom: 10px; word-break: break-word; }
         
         .search-box { margin-bottom: 20px; }
         .search-box form { display: flex; gap: 10px; }
