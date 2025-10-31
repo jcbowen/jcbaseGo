@@ -137,7 +137,7 @@ type Debugger struct {
 }
 
 // New 创建新的调试器实例
-// config: 调试器配置，必须传入实例化的存储器和日志记录器
+// config: 调试器配置，如果没有传入存储实例，将使用默认的内存存储
 func New(config *Config) (*Debugger, error) {
 	if config == nil {
 		return nil, fmt.Errorf("配置不能为nil，请提供有效的Config实例")
@@ -152,11 +152,17 @@ func New(config *Config) (*Debugger, error) {
 		return nil, fmt.Errorf("设置配置默认值失败: %w", err)
 	}
 
-	// 必须传入存储实例
+	// 如果没有传入存储实例，则使用默认的内存存储
 	if d.config.Storage == nil {
-		return nil, fmt.Errorf("必须传入Storage实例，请使用便捷构造函数或创建自定义存储器")
+		// 创建默认内存存储，使用配置中的MaxRecords作为最大记录数
+		memoryStorage, err := NewMemoryStorage(d.config.MaxRecords)
+		if err != nil {
+			return nil, fmt.Errorf("创建默认内存存储失败: %w", err)
+		}
+		d.storage = memoryStorage
+	} else {
+		d.storage = d.config.Storage
 	}
-	d.storage = d.config.Storage
 
 	// 优先使用传入的日志记录器实例
 	if d.config.Logger != nil {
