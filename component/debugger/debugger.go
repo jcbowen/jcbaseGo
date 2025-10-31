@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -484,18 +485,17 @@ func (l *DebugLogger) log(level, msg string, fields ...map[string]interface{}) {
 	jsonData, err := json.Marshal(logEntry)
 	if err != nil {
 		// 如果JSON转换失败，使用简单格式输出
-		fmt.Printf("[%s] %s: %s", level, time.Now().Format("2006-01-02 15:04:05"), msg)
+		log.Printf("[%s] %s: %s", level, time.Now().Format("2006-01-02 15:04:05"), msg)
 		if len(l.fields) > 0 {
-			fmt.Printf(" fields=%v", l.fields)
+			log.Printf(" fields=%v", l.fields)
 		}
 		if len(fields) > 0 {
-			fmt.Printf(" extra_fields=%v", fields[0])
+			log.Printf(" extra_fields=%v", fields[0])
 		}
-		fmt.Println()
 		return
 	}
 
-	fmt.Println(string(jsonData))
+	log.Println(string(jsonData))
 }
 
 // shouldLog 检查是否应该记录指定级别的日志

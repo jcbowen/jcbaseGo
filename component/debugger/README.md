@@ -167,6 +167,153 @@ router.Use(dbg.Middleware())
 - **LevelWarn**: 只记录警告级别的信息
 - **LevelError**: 只记录错误级别的信息
 
+## Logger功能使用
+
+### 在控制器中使用Logger
+
+debugger组件提供了Logger接口，可以在业务控制器中记录调试日志。通过`GetLoggerFromContext`函数可以从Gin上下文中获取Logger实例。
+
+#### 基本使用示例
+
+```go
+package main
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo/component/debugger"
+)
+
+func main() {
+	r := gin.Default()
+
+	// 创建调试器实例
+	dbg, err := debugger.NewWithMemoryStorage(100)
+	if err != nil {
+		panic(err)
+	}
+
+	// 添加调试器中间件
+	r.Use(dbg.Middleware())
+
+	// 在控制器中使用Logger
+	r.GET("/api/users", func(c *gin.Context) {
+		// 从上下文中获取Logger实例
+		logger := debugger.GetLoggerFromContext(c)
+
+		// 记录不同级别的日志
+		logger.Debug("开始处理用户列表请求", map[string]interface{}{
+			"query_params": c.Request.URL.Query(),
+			"page":         c.Query("page"),
+			"limit":        c.Query("limit"),
+		})
+
+		// 模拟数据库查询
+		time.Sleep(50 * time.Millisecond)
+
+		logger.Info("用户列表查询成功", map[string]interface{}{
+			"user_count": 3,
+			"status_code": http.StatusOK,
+		})
+
+		c.JSON(http.StatusOK, gin.H{
+			"users": []gin.H{
+				{"id": 1, "name": "张三"},
+				{"id": 2, "name": "李四"},
+				{"id": 3, "name": "王五"},
+			},
+		})
+	})
+
+	r.Run(":8080")
+}
+```
+
+#### Logger接口方法
+
+Logger接口支持以下方法：
+
+```go
+type Logger interface {
+	// Debug 记录调试级别日志
+	Debug(msg string, fields ...map[string]interface{})
+
+	// Info 记录信息级别日志
+	Info(msg string, fields ...map[string]interface{})
+
+	// Warn 记录警告级别日志
+	Warn(msg string, fields ...map[string]interface{})
+
+	// Error 记录错误级别日志
+	Error(msg string, fields ...map[string]interface{})
+
+	// WithFields 创建带有字段的日志记录器
+	WithFields(fields map[string]interface{}) Logger
+}
+```
+
+#### 使用WithFields添加结构化字段
+
+```go
+// 在控制器中使用WithFields
+r.GET("/api/users/:id", func(c *gin.Context) {
+	userID := c.Param("id")
+
+	// 使用WithFields创建带有用户ID的logger
+	logger := debugger.GetLoggerFromContext(c).WithFields(map[string]interface{}{
+		"user_id": userID,
+		"endpoint": "/api/users/:id",
+	})
+
+	logger.Info("开始查询用户详情")
+
+	// 模拟用户不存在的情况
+	if userID == "999" {
+		logger.Warn("用户不存在", map[string]interface{}{
+			"reason": "数据库中未找到该用户",
+		})
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	logger.Info("用户详情查询成功")
+	c.JSON(http.StatusOK, gin.H{"id": userID, "name": "示例用户"})
+})
+```
+
+#### 错误处理示例
+
+```go
+r.GET("/api/error", func(c *gin.Context) {
+	logger := debugger.GetLoggerFromContext(c)
+
+	logger.Info("开始处理错误示例请求")
+
+	// 模拟业务逻辑错误
+	err := fmt.Errorf("数据库连接失败: 连接超时")
+
+	logger.Error("业务处理失败", map[string]interface{}{
+		"error":         err.Error(),
+		"error_type":    "database_connection_timeout",
+		"retry_count":   3,
+		"last_attempt":  time.Now().Format(time.RFC3339),
+	})
+
+	c.JSON(http.StatusInternalServerError, gin.H{
+		"error": "服务器内部错误",
+		"details": "请稍后重试",
+	})
+})
+```
+
+### 查看完整示例
+
+更多详细的使用示例，请查看：
+- `example/debugger/logger_usage.go` - 完整的Logger使用示例
+- `example/debugger/basic_usage.go` - 基础使用示例
+
 ## 高级功能
 
 ### 采样率配置
