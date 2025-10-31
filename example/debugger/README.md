@@ -12,7 +12,6 @@
 
 **运行方式：**
 ```bash
-cd /Users/bowen/projects/mine/jcbaseGo/example/debugger
 go run basic_usage.go
 ```
 
@@ -24,7 +23,6 @@ go run basic_usage.go
 
 **运行方式：**
 ```bash
-cd /Users/bowen/projects/mine/jcbaseGo/example/debugger
 go run file_storage.go
 ```
 
@@ -36,7 +34,6 @@ go run file_storage.go
 
 **运行方式：**
 ```bash
-cd /Users/bowen/projects/mine/jcbaseGo/example/debugger
 go run controller_usage.go
 ```
 
@@ -48,7 +45,6 @@ go run controller_usage.go
 
 **运行方式：**
 ```bash
-cd /Users/bowen/projects/mine/jcbaseGo/example/debugger
 go run config_examples.go
 ```
 
