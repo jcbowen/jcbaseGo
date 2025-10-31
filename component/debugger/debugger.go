@@ -109,14 +109,14 @@ type DebugLogger struct {
 // Config 调试器配置结构
 type Config struct {
 	Enabled         bool          `json:"enabled" default:"false"`         // 是否启用调试器
-	MaxBodySize     int64         `json:"max_body_size" default:"1048576"` // 最大请求/响应体大小（字节），默认1MB
-	RetentionPeriod time.Duration `json:"retention_period"`                // 日志保留期限
+	MaxBodySize     int64         `json:"max_body_size" default:"1024"`    // 最大请求/响应体大小（KB），默认1MB
+	RetentionPeriod time.Duration `json:"retention_period" default:"168h"` // 日志保留期限，默认7天
 	Level           string        `json:"level" default:"debug"`           // 日志级别：debug/info
 	MaxRecords      int           `json:"max_records" default:"150"`       // 最大记录数量，默认150条
 
 	// 过滤配置
-	SkipPaths   []string `json:"skip_paths"`   // 跳过的路径（如静态文件）
-	SkipMethods []string `json:"skip_methods"` // 跳过的HTTP方法
+	SkipPaths   []string `json:"skip_paths" default:""`          // 跳过的路径（如静态文件："/static/,/favicon.ico"）
+	SkipMethods []string `json:"skip_methods" default:"OPTIONS"` // 跳过的HTTP方法
 
 	// 采样配置
 	SampleRate float64 `json:"sample_rate" default:"1.0"` // 采样率（0-1之间），默认记录所有请求
@@ -310,8 +310,8 @@ func (d *Debugger) extractRequestBody(c *gin.Context) (string, error) {
 	// 恢复请求体，以便后续处理
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	// 限制体大小
-	if int64(len(bodyBytes)) > d.config.MaxBodySize {
+	// 限制体大小（MaxBodySize单位为KB，需要转换为字节）
+	if int64(len(bodyBytes)) > d.config.MaxBodySize*1024 {
 		return fmt.Sprintf("[Body too large: %d bytes]", len(bodyBytes)), nil
 	}
 
@@ -387,7 +387,7 @@ func (d *Debugger) SetSessionData(c *gin.Context, data map[string]interface{}) {
 func DefaultConfig() *Config {
 	return &Config{
 		Enabled:         true,
-		MaxBodySize:     1024 * 1024,        // 1MB
+		MaxBodySize:     1024,               // 1MB（单位：KB）
 		RetentionPeriod: 24 * time.Hour * 7, // 7天
 		Level:           LevelDebug,         // 默认调试级别
 		SkipPaths:       []string{"/static/", "/favicon.ico"},
@@ -548,6 +548,10 @@ func GetLoggerFromContext(c *gin.Context) Logger {
 		Storage: memoryStorage,
 		Level:   LevelDebug,
 	}
+	// 设置默认值
+	if err := helper.CheckAndSetDefault(config); err != nil {
+		fmt.Printf("设置默认值失败: %v\n", err)
+	}
 	debugger, _ := New(config)
 
 	return debugger.GetLogger().WithFields(map[string]interface{}{
@@ -594,6 +598,10 @@ func NewWithMemoryStorage(maxRecords int) (*Debugger, error) {
 		Storage:    memoryStorage,
 		Level:      LevelDebug,
 	}
+	// 设置默认值
+	if err := helper.CheckAndSetDefault(config); err != nil {
+		return nil, err
+	}
 
 	return New(config)
 }
@@ -612,6 +620,10 @@ func NewWithFileStorage(storagePath string, maxRecords int) (*Debugger, error) {
 		Storage:    fileStorage,
 		Level:      LevelDebug,
 	}
+	// 设置默认值
+	if err := helper.CheckAndSetDefault(config); err != nil {
+		return nil, err
+	}
 
 	return New(config)
 }
@@ -623,6 +635,10 @@ func NewWithCustomStorage(customStorage Storage) (*Debugger, error) {
 		Enabled: true,
 		Storage: customStorage,
 		Level:   LevelDebug,
+	}
+	// 设置默认值
+	if err := helper.CheckAndSetDefault(config); err != nil {
+		return nil, err
 	}
 
 	return New(config)

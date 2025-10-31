@@ -34,11 +34,11 @@ go get -u github.com/gin-gonic/gin
 
 ### 基本使用
 
-#### 新的配置方式（推荐）
+#### 便捷构造函数（推荐）
 
-我们改进了配置方式，现在支持直接传入实例化的存储器，使用更加简单直观：
+我们提供了多种便捷构造函数，使用更加简单直观：
 
-##### 1. 使用便捷构造函数（推荐）
+##### 1. 使用便捷构造函数
 
 ```go
 package main
@@ -49,7 +49,7 @@ import (
 )
 
 func main() {
-	// 方式1：使用便捷构造函数（最简单）
+	// 方式1：使用简单调试器（默认配置）
 	dbg, err := debugger.NewSimpleDebugger()
 	if err != nil {
 		panic(err)
@@ -74,6 +74,12 @@ func main() {
 		panic(err)
 	}
 
+	// 方式5：生产环境调试器
+	dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs")
+	if err != nil {
+		panic(err)
+	}
+
 	// 创建Gin路由
 	router := gin.New()
 	
@@ -89,123 +95,71 @@ func main() {
 }
 ```
 
-#### 传统配置方式（向后兼容）
+### 详细使用指南
 
-##### 1. 使用内存存储器（开发环境）
+#### 配置选项
+
+调试器支持丰富的配置选项，推荐使用便捷构造函数：
+
+##### 便捷构造函数方式（推荐）
 
 ```go
-package main
+// 方式1：使用简单调试器（默认配置）
+dbg, err := debugger.NewSimpleDebugger()
 
-import (
-	"github.com/gin-gonic/gin"
-	"your-project/component/debugger"
-)
+// 方式2：使用内存存储器（开发环境）
+dbg, err := debugger.NewWithMemoryStorage(1000)
 
-func main() {
-	// 创建调试器配置
-	memoryStorage, _ := debugger.NewMemoryStorage(1000)
-	config := &debugger.Config{
-		Enabled:    true,
-		Storage:    memoryStorage,
-		MaxRecords: 1000, // 限制最大记录数
-	}
-	
-	// 创建调试器实例
-	dbg, err := debugger.New(config)
-	if err != nil {
-		panic(err)
-	}
-	
-	// 创建Gin路由
-	router := gin.New()
-	
-	// 使用调试器中间件
-	router.Use(dbg.Middleware())
-	
-	// 添加业务路由
-	router.GET("/api/users", func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": "Hello World"})
-	})
-	
-	router.Run(":8080")
+// 方式3：使用文件存储器（生产环境）
+dbg, err := debugger.NewWithFileStorage("/var/log/debug_logs", 5000)
+
+// 方式4：使用自定义存储器
+customStorage, _ := debugger.NewMemoryStorage(150)
+dbg, err := debugger.NewWithCustomStorage(customStorage)
+
+// 方式5：生产环境配置
+dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs", 1000)
+
+if err != nil {
+	panic(err)
 }
+
+router.Use(dbg.Middleware())
 ```
 
-#### 2. 使用文件存储器（生产环境）
+##### 手动配置方式（高级使用）
 
 ```go
-package main
+// 创建存储器实例
+memoryStorage, _ := debugger.NewMemoryStorage(150)
 
-import (
-	"github.com/gin-gonic/gin"
-	"your-project/component/debugger"
-)
+// 创建调试器配置
+config := &debugger.Config{
+	Enabled:         true,                    // 是否启用调试器
+	Storage:         memoryStorage,           // 必须传入实例化的存储器
+	MaxBodySize:     1024,                    // 最大请求/响应体大小（KB），默认1MB
+	RetentionPeriod: 7 * 24 * time.Hour,      // 日志保留期限，默认7天
+	Level:           debugger.LevelDebug,     // 日志级别：LevelDebug/LevelInfo/LevelWarn/LevelError
+	MaxRecords:      150,                     // 最大记录数量，默认150
 
-func main() {
-	// 创建调试器配置
-	fileStorage, _ := debugger.NewFileStorage("/var/log/debug_logs", 5000)
-	config := &debugger.Config{
-		Enabled:    true,
-		Storage:    fileStorage,
-		MaxRecords: 5000, // 限制最大记录数
-		Level:      debugger.LevelInfo, // 生产环境使用Info级别
-	}
-	
-	// 创建调试器实例
-	dbg, err := debugger.New(config)
-	if err != nil {
-		panic(err)
-	}
-	
-	router := gin.New()
-	router.Use(dbg.Middleware())
-	
-	// 业务路由...
-	router.Run(":8080")
+	// 过滤配置
+	SkipPaths:   []string{"/static", "/health"}, // 跳过的路径
+	SkipMethods: []string{"OPTIONS"},              // 跳过的HTTP方法
+
+	// 采样配置
+	SampleRate: 1.0,                            // 采样率（0-1之间），默认1.0（记录所有请求）
+
+	// 日志记录器配置（可选）
+	Logger:  nil,                              // 日志记录器实例
 }
-```
 
-#### 3. 使用数据库存储器
-
-```go
-package main
-
-import (
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
-	"your-project/component/debugger"
-)
-
-func main() {
-	// 假设已有GORM数据库连接
-	var db *gorm.DB
-	
-	// 创建数据库存储器
-	storage, err := debugger.NewDatabaseStorage(db, "debug_logs")
-	if err != nil {
-		panic(err)
-	}
-	
-	// 创建调试器配置
-	config := &debugger.Config{
-		Enabled:     true,
-		Storage:     storage, // 使用已创建的数据库存储器
-		MaxRecords:  10000,   // 限制最大记录数
-		Level:       debugger.LevelInfo,
-	}
-	
-	// 创建调试器实例
-	dbg, err := debugger.New(config)
-	if err != nil {
-		panic(err)
-	}
-	
-	router := gin.New()
-	router.Use(dbg.Middleware())
-	
-	// 业务路由...
-	router.Run(":8080")
+// 使用自定义配置
+dbg, err := debugger.New(config)
+if err != nil {
+	panic(err)
 }
+
+router.Use(dbg.Middleware())
 ```
 
 ## 详细使用指南
@@ -233,41 +187,6 @@ dbg, err := debugger.NewWithCustomStorage(customStorage)
 // 方式5：生产环境配置
 dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs", 1000)
 
-if err != nil {
-	panic(err)
-}
-
-router.Use(dbg.Middleware())
-```
-
-#### 传统配置方式（已废弃）
-
-> **注意**: 向后兼容性支持已被移除，请使用新的配置方式。
-
-```go
-// 新的配置方式（推荐）
-memoryStorage, _ := debugger.NewMemoryStorage(150)
-config := &debugger.Config{
-	Enabled:         true,                    // 是否启用调试器
-	Storage:         memoryStorage,           // 必须传入实例化的存储器
-	MaxBodySize:     1024 * 1024,             // 最大请求/响应体大小（字节），默认1MB
-	RetentionPeriod: 7 * 24 * time.Hour,      // 日志保留期限，默认7天
-	Level:           debugger.LevelDebug,     // 日志级别：LevelDebug/LevelInfo/LevelWarn/LevelError
-	MaxRecords:      150,                     // 最大记录数量，默认150
-
-	// 过滤配置
-	SkipPaths:   []string{"/static", "/health"}, // 跳过的路径
-	SkipMethods: []string{"OPTIONS"},              // 跳过的HTTP方法
-
-	// 采样配置
-	SampleRate: 1.0,                            // 采样率（0-1之间），默认1.0（记录所有请求）
-
-	// 核心组件配置（必须使用）
-	Logger:  nil,                              // 日志记录器（必须传入实例化的日志记录器）
-}
-
-// 使用自定义配置
-dbg, err := debugger.New(config)
 if err != nil {
 	panic(err)
 }
@@ -329,7 +248,7 @@ config := &debugger.Config{
     SkipMethods: []string{"OPTIONS"},
     
     // 最大请求体大小（字节）
-    MaxBodySize: 1024 * 1024, // 1MB
+    MaxBodySize:     1024,        // 1MB（单位：KB）
 }
 
 dbg, err := debugger.New(config)
@@ -486,15 +405,8 @@ func main() {
 	// 创建Gin引擎
 	router := gin.Default()
 	
-	// 创建调试器配置
-	memoryStorage, _ := debugger.NewMemoryStorage(1000)
-	config := &debugger.Config{
-		Enabled: true,
-		Storage: memoryStorage,
-	}
-	
-	// 创建调试器实例
-	dbg, err := debugger.New(config)
+	// 创建调试器实例（推荐使用便捷构造函数）
+	dbg, err := debugger.NewWithMemoryStorage(1000)
 	if err != nil {
 		panic(err)
 	}
@@ -525,7 +437,10 @@ func main() {
 	router := gin.Default()
 	
 	// 创建调试器实例
-	dbg := debugger.New(debugger.NewMemoryStorage(), debugger.Config{})
+	dbg, err := debugger.NewWithMemoryStorage(1000)
+	if err != nil {
+		panic(err)
+	}
 	
 	// 创建自定义路由组
 	adminGroup := router.Group("/admin")
@@ -551,16 +466,8 @@ import (
 func main() {
 	router := gin.Default()
 	
-	// 创建调试器配置
-	memoryStorage, _ := debugger.NewMemoryStorage(1000)
-	config := &debugger.Config{
-		Enabled: true,
-		Storage: memoryStorage,
-		Level:   debugger.LevelDebug,
-	}
-	
 	// 创建调试器实例
-	dbg, err := debugger.New(config)
+	dbg, err := debugger.NewWithMemoryStorage(1000)
 	if err != nil {
 		panic(err)
 	}
@@ -697,6 +604,11 @@ fileStorage, err := debugger.NewFileStorage("/var/log/debug_logs", 20000)
 
 // 数据库存储器（需要GORM连接）
 databaseStorage, err := debugger.NewDatabaseStorage(db, "debug_logs")
+
+// 推荐使用便捷构造函数直接创建调试器
+dbg, err := debugger.NewWithMemoryStorage(1000)  // 内存存储
+dbg, err := debugger.NewWithFileStorage("/var/log/debug_logs", 5000)  // 文件存储
+dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs", 1000)  // 生产环境配置
 ```
 
 ## 性能优化建议
@@ -804,6 +716,22 @@ type LogEntry struct {
 }
 ```
 
+#### Config
+```go
+type Config struct {
+	Enabled         bool          // 是否启用调试器
+	Storage         Storage       // 存储器实例
+	MaxBodySize     int64         // 最大请求/响应体大小（KB）
+	RetentionPeriod time.Duration // 日志保留期限
+	Level           LogLevel      // 日志级别
+	MaxRecords      int           // 最大记录数量
+	SkipPaths       []string      // 跳过的路径
+	SkipMethods     []string      // 跳过的HTTP方法
+	SampleRate      float64       // 采样率（0-1之间）
+	Logger          Logger        // 日志记录器实例
+}
+```
+
 ### 主要接口
 
 #### Storage接口
@@ -819,6 +747,36 @@ type Storage interface {
 	GetStatusCodes() (map[int]int, error)
 	Close() error
 }
+```
+
+#### Logger接口
+```go
+type Logger interface {
+	Debug(args ...interface{})
+	Debugf(format string, args ...interface{})
+	Info(args ...interface{})
+	Infof(format string, args ...interface{})
+	Warn(args ...interface{})
+	Warnf(format string, args ...interface{})
+	Error(args ...interface{})
+	Errorf(format string, args ...interface{})
+}
+```
+
+### 便捷构造函数
+
+```go
+// 便捷构造函数
+func NewSimpleDebugger() (*Debugger, error)
+func NewWithMemoryStorage(maxRecords int) (*Debugger, error)
+func NewWithFileStorage(path string, maxRecords int) (*Debugger, error)
+func NewWithCustomStorage(storage Storage) (*Debugger, error)
+func NewProductionDebugger(path string, maxRecords int) (*Debugger, error)
+
+// 存储器构造函数
+func NewMemoryStorage(maxRecords int) (Storage, error)
+func NewFileStorage(path string, maxRecords int) (Storage, error)
+func NewDatabaseStorage(db *gorm.DB, tableName string) (Storage, error)
 ```
 
 ## 版本历史

@@ -1,6 +1,7 @@
 package debugger
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 // Controller 调试器控制器结构
@@ -20,9 +22,9 @@ type Controller struct {
 
 // ControllerConfig 控制器配置
 type ControllerConfig struct {
-	BasePath string // 基础路径，默认为 "/jcbase/debugger"
-	Title    string // 页面标题，默认为 "调试器"
-	PageSize int    // 页面大小，默认为 20
+	BasePath string `json:"base_path" default:"/jcbase/debugger"` // 基础路径，默认为 "/jcbase/debugger"
+	Title    string `json:"title" default:"调试器"`                  // 页面标题，默认为 "调试器"
+	PageSize int    `json:"page_size" default:"20"`               // 页面大小，默认为 20
 }
 
 // Pagination 分页信息
@@ -54,14 +56,11 @@ func NewController(debugger *Debugger, router *gin.RouterGroup, config *Controll
 	if config == nil {
 		config = &ControllerConfig{}
 	}
-	if config.BasePath == "" {
-		config.BasePath = "/jcbase/debugger"
-	}
-	if config.Title == "" {
-		config.Title = "调试器"
-	}
-	if config.PageSize == 0 {
-		config.PageSize = 20
+
+	// 使用CheckAndSetDefault方法设置默认值，符合jcbaseGo规范
+	if err := helper.CheckAndSetDefault(config); err != nil {
+		// 记录错误但不中断程序执行
+		fmt.Printf("设置控制器配置默认值失败: %v\n", err)
 	}
 
 	controller := &Controller{
