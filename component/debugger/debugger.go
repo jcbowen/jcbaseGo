@@ -2,6 +2,7 @@ package debugger
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -241,8 +242,31 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 		entry.ResponseHeaders = extractHeaders(writer.Header())
 
 		// 记录响应体
-		if body := writer.body.String(); len(body) > 0 {
-			entry.ResponseBody = body
+		if writer.body.Len() > 0 {
+			// 检查响应头是否包含gzip压缩
+			contentEncoding := writer.Header().Get("Content-Encoding")
+
+			// 如果是gzip压缩的响应，尝试解压缩
+			if strings.Contains(contentEncoding, "gzip") {
+				// 解压缩gzip数据
+				reader, err := gzip.NewReader(bytes.NewReader(writer.body.Bytes()))
+				if err == nil {
+					defer reader.Close()
+					decompressed, err := io.ReadAll(reader)
+					if err == nil {
+						entry.ResponseBody = string(decompressed)
+					} else {
+						// 解压缩失败，记录原始数据并添加错误标记
+						entry.ResponseBody = "[GZIP解压缩失败] " + string(writer.body.Bytes())
+					}
+				} else {
+					// 创建gzip读取器失败，记录原始数据
+					entry.ResponseBody = "[GZIP格式错误] " + string(writer.body.Bytes())
+				}
+			} else {
+				// 非gzip压缩的响应，直接使用原始数据
+				entry.ResponseBody = string(writer.body.Bytes())
+			}
 		}
 
 		// 记录会话数据（如果存在）

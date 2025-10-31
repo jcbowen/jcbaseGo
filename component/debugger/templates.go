@@ -400,13 +400,13 @@ const detailTemplate = `<!DOCTYPE html>
                     
                     <div id="request" class="tab-content active">
                         <div class="json-viewer">
-                            <pre>{{.Entry.RequestBody}}</pre>
+                            <pre>{{.Entry.RequestBody | html}}</pre>
                         </div>
                     </div>
                     
                     <div id="response" class="tab-content">
                         <div class="json-viewer">
-                            <pre>{{.Entry.ResponseBody}}</pre>
+                            <pre>{{.Entry.ResponseBody | html}}</pre>
                         </div>
                     </div>
                 </div>
