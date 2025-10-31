@@ -16,8 +16,8 @@ import (
 type Controller struct {
 	debugger *Debugger
 	config   *ControllerConfig
-	router   *gin.RouterGroup
-	basePath string
+	router   *gin.Engine
+	basePath string // 基础路径，默认为 "/jcbase/debugger"
 }
 
 // ControllerConfig 控制器配置
@@ -52,7 +52,7 @@ type TemplateData struct {
 }
 
 // NewController 创建新的调试器控制器
-func NewController(debugger *Debugger, router *gin.RouterGroup, config *ControllerConfig) *Controller {
+func NewController(debugger *Debugger, router *gin.Engine, config *ControllerConfig) *Controller {
 	if config == nil {
 		config = &ControllerConfig{}
 	}
@@ -70,7 +70,7 @@ func NewController(debugger *Debugger, router *gin.RouterGroup, config *Controll
 		basePath: config.BasePath,
 	}
 
-	// 如果提供了路由组，自动注册路由
+	// 如果提供了路由引擎，自动注册路由
 	if router != nil {
 		controller.registerRoutes()
 	}
@@ -80,29 +80,37 @@ func NewController(debugger *Debugger, router *gin.RouterGroup, config *Controll
 
 // registerRoutes 注册调试器页面的路由
 func (c *Controller) registerRoutes() {
+	// 创建路由组
+	routerGroup := c.router.Group("/" + c.basePath)
+
+	// 重定向根目录到 /list
+	routerGroup.GET("", func(ctx *gin.Context) {
+		ctx.Redirect(http.StatusFound, "/"+c.basePath+"/list")
+	})
+
 	// 调试器主页 - 显示日志列表
-	c.router.GET(c.basePath, c.indexHandler)
+	routerGroup.GET("/list", c.indexHandler)
 
 	// 日志详情页面
-	c.router.GET(c.basePath+"/detail/:id", c.detailHandler)
+	routerGroup.GET("/detail/:id", c.detailHandler)
 
 	// 搜索日志
-	c.router.GET(c.basePath+"/search", c.searchHandler)
+	routerGroup.GET("/search", c.searchHandler)
 
 	// 获取日志列表API（JSON格式）
-	c.router.GET(c.basePath+"/api/logs", c.logsAPIHandler)
+	routerGroup.GET("/api/logs", c.logsAPIHandler)
 
 	// 获取日志详情API（JSON格式）
-	c.router.GET(c.basePath+"/api/logs/:id", c.logDetailAPIHandler)
+	routerGroup.GET("/api/logs/:id", c.logDetailAPIHandler)
 
 	// 搜索日志API（JSON格式）
-	c.router.GET(c.basePath+"/api/search", c.searchAPIHandler)
+	routerGroup.GET("/api/search", c.searchAPIHandler)
 
 	// 获取统计信息API
-	c.router.GET(c.basePath+"/api/stats", c.statsAPIHandler)
+	routerGroup.GET("/api/stats", c.statsAPIHandler)
 
 	// 清理过期日志API
-	c.router.POST(c.basePath+"/api/cleanup", c.cleanupAPIHandler)
+	routerGroup.POST("/api/cleanup", c.cleanupAPIHandler)
 }
 
 // indexHandler 调试器主页处理器
@@ -479,9 +487,9 @@ func getTemplateContent(templateName string) string {
 	}
 }
 
-// RegisterRoutes 手动注册路由到指定的路由组
+// RegisterRoutes 手动注册路由到指定的Gin引擎
 // 用于在初始化时没有传入路由组的情况
-func (c *Controller) RegisterRoutes(router *gin.RouterGroup) {
+func (c *Controller) RegisterRoutes(router *gin.Engine) {
 	c.router = router
 	c.registerRoutes()
 }

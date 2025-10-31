@@ -560,9 +560,9 @@ func GetLoggerFromContext(c *gin.Context) Logger {
 }
 
 // WithController 为调试器添加控制器支持
-// router: Gin路由组，用于注册调试器页面路由
+// router: Gin引擎，用于注册调试器页面路由
 // config: 控制器配置（可选）
-func (d *Debugger) WithController(router *gin.RouterGroup, config *ControllerConfig) *Debugger {
+func (d *Debugger) WithController(router *gin.Engine, config *ControllerConfig) *Debugger {
 	d.controller = NewController(d, router, config)
 	return d
 }
@@ -572,9 +572,10 @@ func (d *Debugger) GetController() *Controller {
 	return d.controller
 }
 
-// RegisterRoutes 手动注册路由到指定的路由组
-// 用于在初始化时没有传入路由组的情况
-func (d *Debugger) RegisterRoutes(router *gin.RouterGroup) {
+// RegisterRoutes 手动注册路由到指定的Gin引擎
+// 只支持 *gin.Engine 类型，使用更简洁
+func (d *Debugger) RegisterRoutes(router *gin.Engine) {
+	// 使用根路径创建路由组
 	if d.controller == nil {
 		d.controller = NewController(d, router, nil)
 	} else {

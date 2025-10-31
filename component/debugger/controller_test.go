@@ -24,7 +24,7 @@ func TestControllerInitialization(t *testing.T) {
 
 		// 创建Gin引擎并注册路由以初始化控制器
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 获取控制器
 		controller := dbg.GetController()
@@ -52,7 +52,7 @@ func TestControllerInitialization(t *testing.T) {
 		router := gin.New()
 
 		// 重新配置控制器
-		dbg.WithController(router.Group(""), controllerConfig)
+		dbg.WithController(router, controllerConfig)
 
 		// 获取控制器
 		controller := dbg.GetController()
@@ -74,7 +74,7 @@ func TestControllerInitialization(t *testing.T) {
 		dbg, _ := New(config)
 
 		// 注册路由
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 验证路由是否注册成功
 		routes := router.Routes()
@@ -144,7 +144,7 @@ func TestControllerHandlers(t *testing.T) {
 
 		// 创建Gin引擎和测试请求
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
 		req := httptest.NewRequest("GET", "/jcbase/debugger", nil)
@@ -177,7 +177,7 @@ func TestControllerHandlers(t *testing.T) {
 
 		// 创建Gin引擎和测试请求
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
 		req := httptest.NewRequest("GET", "/jcbase/debugger/detail/test-id-1", nil)
@@ -211,7 +211,7 @@ func TestControllerHandlers(t *testing.T) {
 
 		// 创建Gin引擎和测试请求
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
 		req := httptest.NewRequest("GET", "/jcbase/debugger/search", nil)
@@ -240,7 +240,7 @@ func TestControllerHandlers(t *testing.T) {
 
 		// 创建Gin引擎和测试请求
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 创建测试请求（不存在的ID）
 		req := httptest.NewRequest("GET", "/jcbase/debugger/detail/non-existent-id", nil)
@@ -296,7 +296,7 @@ func TestControllerAPIHandlers(t *testing.T) {
 
 		// 创建Gin引擎和测试请求
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
 		req := httptest.NewRequest("GET", "/jcbase/debugger/api/logs?page=1&page_size=10", nil)
@@ -350,7 +350,7 @@ func TestControllerAPIHandlers(t *testing.T) {
 
 		// 创建Gin引擎和测试请求
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
 		req := httptest.NewRequest("GET", "/jcbase/debugger/api/logs/api-test-1", nil)
@@ -394,7 +394,7 @@ func TestControllerAPIHandlers(t *testing.T) {
 
 		// 创建Gin引擎和测试请求
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
 		req := httptest.NewRequest("GET", "/jcbase/debugger/api/search?q=test&page=1&page_size=10", nil)
@@ -440,7 +440,7 @@ func TestControllerAPIHandlers(t *testing.T) {
 
 		// 创建Gin引擎和测试请求
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 创建测试请求（不存在的ID）
 		req := httptest.NewRequest("GET", "/jcbase/debugger/api/logs/non-existent-id", nil)
@@ -474,7 +474,7 @@ func TestControllerTemplateRendering(t *testing.T) {
 
 		// 创建Gin引擎并注册路由以初始化控制器
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 获取控制器
 		controller := dbg.GetController()
@@ -509,7 +509,7 @@ func TestControllerTemplateRendering(t *testing.T) {
 
 		// 创建Gin引擎并注册路由以初始化控制器
 		router := gin.New()
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 获取控制器
 		controller := dbg.GetController()
@@ -636,7 +636,7 @@ func TestControllerIntegration(t *testing.T) {
 		router.Use(dbg.Middleware())
 
 		// 注册调试器路由
-		dbg.RegisterRoutes(router.Group(""))
+		dbg.RegisterRoutes(router)
 
 		// 添加测试业务路由
 		router.GET("/api/test", func(c *gin.Context) {
