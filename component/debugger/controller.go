@@ -85,7 +85,7 @@ func (c *Controller) registerRoutes() {
 
 	// 重定向根目录到 /list
 	routerGroup.GET("", func(ctx *gin.Context) {
-		ctx.Redirect(http.StatusFound, "/"+c.basePath+"/list")
+		ctx.Redirect(http.StatusFound, helper.GetHostInfo(ctx.Request)+"/"+c.basePath+"/list")
 	})
 
 	// 调试器主页 - 显示日志列表
