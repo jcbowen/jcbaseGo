@@ -271,6 +271,14 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 
 // shouldSkip 检查是否应该跳过当前请求
 func (d *Debugger) shouldSkip(c *gin.Context) bool {
+	// 自动跳过debugger控制器自身的请求，避免无限循环（放在最前面提高性能）
+	if d.controller != nil && d.controller.config != nil {
+		// 检查当前请求路径是否以debugger控制器的基础路径开头
+		if strings.HasPrefix(c.Request.URL.Path, d.controller.config.BasePath) {
+			return true
+		}
+	}
+
 	// 检查路径
 	for _, path := range d.config.SkipPaths {
 		if strings.HasPrefix(c.Request.URL.Path, path) {
