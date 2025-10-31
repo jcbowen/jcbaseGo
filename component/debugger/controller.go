@@ -443,6 +443,12 @@ func (c *Controller) renderTemplate(ctx *gin.Context, templateName string, data 
 			}
 			return result
 		},
+		"sub": func(a, b int) int {
+			return a - b
+		},
+		"add": func(a, b int) int {
+			return a + b
+		},
 	}
 
 	// 解析模板

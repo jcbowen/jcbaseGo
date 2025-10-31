@@ -191,8 +191,16 @@ const indexTemplate = `<!DOCTYPE html>
                 {{end}}
                 
                 {{/* 显示当前页附近的页码 */}}
-                {{$start := max 1 (sub $page 2)}}
-                {{$end := min $totalPages (add $page 2)}}
+                {{$start := 1}}
+                {{if gt $page 2}}
+                    {{$start = sub $page 2}}
+                {{end}}
+                {{$end := $totalPages}}
+                {{if lt $page $totalPages}}
+                    {{if lt $page (sub $totalPages 2)}}
+                        {{$end = add $page 2}}
+                    {{end}}
+                {{end}}
                 {{range $i := seq $start $end}}
                 {{if eq $i $page}}
                 <span class="current">{{$i}}</span>
@@ -201,11 +209,13 @@ const indexTemplate = `<!DOCTYPE html>
                 {{end}}
                 {{end}}
                 
-                {{if lt $page (sub $totalPages 3)}}
-                    {{if lt $page (sub $totalPages 4)}}
-                    <span class="ellipsis">...</span>
+                {{if lt $page $totalPages}}
+                    {{if lt $page (sub $totalPages 3)}}
+                        {{if lt $page (sub $totalPages 4)}}
+                        <span class="ellipsis">...</span>
+                        {{end}}
+                        <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$totalPages}}</a>
                     {{end}}
-                    <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$totalPages}}</a>
                 {{end}}
             {{end}}
             
@@ -338,9 +348,24 @@ const detailTemplate = `<!DOCTYPE html>
         .status-4xx { background: #f8d7da; color: #721c24; }
         .status-5xx { background: #f5c6cb; color: #721c24; }
         
+        /* Logger日志样式 */
+        .logger-logs { margin-top: 15px; }
+        .log-item { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 12px; margin-bottom: 10px; }
+        .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .log-timestamp { font-size: 12px; color: #6c757d; }
+        .log-level { padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+        .level-debug { background: #d1ecf1; color: #0c5460; }
+        .level-info { background: #d4edda; color: #155724; }
+        .level-warn { background: #fff3cd; color: #856404; }
+        .level-error { background: #f8d7da; color: #721c24; }
+        .log-message { font-size: 14px; color: #333; margin-bottom: 8px; }
+        .log-fields { display: flex; flex-wrap: wrap; gap: 8px; }
+        .log-field { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 11px; color: #495057; }
+        
         @media (max-width: 768px) {
             .basic-info { grid-template-columns: 1fr; }
             .headers-table, .params-table { font-size: 12px; }
+            .log-header { flex-direction: column; align-items: flex-start; gap: 5px; }
         }
     </style>
 </head>
@@ -467,6 +492,31 @@ const detailTemplate = `<!DOCTYPE html>
                     </div>
                 </div>
             </div>
+            
+            <!-- Logger日志 -->
+            {{if .Entry.LoggerLogs}}
+            <div class="section">
+                <h2>Logger日志</h2>
+                <div class="logger-logs">
+                    {{range .Entry.LoggerLogs}}
+                    <div class="log-item">
+                        <div class="log-header">
+                            <span class="log-timestamp">{{.Timestamp.Format "2006-01-02 15:04:05.000"}}</span>
+                            <span class="log-level level-{{.Level}}">{{.Level}}</span>
+                        </div>
+                        <div class="log-message">{{.Message}}</div>
+                        {{if .Fields}}
+                        <div class="log-fields">
+                            {{range $key, $value := .Fields}}
+                            <span class="log-field">{{$key}}: {{$value}}</span>
+                            {{end}}
+                        </div>
+                        {{end}}
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
         </div>
         {{else}}
         <div class="section">

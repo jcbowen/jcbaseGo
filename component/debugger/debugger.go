@@ -42,6 +42,17 @@ type LogEntry struct {
 
 	// 错误信息
 	Error string `json:"error,omitempty"` // 错误信息
+
+	// Logger日志信息（新增）
+	LoggerLogs []LoggerLog `json:"logger_logs,omitempty"` // 通过logger记录的日志
+}
+
+// LoggerLog 记录通过logger打印的日志信息
+type LoggerLog struct {
+	Timestamp time.Time              `json:"timestamp"` // 日志时间戳
+	Level     string                 `json:"level"`     // 日志级别：debug/info/warn/error
+	Message   string                 `json:"message"`   // 日志消息
+	Fields    map[string]interface{} `json:"fields"`    // 日志附加字段
 }
 
 // Storage 存储接口定义
@@ -106,6 +117,7 @@ type Logger interface {
 type DebugLogger struct {
 	debugger *Debugger
 	fields   map[string]interface{}
+	logs     []LoggerLog // 存储收集的日志
 }
 
 // Config 调试器配置结构
@@ -289,6 +301,16 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 				errorMsgs = append(errorMsgs, err.Error())
 			}
 			entry.Error = strings.Join(errorMsgs, "; ")
+		}
+
+		// 从上下文中获取logger并保存其收集的日志
+		if loggerValue, exists := c.Get("debugger_logger"); exists {
+			if logger, ok := loggerValue.(*DebugLogger); ok {
+				// 获取logger收集的所有日志
+				entry.LoggerLogs = logger.GetLogs()
+				// 清空logger的日志记录，避免内存泄漏
+				logger.ClearLogs()
+			}
 		}
 
 		// 保存日志条目
@@ -484,6 +506,7 @@ func (l *DebugLogger) WithFields(fields map[string]interface{}) Logger {
 	return &DebugLogger{
 		debugger: l.debugger,
 		fields:   newFields,
+		logs:     l.logs, // 继承父logger的日志
 	}
 }
 
@@ -513,6 +536,15 @@ func (l *DebugLogger) log(level, msg string, fields ...map[string]interface{}) {
 			allFields[k] = v
 		}
 	}
+
+	// 收集日志信息到logs字段
+	loggerLog := LoggerLog{
+		Timestamp: time.Now(),
+		Level:     level,
+		Message:   msg,
+		Fields:    allFields,
+	}
+	l.logs = append(l.logs, loggerLog)
 
 	// 格式化日志输出
 	logEntry := map[string]interface{}{
@@ -556,6 +588,16 @@ func (l *DebugLogger) shouldLog(level string) bool {
 		// 默认记录所有日志
 		return true
 	}
+}
+
+// GetLogs 获取收集的日志信息
+func (l *DebugLogger) GetLogs() []LoggerLog {
+	return l.logs
+}
+
+// ClearLogs 清空收集的日志信息
+func (l *DebugLogger) ClearLogs() {
+	l.logs = []LoggerLog{}
 }
 
 // GetLogger 获取调试器的日志记录器

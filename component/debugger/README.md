@@ -456,6 +456,49 @@ result, err := queryManager.Query(options)
 result, total, err := storage.Search("用户", 1, 10)
 ```
 
+### Logger日志显示功能
+
+debugger组件现在支持在详情页面中显示业务控制器中记录的logger日志。当您在控制器中使用`GetLoggerFromContext`记录日志时，这些日志会自动收集并在日志详情页面中显示。
+
+#### 功能特性
+
+- ✅ **自动收集**: 在请求处理过程中自动收集logger日志
+- ✅ **级别区分**: 支持Debug、Info、Warn、Error四种日志级别
+- ✅ **结构化字段**: 显示日志的附加字段信息
+- ✅ **时间戳**: 记录每条日志的精确时间戳
+- ✅ **响应式布局**: 适配不同屏幕尺寸的显示
+
+#### 在详情页中查看Logger日志
+
+1. 访问调试器列表页面：`http://localhost:8080/jcbase/debugger/list`
+2. 点击任意日志条目的"详情"按钮
+3. 在详情页面中查看"Logger日志"区域
+
+#### 示例效果
+
+当您在控制器中记录如下日志：
+
+```go
+logger := debugger.GetLoggerFromContext(c)
+logger.Debug("开始处理请求", map[string]interface{}{
+    "user_id": 123,
+    "action": "create_user",
+})
+logger.Info("用户创建成功")
+logger.Warn("密码强度较弱")
+logger.Error("数据库连接失败", map[string]interface{}{
+    "error": "connection timeout",
+    "retry_count": 3,
+})
+```
+
+在详情页面中，您将看到格式化的logger日志显示：
+
+- **DEBUG** 开始处理请求 (user_id: 123, action: create_user)
+- **INFO** 用户创建成功
+- **WARN** 密码强度较弱
+- **ERROR** 数据库连接失败 (error: connection timeout, retry_count: 3)
+
 ### 详情查看功能
 
 ```go
