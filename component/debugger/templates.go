@@ -20,14 +20,46 @@ const indexTemplate = `<!DOCTYPE html>
         .stat-item .label { font-size: 12px; color: #666; }
         .stat-item .value { font-size: 18px; font-weight: bold; color: #2c3e50; }
         
-        .filters { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        .filter-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-        .filter-form input, .filter-form select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; }
-        .filter-form button { background: #3498db; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        .filters { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .filter-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+        .filter-form input, .filter-form select { 
+            padding: 10px 12px; 
+            border: 1px solid #ddd; 
+            border-radius: 6px; 
+            font-size: 14px; 
+            transition: border-color 0.2s ease;
+        }
+        .filter-form input:focus, .filter-form select:focus { 
+            outline: none; 
+            border-color: #3498db; 
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+        .filter-form button { 
+            background: #3498db; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 14px;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+        }
+        .filter-form button:hover { background: #2980b9; }
+        .filter-form a { 
+            color: #666; 
+            text-decoration: none; 
+            font-size: 14px; 
+            padding: 10px 0;
+            text-align: center;
+        }
+        .filter-form a:hover { color: #3498db; }
         
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px minmax(200px, 1fr) 80px 100px 120px 100px; gap: 10px; font-weight: bold; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px minmax(200px, 1fr) 80px 100px 120px 100px; gap: 10px; align-items: center; }
+        .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .table-content { min-width: 800px; }
+        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px minmax(250px, 1fr) 80px 90px 100px 100px; gap: 12px; font-weight: bold; font-size: 14px; }
+        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px minmax(250px, 1fr) 80px 90px 100px 100px; gap: 12px; align-items: center; font-size: 14px; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
         .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
@@ -45,12 +77,14 @@ const indexTemplate = `<!DOCTYPE html>
         .actions a { color: #3498db; text-decoration: none; margin-right: 10px; }
         .actions a:hover { text-decoration: underline; }
         
-        .pagination { display: flex; justify-content: center; gap: 5px; margin-top: 20px; flex-wrap: wrap; }
-        .pagination a, .pagination span { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; min-width: 40px; text-align: center; }
+        .pagination { display: flex; justify-content: center; gap: 4px; margin-top: 20px; flex-wrap: wrap; align-items: center; }
+        .pagination a, .pagination span { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; min-width: 40px; text-align: center; font-size: 14px; line-height: 1.2; }
         .pagination a:hover { background: #f8f9fa; }
         .pagination .current { background: #3498db; color: white; border-color: #3498db; }
-        .pagination .disabled { color: #999; cursor: not-allowed; }
-        .pagination .ellipsis { padding: 8px 6px; color: #999; }
+        .pagination .disabled { color: #999; cursor: not-allowed; background: #f5f5f5; }
+        .pagination .ellipsis { padding: 8px 6px; color: #999; min-width: auto; }
+        .pagination .page-nav { font-weight: 600; }
+        .pagination .page-number { transition: all 0.2s ease; }
         
         @media (max-width: 768px) {
             .pagination { gap: 3px; }
@@ -68,9 +102,52 @@ const indexTemplate = `<!DOCTYPE html>
         .nav a.active { background: #3498db; color: white; }
         
         @media (max-width: 768px) {
-            .table-header, .log-row { grid-template-columns: 1fr; gap: 5px; }
-            .header .stats { flex-direction: column; }
-            .filter-form { flex-direction: column; align-items: stretch; }
+            .container { padding: 10px; }
+            .header { padding: 15px; margin-bottom: 15px; }
+            .header h1 { font-size: 20px; }
+            .header .stats { flex-direction: column; gap: 10px; }
+            .stat-item { padding: 8px 12px; }
+            .stat-item .value { font-size: 16px; }
+            
+            .filter-form { flex-direction: column; align-items: stretch; gap: 8px; }
+            .filter-form input, .filter-form select { width: 100%; }
+            
+            .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .table-content { min-width: 600px; }
+            .table-header, .log-row { 
+                grid-template-columns: 100px minmax(150px, 1fr) 70px 80px 90px 90px; 
+                gap: 8px; 
+                font-size: 12px; 
+            }
+            .log-row { padding: 10px; }
+            .method, .status-code { font-size: 10px; padding: 3px 6px; }
+            .duration { font-size: 11px; }
+            .actions a { margin-right: 5px; font-size: 12px; }
+            
+            .pagination { gap: 3px; }
+            .pagination a, .pagination span { 
+                padding: 6px 8px; 
+                min-width: 32px; 
+                font-size: 12px; 
+            }
+            .pagination .ellipsis { padding: 6px 4px; }
+        }
+        
+        @media (max-width: 480px) {
+            .table-content { min-width: 500px; }
+            .table-header, .log-row { 
+                grid-template-columns: 90px minmax(120px, 1fr) 60px 70px 80px 80px; 
+                gap: 6px; 
+            }
+            .log-row { padding: 8px; }
+            .header { padding: 12px; }
+            .header h1 { font-size: 18px; }
+            .stat-item .value { font-size: 14px; }
+            .pagination a, .pagination span { 
+                padding: 4px 6px; 
+                min-width: 28px; 
+                font-size: 11px; 
+            }
         }
     </style>
 </head>
@@ -129,32 +206,36 @@ const indexTemplate = `<!DOCTYPE html>
         </div>
         
         <div class="logs-table">
-            <div class="table-header">
-                <div>时间</div>
-                <div>URL</div>
-                <div>方法</div>
-                <div>状态码</div>
-                <div>耗时</div>
-                <div>操作</div>
-            </div>
-            
-            {{range .Entries}}
-            <div class="log-row">
-                <div class="timestamp">{{.Timestamp.Format "2006-01-02 15:04:05"}}</div>
-                <div class="url" title="{{.URL}}">{{.URL}}</div>
-                <div class="method method-{{lower .Method}}">{{.Method}}</div>
-                <div class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.StatusCode}}</div>
-                <div class="duration">{{.Duration.Milliseconds}}ms</div>
-                <div class="actions">
-                    <a href="{{$.BasePath}}/detail/{{.ID}}">详情</a>
-                    <a href="{{$.BasePath}}/api/logs/{{.ID}}" target="_blank">JSON</a>
+            <div class="table-container">
+                <div class="table-content">
+                    <div class="table-header">
+                        <div>时间</div>
+                        <div>URL</div>
+                        <div>方法</div>
+                        <div>状态码</div>
+                        <div>耗时</div>
+                        <div>操作</div>
+                    </div>
+                    
+                    {{range .Entries}}
+                    <div class="log-row">
+                        <div class="timestamp">{{.Timestamp.Format "2006-01-02 15:04:05"}}</div>
+                        <div class="url" title="{{.URL}}">{{.URL}}</div>
+                        <div class="method method-{{lower .Method}}">{{.Method}}</div>
+                        <div class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.StatusCode}}</div>
+                        <div class="duration">{{.Duration.Milliseconds}}ms</div>
+                        <div class="actions">
+                            <a href="{{$.BasePath}}/detail/{{.ID}}">详情</a>
+                            <a href="{{$.BasePath}}/api/logs/{{.ID}}" target="_blank">JSON</a>
+                        </div>
+                    </div>
+                    {{else}}
+                    <div class="log-row" style="text-align: center; padding: 40px;">
+                        暂无日志记录
+                    </div>
+                    {{end}}
                 </div>
             </div>
-            {{else}}
-            <div class="log-row" style="text-align: center; padding: 40px;">
-                暂无日志记录
-            </div>
-            {{end}}
         </div>
         
         {{if .Pagination}}
