@@ -39,11 +39,8 @@ func main() {
 		Title:    "调试器管理界面",
 	}
 
-	// 创建调试器路由组
-	debuggerGroup := r.Group(controllerConfig.BasePath)
-
 	// 注册调试器控制器
-	debuggerInstance.WithController(debuggerGroup, controllerConfig)
+	debuggerInstance.WithController(r, controllerConfig)
 
 	// 添加调试器中间件到主路由
 	r.Use(debuggerInstance.Middleware())

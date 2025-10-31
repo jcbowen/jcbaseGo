@@ -93,7 +93,7 @@ const indexTemplate = `<!DOCTYPE html>
         </div>
         
         <div class="nav">
-            <a href="{{.BasePath}}" class="active">日志列表</a>
+            <a href="{{.BasePath}}/list" class="active">日志列表</a>
             <a href="{{.BasePath}}/search">搜索</a>
         </div>
         
@@ -116,7 +116,7 @@ const indexTemplate = `<!DOCTYPE html>
                 <input type="number" name="status_code" placeholder="状态码" value="{{.Filters.status_code}}">
                 <input type="text" name="url" placeholder="URL包含" value="{{.Filters.url}}">
                 <button type="submit">筛选</button>
-                <a href="{{.BasePath}}" style="margin-left: auto;">清除筛选</a>
+                <a href="{{.BasePath}}/list" style="margin-left: auto;">清除筛选</a>
             </form>
         </div>
         
@@ -152,7 +152,7 @@ const indexTemplate = `<!DOCTYPE html>
         {{if .Pagination}}
         <div class="pagination">
             {{if .Pagination.HasPrev}}
-            <a href="{{.BasePath}}?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}">上一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}">上一页</a>
             {{else}}
             <span class="disabled">上一页</span>
             {{end}}
@@ -166,12 +166,12 @@ const indexTemplate = `<!DOCTYPE html>
             {{if eq $i $page}}
             <span class="current">{{$i}}</span>
             {{else}}
-            <a href="{{$basePath}}?page={{$i}}&pageSize={{$pageSize}}">{{$i}}</a>
+            <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}">{{$i}}</a>
             {{end}}
             {{end}}
             
             {{if .Pagination.HasNext}}
-            <a href="{{.BasePath}}?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}">下一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}">下一页</a>
             {{else}}
             <span class="disabled">下一页</span>
             {{end}}
@@ -220,7 +220,7 @@ const errorTemplate = `<!DOCTYPE html>
             <div class="error-icon">⚠️</div>
             <h1 class="error-title">{{.Title}}</h1>
             <p class="error-message">{{.Message}}</p>
-            <a href="{{.BasePath}}" class="back-link">返回首页</a>
+            <a href="{{.BasePath}}/list" class="back-link">返回首页</a>
         </div>
     </div>
     
@@ -291,7 +291,7 @@ const detailTemplate = `<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <a href="{{.BasePath}}" class="back-link">← 返回日志列表</a>
+        <a href="{{.BasePath}}/list" class="back-link">← 返回日志列表</a>
         
         <div class="header">
             <h1>{{.Title}}</h1>
@@ -506,7 +506,7 @@ const searchTemplate = `<!DOCTYPE html>
         </div>
         
         <div class="nav">
-            <a href="{{.BasePath}}">日志列表</a>
+            <a href="{{.BasePath}}/list">日志列表</a>
             <a href="{{.BasePath}}/search" class="active">搜索</a>
         </div>
         
