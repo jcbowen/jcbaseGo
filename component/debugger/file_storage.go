@@ -367,23 +367,75 @@ func (fs *FileStorage) GetStats() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	// 计算文件总大小
-	var totalSize int64
+	// 计算存储大小（精确计算，与内存存储器和单个条目计算逻辑保持一致）
+	var storageSize int64
+	var errorCount int
+	var totalDuration time.Duration
+
 	for _, file := range files {
-		info, err := os.Stat(file)
+		entry, err := fs.readLogFile(file)
 		if err != nil {
-			continue
+			continue // 跳过读取失败的文件
 		}
-		totalSize += info.Size()
+
+		// 使用与CalculateStorageSize相同的计算逻辑
+		entrySize := int64(len(entry.ID) + len(entry.URL) + len(entry.Method) +
+			len(entry.RequestBody) + len(entry.ResponseBody) + len(entry.Error) +
+			len(entry.UserAgent) + len(entry.ClientIP))
+
+		// 计算请求头大小
+		for key, value := range entry.RequestHeaders {
+			entrySize += int64(len(key) + len(value))
+		}
+
+		// 计算响应头大小
+		for key, value := range entry.ResponseHeaders {
+			entrySize += int64(len(key) + len(value))
+		}
+
+		// 计算查询参数大小
+		for key, value := range entry.QueryParams {
+			entrySize += int64(len(key) + len(value))
+		}
+
+		// 计算会话数据大小（JSON格式）
+		if entry.SessionData != nil {
+			if sessionData, err := json.Marshal(entry.SessionData); err == nil {
+				entrySize += int64(len(sessionData))
+			}
+		}
+
+		// 计算Logger日志大小
+		for _, log := range entry.LoggerLogs {
+			entrySize += int64(len(log.Message))
+			if log.Fields != nil {
+				if fieldsData, err := json.Marshal(log.Fields); err == nil {
+					entrySize += int64(len(fieldsData))
+				}
+			}
+		}
+
+		storageSize += entrySize
+		totalDuration += entry.Duration
+		if entry.Error != "" {
+			errorCount++
+		}
 	}
 
 	// 统一字段名，移除重复的total_entries字段
 	stats := map[string]interface{}{
-		"total_requests": len(files),                   // 总请求数
-		"storage_size":   fs.formatFileSize(totalSize), // 存储大小（格式化显示）
-		"max_size":       fs.maxSize,                   // 最大存储条目数
-		"storage_type":   "file",                       // 存储类型
-		"storage_path":   fs.basePath,                  // 存储路径
+		"total_requests": len(files),                                        // 总请求数
+		"storage_size":   fmt.Sprintf("%.2f KB", float64(storageSize)/1024), // 存储大小（格式化显示）
+		"max_size":       fs.maxSize,                                        // 最大存储条目数
+		"storage_type":   "file",                                            // 存储类型
+		"storage_path":   fs.basePath,                                       // 存储路径
+	}
+
+	// 计算平均响应时间和错误率
+	if len(files) > 0 {
+		stats["avg_duration"] = totalDuration / time.Duration(len(files))
+		stats["error_rate"] = float64(errorCount) / float64(len(files))
+		stats["error_count"] = errorCount
 	}
 
 	return stats, nil

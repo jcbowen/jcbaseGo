@@ -380,13 +380,32 @@ func (ds *DatabaseStorage) GetStats() (map[string]interface{}, error) {
 		avgDuration = 0
 	}
 
+	// 估算存储大小（数据库存储难以精确计算，使用近似估算）
+	var estimatedSize int64
+	if total > 0 {
+		// 获取一个样本条目来估算平均大小
+		var sampleModel LogEntryModel
+		if err := ds.db.Table(ds.tableName).First(&sampleModel).Error; err == nil {
+			// 估算每个条目的平均大小
+			// 这里使用一个保守的估算因子，实际大小可能更大
+			estimatedSize = int64(len(sampleModel.ID) + len(sampleModel.URL) + len(sampleModel.Method) +
+				len(sampleModel.RequestBody) + len(sampleModel.ResponseBody) + len(sampleModel.Error) +
+				len(sampleModel.UserAgent) + len(sampleModel.ClientIP) + len(sampleModel.RequestID) +
+				len(sampleModel.RequestHeaders) + len(sampleModel.ResponseHeaders) +
+				len(sampleModel.QueryParams) + len(sampleModel.SessionData))
+
+			// 乘以总条目数，并考虑数据库索引和元数据的开销
+			estimatedSize = estimatedSize * total * 2 // 乘以2考虑数据库开销
+		}
+	}
+
 	// 统一字段名，移除重复的total_entries字段
 	stats := map[string]interface{}{
-		"total_requests": total,        // 总请求数
-		"storage_size":   "N/A",        // 存储大小（数据库存储难以精确计算，显示为N/A）
-		"max_size":       ds.maxSize,   // 最大存储条目数
-		"storage_type":   "database",   // 存储类型
-		"table_name":     ds.tableName, // 数据表名
+		"total_requests": total,                                               // 总请求数
+		"storage_size":   fmt.Sprintf("%.2f KB", float64(estimatedSize)/1024), // 存储大小（估算显示）
+		"max_size":       ds.maxSize,                                          // 最大存储条目数
+		"storage_type":   "database",                                          // 存储类型
+		"table_name":     ds.tableName,                                        // 数据表名
 	}
 
 	// 添加错误统计信息

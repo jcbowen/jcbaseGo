@@ -1,6 +1,7 @@
 package debugger
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -274,20 +275,44 @@ func (ms *MemoryStorage) GetStats() (map[string]interface{}, error) {
 		"storage_type":   "memory",
 	}
 
-	// 计算存储大小（估算）
+	// 计算存储大小（精确计算，与单个条目计算逻辑保持一致）
 	var storageSize int64
 	for _, entry := range ms.entries {
-		// 估算每个条目的存储大小
+		// 使用与CalculateStorageSize相同的计算逻辑
 		entrySize := int64(len(entry.ID) + len(entry.URL) + len(entry.Method) +
 			len(entry.RequestBody) + len(entry.ResponseBody) + len(entry.Error) +
 			len(entry.UserAgent) + len(entry.ClientIP))
 
-		// 估算请求头和响应头的大小
+		// 计算请求头大小
 		for key, value := range entry.RequestHeaders {
 			entrySize += int64(len(key) + len(value))
 		}
+
+		// 计算响应头大小
 		for key, value := range entry.ResponseHeaders {
 			entrySize += int64(len(key) + len(value))
+		}
+
+		// 计算查询参数大小
+		for key, value := range entry.QueryParams {
+			entrySize += int64(len(key) + len(value))
+		}
+
+		// 计算会话数据大小（JSON格式）
+		if entry.SessionData != nil {
+			if sessionData, err := json.Marshal(entry.SessionData); err == nil {
+				entrySize += int64(len(sessionData))
+			}
+		}
+
+		// 计算Logger日志大小
+		for _, log := range entry.LoggerLogs {
+			entrySize += int64(len(log.Message))
+			if log.Fields != nil {
+				if fieldsData, err := json.Marshal(log.Fields); err == nil {
+					entrySize += int64(len(fieldsData))
+				}
+			}
 		}
 
 		storageSize += entrySize

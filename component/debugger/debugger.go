@@ -500,9 +500,13 @@ func (e *LogEntry) Summary() string {
 }
 
 // CalculateStorageSize 计算日志条目的存储大小并格式化显示
-// 计算内容包括：请求体、响应体、请求头、响应头、查询参数、会话数据等
+// 计算内容包括：基本字段、请求体、响应体、请求头、响应头、查询参数、会话数据等
+// 与总存储计算逻辑保持一致
 func (e *LogEntry) CalculateStorageSize() string {
 	totalSize := 0
+
+	// 计算基本字段大小（与总存储计算保持一致）
+	totalSize += len(e.ID) + len(e.URL) + len(e.Method) + len(e.ClientIP) + len(e.UserAgent) + len(e.RequestID)
 
 	// 计算请求体大小
 	totalSize += len(e.RequestBody)

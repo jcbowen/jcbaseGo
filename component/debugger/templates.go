@@ -58,11 +58,11 @@ const indexTemplate = `<!DOCTYPE html>
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .table-content { min-width: 800px; }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 12px; font-weight: bold; font-size: 14px; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 12px; align-items: center; font-size: 14px; }
+        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(120px, 200px) 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 12px; font-weight: bold; font-size: 14px; }
+        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(120px, 200px) 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 12px; align-items: center; font-size: 14px; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
-        .request-id a { color: #3498db; text-decoration: none; font-weight: 600; }
+        .request-id a { color: #3498db; text-decoration: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; display: block; }
         .request-id a:hover { text-decoration: underline; }
         .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
         .method { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
@@ -119,7 +119,7 @@ const indexTemplate = `<!DOCTYPE html>
             .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
             .table-content { min-width: 600px; }
             .table-header, .log-row { 
-                grid-template-columns: 80px 100px 60px 80px 90px 60px 60px minmax(120px, 1fr); 
+                grid-template-columns: minmax(80px, 120px) 100px 60px 80px 90px 60px 60px minmax(120px, 1fr); 
                 gap: 6px; 
                 font-size: 11px; 
             }
@@ -140,7 +140,7 @@ const indexTemplate = `<!DOCTYPE html>
         @media (max-width: 480px) {
             .table-content { min-width: 500px; }
             .table-header, .log-row { 
-                grid-template-columns: 70px 80px 50px 70px 80px 50px 50px minmax(100px, 1fr); 
+                grid-template-columns: minmax(70px, 100px) 80px 50px 70px 80px 50px 50px minmax(100px, 1fr); 
                 gap: 4px; 
             }
             .log-row { padding: 8px; }
