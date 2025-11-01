@@ -474,18 +474,16 @@ func (d *Debugger) SetSessionData(c *gin.Context, data map[string]interface{}) {
 }
 
 // DefaultConfig 返回默认配置
+// 使用helper.CheckAndSetDefault方法设置默认值，符合jcbaseGo规范
 func DefaultConfig() *Config {
-	return &Config{
-		Enabled:         true,
-		MaxBodySize:     1024,               // 1MB（单位：KB）
-		RetentionPeriod: 24 * time.Hour * 7, // 7天
-		Level:           LevelDebug,         // 默认调试级别
-		SkipPaths:       []string{"/static/", "/favicon.ico"},
-		SkipMethods:     []string{"OPTIONS"},
-		SampleRate:      1.0,
-		Storage:         nil, // 必须传入实例化的存储器
-		Logger:          nil, // 必须传入实例化的日志记录器
+	config := &Config{}
+
+	// 使用CheckAndSetDefault方法设置默认值
+	if err := helper.CheckAndSetDefault(config); err != nil {
+		panic(fmt.Sprintf("DefaultConfig failed: %v", err))
 	}
+
+	return config
 }
 
 // JSONString 返回日志条目的JSON字符串表示
