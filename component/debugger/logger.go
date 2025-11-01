@@ -10,6 +10,14 @@ import (
 	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
+// 日志级别常量
+const (
+	LevelDebug = "debug" // 调试级别：记录所有详细信息
+	LevelInfo  = "info"  // 信息级别：只记录基本信息
+	LevelWarn  = "warn"  // 警告级别：记录警告信息
+	LevelError = "error" // 错误级别：记录错误信息
+)
+
 // LoggerInterface 日志记录器接口
 // 支持不同级别的日志记录，可以在控制器中直接使用
 type LoggerInterface interface {

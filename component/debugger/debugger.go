@@ -15,14 +15,6 @@ import (
 	"github.com/jcbowen/jcbaseGo/component/security"
 )
 
-// 日志级别常量
-const (
-	LevelDebug = "debug" // 调试级别：记录所有详细信息
-	LevelInfo  = "info"  // 信息级别：只记录基本信息
-	LevelWarn  = "warn"  // 警告级别：记录警告信息
-	LevelError = "error" // 错误级别：记录错误信息
-)
-
 // Config 调试器配置结构
 type Config struct {
 	Enabled         bool          `json:"enabled" default:"false"`         // 是否启用调试器
