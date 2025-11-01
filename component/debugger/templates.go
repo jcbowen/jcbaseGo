@@ -62,6 +62,16 @@ const indexTemplate = `<!DOCTYPE html>
         .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(120px, 200px) 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 12px; align-items: center; font-size: 14px; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
+        .no-data-row { 
+            grid-column: 1 / -1; 
+            text-align: center; 
+            padding: 40px; 
+            color: #666; 
+            font-size: 16px; 
+            background: #f8f9fa;
+            border-radius: 4px;
+            margin: 10px;
+        }
         .request-id a { color: #3498db; text-decoration: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; display: block; }
         .request-id a:hover { text-decoration: underline; }
         .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
@@ -252,7 +262,7 @@ const indexTemplate = `<!DOCTYPE html>
                         <div class="url" title="{{.URL}}">{{.URL}}</div>
                     </div>
                     {{else}}
-                    <div class="log-row" style="text-align: center; padding: 40px;">
+                    <div class="no-data-row">
                         暂无日志记录
                     </div>
                     {{end}}
