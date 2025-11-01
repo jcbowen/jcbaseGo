@@ -352,9 +352,7 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 
 	// 状态码过滤
 	if statusCode := ctx.Query("status_code"); statusCode != "" {
-		if code, err := strconv.Atoi(statusCode); err == nil {
-			filters["status_code"] = code
-		}
+		filters["status_code"] = statusCode
 	}
 
 	// IP地址过滤
