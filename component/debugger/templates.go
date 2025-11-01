@@ -207,14 +207,14 @@ const indexTemplate = `<!DOCTYPE html>
         
         <div class="filters">
             <form class="filter-form" method="get">
-                <select name="method">
+                <select name="method" onchange="this.form.submit()">
                     <option value="">所有方法</option>
                     <option value="GET" {{if eq .Filters.method "GET"}}selected{{end}}>GET</option>
                     <option value="POST" {{if eq .Filters.method "POST"}}selected{{end}}>POST</option>
                     <option value="PUT" {{if eq .Filters.method "PUT"}}selected{{end}}>PUT</option>
                     <option value="DELETE" {{if eq .Filters.method "DELETE"}}selected{{end}}>DELETE</option>
                 </select>
-                <select name="status_code">
+                <select name="status_code" onchange="this.form.submit()">
                     <option value="">所有状态码</option>
                     <option value="200" {{if eq .Filters.status_code "200"}}selected{{end}}>200 - 成功</option>
                     <option value="201" {{if eq .Filters.status_code "201"}}selected{{end}}>201 - 已创建</option>
