@@ -183,13 +183,15 @@ const indexTemplate = `<!DOCTYPE html>
         
         <div class="nav">
             <a href="{{.BasePath}}/list" class="active">日志列表</a>
-            <a href="{{.BasePath}}/search">搜索</a>
         </div>
         
         <div class="search-box">
-            <form action="{{.BasePath}}/search" method="get">
-                <input type="text" name="q" placeholder="搜索日志内容..." value="">
+            <form action="{{.BasePath}}/list" method="get">
+                <input type="text" name="q" placeholder="搜索日志内容..." value="{{.Keyword}}">
                 <button type="submit">搜索</button>
+                {{if .Keyword}}
+                <a href="{{.BasePath}}/list" style="margin-left: 10px; color: #666; text-decoration: none; padding: 10px 15px; border: 1px solid #ddd; border-radius: 4px;">清除搜索</a>
+                {{end}}
             </form>
         </div>
         
@@ -246,7 +248,7 @@ const indexTemplate = `<!DOCTYPE html>
         {{if .Pagination}}
         <div class="pagination">
             {{if .Pagination.HasPrev}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">上一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">上一页</a>
             {{else}}
             <span class="disabled">上一页</span>
             {{end}}
@@ -256,6 +258,7 @@ const indexTemplate = `<!DOCTYPE html>
             {{$basePath := .BasePath}}
             {{$pageSize := .Pagination.PageSize}}
             {{$filters := .Filters}}
+            {{$keyword := .Keyword}}
             
             {{/* 智能分页显示逻辑 */}}
             {{if le $totalPages 7}}
@@ -264,13 +267,13 @@ const indexTemplate = `<!DOCTYPE html>
                 {{if eq $i $page}}
                 <span class="current">{{$i}}</span>
                 {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
                 {{end}}
                 {{end}}
             {{else}}
                 {{/* 总页数大于7时，使用智能分页 */}}
                 {{if gt $page 4}}
-                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">1</a>
+                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">1</a>
                     {{if gt $page 5}}
                     <span class="ellipsis">...</span>
                     {{end}}
@@ -291,7 +294,7 @@ const indexTemplate = `<!DOCTYPE html>
                 {{if eq $i $page}}
                 <span class="current">{{$i}}</span>
                 {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
                 {{end}}
                 {{end}}
                 
@@ -300,13 +303,13 @@ const indexTemplate = `<!DOCTYPE html>
                         {{if lt $page (sub $totalPages 4)}}
                         <span class="ellipsis">...</span>
                         {{end}}
-                        <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$totalPages}}</a>
+                        <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$totalPages}}</a>
                     {{end}}
                 {{end}}
             {{end}}
             
             {{if .Pagination.HasNext}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">下一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">下一页</a>
             {{else}}
             <span class="disabled">下一页</span>
             {{end}}
@@ -492,7 +495,7 @@ const detailTemplate = `<!DOCTYPE html>
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         
-        .method-badge, .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block; min-width: 50px; text-align: center; }
+        .method-badge, .status-badge { padding: 8px 8px; border-radius: 4px; font-weight: bold; display: inline-block; min-width: 50px; }
         .method-get { background: #d4edda; color: #155724; }
         .method-post { background: #d1ecf1; color: #0c5460; }
         .method-put { background: #fff3cd; color: #856404; }
@@ -724,10 +727,20 @@ const detailTemplate = `<!DOCTYPE html>
                 {{end}}
             </div>
             
-            <!-- Logger日志 -->
+            <!-- 响应体 -->
+            {{if .Entry.ResponseBody}}
+            <div class="section">
+                <h2>响应信息</h2>
+                <div class="json-viewer">
+                    <pre>{{.Entry.ResponseBody | html}}</pre>
+                </div>
+            </div>
+            {{end}}
+
+            <!-- Logger -->
             {{if .Entry.LoggerLogs}}
             <div class="section">
-                <h2>Logger日志</h2>
+                <h2>Logger</h2>
                 <div class="logger-logs">
                     {{range .Entry.LoggerLogs}}
                     <div class="log-item">
@@ -751,16 +764,7 @@ const detailTemplate = `<!DOCTYPE html>
                 </div>
             </div>
             {{end}}
-            
-            <!-- 响应体 -->
-            {{if .Entry.ResponseBody}}
-            <div class="section">
-                <h2>响应信息</h2>
-                <div class="json-viewer">
-                    <pre>{{.Entry.ResponseBody | html}}</pre>
-                </div>
-            </div>
-            {{end}}
+
         </div>
         {{else}}
         <div class="section">
@@ -799,160 +803,6 @@ const detailTemplate = `<!DOCTYPE html>
         
         function lower(str) {
             return str ? str.toLowerCase() : '';
-        }
-    </script>
-</body>
-</html>`
-
-// searchTemplate 搜索页面模板
-const searchTemplate = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .header h1 { color: #2c3e50; margin-bottom: 10px; word-break: break-word; }
-        
-        .search-box { margin-bottom: 20px; }
-        .search-box form { display: flex; gap: 10px; }
-        .search-box input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
-        .search-box button { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
-        
-        .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 10px; font-weight: bold; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 10px; align-items: center; }
-        .log-row:hover { background: #f8f9fa; }
-        .log-row:last-child { border-bottom: none; }
-        .method { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
-        .method-get { background: #d4edda; color: #155724; }
-        .method-post { background: #d1ecf1; color: #0c5460; }
-        .method-put { background: #fff3cd; color: #856404; }
-        .method-delete { background: #f8d7da; color: #721c24; }
-        .status-code { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
-        .status-2xx { background: #d4edda; color: #155724; }
-        .status-3xx { background: #fff3cd; color: #856404; }
-        .status-4xx { background: #f8d7da; color: #721c24; }
-        .status-5xx { background: #f5c6cb; color: #721c24; }
-        .duration { color: #666; font-size: 12px; }
-        .actions a { color: #3498db; text-decoration: none; margin-right: 10px; }
-        .actions a:hover { text-decoration: underline; }
-        
-        .pagination { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
-        .pagination a, .pagination span { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; }
-        .pagination a:hover { background: #f8f9fa; }
-        .pagination .current { background: #3498db; color: white; border-color: #3498db; }
-        .pagination .disabled { color: #999; cursor: not-allowed; }
-        
-        .nav { display: flex; gap: 20px; margin-bottom: 20px; }
-        .nav a { color: #3498db; text-decoration: none; padding: 10px 15px; border-radius: 4px; }
-        .nav a.active { background: #27ae60; color: white; }
-        
-        @media (max-width: 768px) {
-            .table-header, .log-row { grid-template-columns: 1fr; gap: 5px; }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>{{.Title}}</h1>
-        </div>
-        
-        <div class="nav">
-            <a href="{{.BasePath}}/list">日志列表</a>
-            <a href="{{.BasePath}}/search" class="active">搜索</a>
-        </div>
-        
-        <div class="search-box">
-            <form action="{{.BasePath}}/search" method="get">
-                <input type="text" name="q" placeholder="搜索日志内容..." value="{{.Keyword}}">
-                <button type="submit">搜索</button>
-            </form>
-        </div>
-        
-        <div class="logs-table">
-            <div class="table-header">
-                <div>请求Id</div>
-                <div>时间</div>
-                <div>耗时</div>
-                <div>存储大小</div>
-                <div>IP</div>
-                <div>方法</div>
-                <div>状态</div>
-                <div>URL</div>
-            </div>
-            
-            {{range .Entries}}
-            <div class="log-row">
-                <div class="request-id"><a href="{{$.BasePath}}/detail/{{.ID}}" title="查看详情">{{.ID}}</a></div>
-                <div class="timestamp">{{.Timestamp.Format "2006-01-02 15:04:05"}}</div>
-                <div class="duration">{{.Duration.Milliseconds}}ms</div>
-                <div class="storage-size">{{.StorageSize}}</div>
-                <div class="client-ip">{{.ClientIP}}</div>
-                <div class="method method-{{lower .Method}}">{{.Method}}</div>
-                <div class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.StatusCode}}</div>
-                <div class="url" title="{{.URL}}">{{.URL}}</div>
-            </div>
-            {{else}}
-            {{if .Keyword}}
-            <div class="log-row" style="text-align: center; padding: 40px;">
-                未找到匹配 "{{.Keyword}}" 的日志记录
-            </div>
-            {{else}}
-            <div class="log-row" style="text-align: center; padding: 40px;">
-                请输入搜索关键词
-            </div>
-            {{end}}
-            {{end}}
-        </div>
-        
-        {{if and .Pagination .Keyword}}
-        <div class="pagination">
-            {{if .Pagination.HasPrev}}
-            <a href="{{.BasePath}}/search?q={{.Keyword}}&page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}">上一页</a>
-            {{else}}
-            <span class="disabled">上一页</span>
-            {{end}}
-            
-            {{$page := .Pagination.Page}}
-            {{$totalPages := .Pagination.TotalPages}}
-            {{$basePath := .BasePath}}
-            {{$pageSize := .Pagination.PageSize}}
-            {{$keyword := .Keyword}}
-            
-            {{range $i := seq 1 $totalPages}}
-            {{if eq $i $page}}
-            <span class="current">{{$i}}</span>
-            {{else}}
-            <a href="{{$basePath}}/search?q={{$keyword}}&page={{$i}}&pageSize={{$pageSize}}">{{$i}}</a>
-            {{end}}
-            {{end}}
-            
-            {{if .Pagination.HasNext}}
-            <a href="{{.BasePath}}/search?q={{.Keyword}}&page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}">下一页</a>
-            {{else}}
-            <span class="disabled">下一页</span>
-            {{end}}
-        </div>
-        {{end}}
-    </div>
-    
-    <script>
-        function lower(str) {
-            return str ? str.toLowerCase() : '';
-        }
-        
-        function seq(start, end) {
-            const result = [];
-            for (let i = start; i <= end; i++) {
-                result.push(i);
-            }
-            return result;
         }
     </script>
 </body>

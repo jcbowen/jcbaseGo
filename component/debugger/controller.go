@@ -94,9 +94,6 @@ func (c *Controller) registerRoutes() {
 	// 日志详情页面
 	routerGroup.GET("/detail/:id", c.detailHandler)
 
-	// 搜索日志
-	routerGroup.GET("/search", c.searchHandler)
-
 	// 获取日志列表API（JSON格式）
 	routerGroup.GET("/api/logs", c.logsAPIHandler)
 
@@ -113,17 +110,31 @@ func (c *Controller) registerRoutes() {
 	routerGroup.POST("/api/cleanup", c.cleanupAPIHandler)
 }
 
-// indexHandler 调试器主页处理器
+// indexHandler 调试器主页处理器（支持搜索功能）
 func (c *Controller) indexHandler(ctx *gin.Context) {
 	// 获取分页参数
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
 
+	// 获取搜索关键词
+	keyword := ctx.Query("q")
+
 	// 获取过滤参数
 	filters := c.parseFilters(ctx)
 
-	// 获取日志列表
-	entries, total, err := c.debugger.GetStorage().FindAll(page, pageSize, filters)
+	var entries []*LogEntry
+	var total int
+	var err error
+
+	// 根据是否有搜索关键词选择不同的查询方式
+	if keyword != "" {
+		// 执行搜索
+		entries, total, err = c.debugger.GetStorage().Search(keyword, page, pageSize)
+	} else {
+		// 获取所有日志列表
+		entries, total, err = c.debugger.GetStorage().FindAll(page, pageSize, filters)
+	}
+
 	if err != nil {
 		c.renderError(ctx, "获取日志列表失败: "+err.Error())
 		return
@@ -132,8 +143,11 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 	// 计算分页信息
 	pagination := c.calculatePagination(page, pageSize, total)
 
-	// 获取统计信息
-	stats, _ := c.debugger.GetStorage().GetStats()
+	// 获取统计信息（仅在非搜索模式下显示）
+	var stats map[string]interface{}
+	if keyword == "" {
+		stats, _ = c.debugger.GetStorage().GetStats()
+	}
 
 	// 计算每个日志条目的存储大小
 	c.calculateEntriesStorageSize(entries)
@@ -145,6 +159,7 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 		"Pagination": pagination,
 		"Filters":    filters,
 		"Stats":      stats,
+		"Keyword":    keyword,
 		"BasePath":   c.basePath,
 	})
 }
@@ -191,45 +206,6 @@ func (c *Controller) detailHandler(ctx *gin.Context) {
 		"Title":    "日志详情 - " + entry.ID,
 		"Entry":    entry,
 		"BasePath": c.basePath,
-	})
-}
-
-// searchHandler 搜索页面处理器
-func (c *Controller) searchHandler(ctx *gin.Context) {
-	keyword := ctx.Query("q")
-	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
-
-	var entries []*LogEntry
-	var total int
-	var err error
-
-	if keyword != "" {
-		// 执行搜索
-		entries, total, err = c.debugger.GetStorage().Search(keyword, page, pageSize)
-	} else {
-		// 没有关键词，显示所有日志
-		entries, total, err = c.debugger.GetStorage().FindAll(page, pageSize, nil)
-	}
-
-	if err != nil {
-		c.renderError(ctx, "搜索日志失败: "+err.Error())
-		return
-	}
-
-	// 计算分页信息
-	pagination := c.calculatePagination(page, pageSize, total)
-
-	// 计算每个日志条目的存储大小
-	c.calculateEntriesStorageSize(entries)
-
-	// 渲染搜索页面
-	c.renderTemplate(ctx, "search.html", gin.H{
-		"Title":      "调试器 - 搜索",
-		"Entries":    entries,
-		"Pagination": pagination,
-		"Keyword":    keyword,
-		"BasePath":   c.basePath,
 	})
 }
 
@@ -493,8 +469,6 @@ func getTemplateContent(templateName string) string {
 		return indexTemplate
 	case "detail.html":
 		return detailTemplate
-	case "search.html":
-		return searchTemplate
 	case "error.html":
 		return errorTemplate
 	default:
