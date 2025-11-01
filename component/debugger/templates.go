@@ -448,7 +448,7 @@ const detailTemplate = `<!DOCTYPE html>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
         .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
         .header h1 { color: #2c3e50; margin-bottom: 10px; word-break: break-word; }
         .back-link { color: #3498db; text-decoration: none; margin-bottom: 10px; display: inline-block; }
@@ -656,6 +656,56 @@ const detailTemplate = `<!DOCTYPE html>
                 padding: 3px 6px; 
                 font-size: 11px; 
                 min-width: 40px;
+            }
+        }
+        
+        /* 超大屏幕优化 */
+        @media (min-width: 1600px) {
+            .container { max-width: 1800px; padding: 30px; }
+            .header { padding: 30px; }
+            .header h1 { font-size: 28px; margin-bottom: 15px; }
+            .section { padding: 30px; }
+            .section h2 { font-size: 24px; margin-bottom: 20px; }
+            .section h3 { font-size: 20px; margin-bottom: 15px; }
+            .basic-info { 
+                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); 
+                gap: 20px; 
+            }
+            .info-item { min-height: 80px; }
+            .info-label { font-size: 16px; margin-bottom: 8px; }
+            .info-value { font-size: 18px; line-height: 1.5; }
+            .headers-table, .params-table { font-size: 16px; }
+            .headers-table th, .params-table th,
+            .headers-table td, .params-table td { 
+                padding: 15px 20px; 
+                white-space: normal; 
+                word-break: break-word;
+                line-height: 1.5;
+            }
+            .headers-table td:first-child, .params-table td:first-child {
+                min-width: 160px;
+            }
+            .json-viewer { 
+                padding: 20px; 
+                font-size: 16px; 
+                max-height: 500px; 
+                line-height: 1.5;
+            }
+            .method-badge, .status-badge { 
+                padding: 10px 12px; 
+                font-size: 16px; 
+                min-width: 60px;
+            }
+            .back-link { font-size: 16px; margin-bottom: 15px; }
+            .json-view-link { font-size: 16px; padding: 4px 8px; }
+            
+            /* 表格容器优化 */
+            .table-container {
+                margin-top: 20px;
+                border: 1px solid #eee;
+            }
+            .table-container table {
+                min-width: 800px;
             }
         }
     </style>
