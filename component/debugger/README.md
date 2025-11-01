@@ -470,7 +470,7 @@ debugger组件现在支持在详情页面中显示业务控制器中记录的log
 
 #### 在详情页中查看Logger日志
 
-1. 访问调试器列表页面：`http://localhost:8080/jcbase/debugger/list`
+1. 访问调试器列表页面：`http://localhost:8080/jcbase/debug/list`
 2. 点击任意日志条目的"详情"按钮
 3. 在详情页面中查看"Logger日志"区域
 
@@ -567,7 +567,7 @@ func main() {
 		panic(err)
 	}
 	
-	// 注册调试器路由（使用默认路径：/jcbase/debugger）
+	// 注册调试器路由（使用默认路径：/jcbase/debug）
 	dbg.RegisterRoutes(router)
 	
 	// 添加业务路由
@@ -652,22 +652,22 @@ func main() {
 Gin控制器提供以下功能：
 
 #### 1. 日志列表页面
-- 路径：`GET /jcbase/debugger/`
+- 路径：`GET /jcbase/debug/`
 - 功能：显示所有调试日志的列表，支持分页和搜索
 
 #### 2. 日志详情页面
-- 路径：`GET /jcbase/debugger/detail/:id`
+- 路径：`GET /jcbase/debug/detail/:id`
 - 功能：显示单个日志的详细信息，包括请求头、响应头、请求体等
 
 #### 3. 搜索功能
-- 路径：`GET /jcbase/debugger/search`
+- 路径：`GET /jcbase/debug/search`
 - 功能：支持关键词搜索，可搜索请求头、响应头、请求体等内容
 
 #### 4. API接口
 控制器还提供对应的API接口，方便前端集成：
-- `GET /jcbase/debugger/api/logs` - 获取日志列表（JSON格式）
-- `GET /jcbase/debugger/api/logs/:id` - 获取日志详情（JSON格式）
-- `GET /jcbase/debugger/api/search` - 搜索日志（JSON格式）
+- `GET /jcbase/debug/api/logs` - 获取日志列表（JSON格式）
+- `GET /jcbase/debug/api/logs/:id` - 获取日志详情（JSON格式）
+- `GET /jcbase/debug/api/search` - 搜索日志（JSON格式）
 
 ### 示例代码
 

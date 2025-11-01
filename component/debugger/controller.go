@@ -17,14 +17,14 @@ type Controller struct {
 	debugger *Debugger
 	config   *ControllerConfig
 	router   *gin.Engine
-	basePath string // 基础路径，默认为 "/jcbase/debugger"
+	basePath string // 基础路径，默认为 "/jcbase/debug"
 }
 
 // ControllerConfig 控制器配置
 type ControllerConfig struct {
-	BasePath string `json:"base_path" default:"/jcbase/debugger"` // 基础路径，默认为 "/jcbase/debugger"
-	Title    string `json:"title" default:"调试器"`                  // 页面标题，默认为 "调试器"
-	PageSize int    `json:"page_size" default:"20"`               // 页面大小，默认为 20
+	BasePath string `json:"base_path" default:"/jcbase/debug"` // 基础路径，默认为 "/jcbase/debug"
+	Title    string `json:"title" default:"调试器"`               // 页面标题，默认为 "调试器"
+	PageSize int    `json:"page_size" default:"20"`            // 页面大小，默认为 20
 }
 
 // Pagination 分页信息

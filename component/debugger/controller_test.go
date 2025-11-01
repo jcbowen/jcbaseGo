@@ -31,7 +31,7 @@ func TestControllerInitialization(t *testing.T) {
 		assert.NotNil(t, controller)
 
 		// 验证默认配置
-		assert.Equal(t, "/jcbase/debugger", controller.config.BasePath)
+		assert.Equal(t, "/jcbase/debug", controller.config.BasePath)
 		assert.Equal(t, 20, controller.config.PageSize)
 	})
 
@@ -86,13 +86,13 @@ func TestControllerInitialization(t *testing.T) {
 		foundSearch := false
 
 		for _, route := range routes {
-			if route.Path == "/jcbase/debugger" && route.Method == "GET" {
+			if route.Path == "/jcbase/debug" && route.Method == "GET" {
 				foundIndex = true
 			}
-			if route.Path == "/jcbase/debugger/detail/:id" && route.Method == "GET" {
+			if route.Path == "/jcbase/debug/detail/:id" && route.Method == "GET" {
 				foundDetail = true
 			}
-			if route.Path == "/jcbase/debugger/search" && route.Method == "GET" {
+			if route.Path == "/jcbase/debug/search" && route.Method == "GET" {
 				foundSearch = true
 			}
 		}
@@ -147,7 +147,7 @@ func TestControllerHandlers(t *testing.T) {
 		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
-		req := httptest.NewRequest("GET", "/jcbase/debugger", nil)
+		req := httptest.NewRequest("GET", "/jcbase/debug", nil)
 		w := httptest.NewRecorder()
 
 		// 执行请求
@@ -180,7 +180,7 @@ func TestControllerHandlers(t *testing.T) {
 		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
-		req := httptest.NewRequest("GET", "/jcbase/debugger/detail/test-id-1", nil)
+		req := httptest.NewRequest("GET", "/jcbase/debug/detail/test-id-1", nil)
 		w := httptest.NewRecorder()
 
 		// 执行请求
@@ -214,7 +214,7 @@ func TestControllerHandlers(t *testing.T) {
 		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
-		req := httptest.NewRequest("GET", "/jcbase/debugger/search", nil)
+		req := httptest.NewRequest("GET", "/jcbase/debug/search", nil)
 		w := httptest.NewRecorder()
 
 		// 执行请求
@@ -243,7 +243,7 @@ func TestControllerHandlers(t *testing.T) {
 		dbg.RegisterRoutes(router)
 
 		// 创建测试请求（不存在的ID）
-		req := httptest.NewRequest("GET", "/jcbase/debugger/detail/non-existent-id", nil)
+		req := httptest.NewRequest("GET", "/jcbase/debug/detail/non-existent-id", nil)
 		w := httptest.NewRecorder()
 
 		// 执行请求
@@ -299,7 +299,7 @@ func TestControllerAPIHandlers(t *testing.T) {
 		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
-		req := httptest.NewRequest("GET", "/jcbase/debugger/api/logs?page=1&page_size=10", nil)
+		req := httptest.NewRequest("GET", "/jcbase/debug/api/logs?page=1&page_size=10", nil)
 		w := httptest.NewRecorder()
 
 		// 执行请求
@@ -353,7 +353,7 @@ func TestControllerAPIHandlers(t *testing.T) {
 		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
-		req := httptest.NewRequest("GET", "/jcbase/debugger/api/logs/api-test-1", nil)
+		req := httptest.NewRequest("GET", "/jcbase/debug/api/logs/api-test-1", nil)
 		w := httptest.NewRecorder()
 
 		// 执行请求
@@ -397,7 +397,7 @@ func TestControllerAPIHandlers(t *testing.T) {
 		dbg.RegisterRoutes(router)
 
 		// 创建测试请求
-		req := httptest.NewRequest("GET", "/jcbase/debugger/api/search?q=test&page=1&page_size=10", nil)
+		req := httptest.NewRequest("GET", "/jcbase/debug/api/search?q=test&page=1&page_size=10", nil)
 		w := httptest.NewRecorder()
 
 		// 执行请求
@@ -443,7 +443,7 @@ func TestControllerAPIHandlers(t *testing.T) {
 		dbg.RegisterRoutes(router)
 
 		// 创建测试请求（不存在的ID）
-		req := httptest.NewRequest("GET", "/jcbase/debugger/api/logs/non-existent-id", nil)
+		req := httptest.NewRequest("GET", "/jcbase/debug/api/logs/non-existent-id", nil)
 		w := httptest.NewRecorder()
 
 		// 执行请求
@@ -683,7 +683,7 @@ func TestControllerIntegration(t *testing.T) {
 		assert.Greater(t, total2, 0, "调试器存储中应该有日志记录")
 
 		// 访问调试器页面
-		resp, err = http.Get(server.URL + "/jcbase/debugger/")
+		resp, err = http.Get(server.URL + "/jcbase/debug/")
 		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 
