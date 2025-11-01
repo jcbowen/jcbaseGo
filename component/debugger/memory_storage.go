@@ -175,7 +175,7 @@ func (ms *MemoryStorage) filterEntry(entry *LogEntry, filters map[string]interfa
 			if entry.StatusCode != value {
 				return false
 			}
-		case "url_contains":
+		case "url":
 			if !strings.Contains(entry.URL, value.(string)) {
 				return false
 			}

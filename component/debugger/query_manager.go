@@ -198,7 +198,7 @@ func (qm *QueryManager) GetByStatusCode(statusCode int, page, pageSize int) (*Qu
 // GetByURL 根据URL查询日志（模糊匹配）
 func (qm *QueryManager) GetByURL(urlPattern string, page, pageSize int) (*QueryResult, error) {
 	filters := map[string]interface{}{
-		"url_contains": urlPattern,
+		"url": urlPattern,
 	}
 
 	options := QueryOptions{

@@ -241,7 +241,7 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 			db = db.Where("method = ?", value)
 		case "status_code":
 			db = db.Where("status_code = ?", value)
-		case "url_contains":
+		case "url":
 			db = db.Where("url LIKE ?", "%"+value.(string)+"%")
 		case "start_time":
 			db = db.Where("timestamp >= ?", value)

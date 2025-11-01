@@ -292,7 +292,7 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 			if entry.StatusCode != value {
 				return false
 			}
-		case "url_contains":
+		case "url":
 			if !strings.Contains(entry.URL, value.(string)) {
 				return false
 			}
