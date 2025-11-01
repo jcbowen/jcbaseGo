@@ -418,7 +418,6 @@ func GenerateID() string {
 	// 使用SM4加密原始ID，确保安全性和唯一性
 	sm4Instance := security.SM4{
 		Text:     originalID,
-		Mode:     "CBC",
 		Encoding: "RawURL", // 使用RawURL编码避免=字符
 	}
 
