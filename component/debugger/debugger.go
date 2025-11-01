@@ -3,10 +3,8 @@ package debugger
 import (
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -17,80 +15,6 @@ import (
 	"github.com/jcbowen/jcbaseGo/component/security"
 )
 
-// LogEntry 调试日志条目结构
-// 用于记录单个HTTP请求的完整调试信息
-type LogEntry struct {
-	ID         string        `json:"id"`          // 日志唯一标识
-	Timestamp  time.Time     `json:"timestamp"`   // 请求时间戳
-	Method     string        `json:"method"`      // HTTP方法
-	URL        string        `json:"url"`         // 请求URL
-	StatusCode int           `json:"status_code"` // HTTP状态码
-	Duration   time.Duration `json:"duration"`    // 处理耗时
-	ClientIP   string        `json:"client_ip"`   // 客户端IP
-	UserAgent  string        `json:"user_agent"`  // 用户代理
-	RequestID  string        `json:"request_id"`  // 请求ID（用于追踪）
-
-	// 请求信息
-	RequestHeaders map[string]string `json:"request_headers"` // 请求头
-	QueryParams    map[string]string `json:"query_params"`    // 查询参数
-	RequestBody    string            `json:"request_body"`    // 请求体内容
-
-	// 响应信息
-	ResponseHeaders map[string]string `json:"response_headers"` // 响应头
-	ResponseBody    string            `json:"response_body"`    // 响应体内容
-
-	// 会话数据（可选）
-	SessionData map[string]interface{} `json:"session_data,omitempty"` // 会话数据
-
-	// 错误信息
-	Error string `json:"error,omitempty"` // 错误信息
-
-	// Logger日志信息（新增）
-	LoggerLogs []LoggerLog `json:"logger_logs,omitempty"` // 通过logger记录的日志
-
-	// 存储大小（计算字段，不持久化到存储）
-	StorageSize string `json:"storage_size,omitempty"` // 存储大小（格式化显示）
-}
-
-// LoggerLog 记录通过logger打印的日志信息
-type LoggerLog struct {
-	Timestamp time.Time              `json:"timestamp"` // 日志时间戳
-	Level     string                 `json:"level"`     // 日志级别：debug/info/warn/error
-	Message   string                 `json:"message"`   // 日志消息
-	Fields    map[string]interface{} `json:"fields"`    // 日志附加字段
-}
-
-// Storage 存储接口定义
-// 支持多种存储方式：文件、内存、数据库
-type Storage interface {
-	// Save 保存日志条目
-	Save(entry *LogEntry) error
-
-	// FindByID 根据ID查找日志条目
-	FindByID(id string) (*LogEntry, error)
-
-	// FindAll 查找所有日志条目，支持分页和过滤
-	FindAll(page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error)
-
-	// Search 搜索日志内容
-	Search(keyword string, page, pageSize int) ([]*LogEntry, int, error)
-
-	// Cleanup 清理过期日志
-	Cleanup(before time.Time) error
-
-	// GetStats 获取统计信息
-	GetStats() (map[string]interface{}, error)
-
-	// GetMethods 获取HTTP方法统计
-	GetMethods() (map[string]int, error)
-
-	// GetStatusCodes 获取状态码统计
-	GetStatusCodes() (map[int]int, error)
-
-	// Close 关闭存储
-	Close() error
-}
-
 // 日志级别常量
 const (
 	LevelDebug = "debug" // 调试级别：记录所有详细信息
@@ -98,32 +22,6 @@ const (
 	LevelWarn  = "warn"  // 警告级别：记录警告信息
 	LevelError = "error" // 错误级别：记录错误信息
 )
-
-// Logger 日志记录器接口
-// 支持不同级别的日志记录，可以在控制器中直接使用
-type Logger interface {
-	// Debug 记录调试级别日志
-	Debug(msg string, fields ...map[string]interface{})
-
-	// Info 记录信息级别日志
-	Info(msg string, fields ...map[string]interface{})
-
-	// Warn 记录警告级别日志
-	Warn(msg string, fields ...map[string]interface{})
-
-	// Error 记录错误级别日志
-	Error(msg string, fields ...map[string]interface{})
-
-	// WithFields 创建带有字段的日志记录器
-	WithFields(fields map[string]interface{}) Logger
-}
-
-// DebugLogger 调试器内置的日志记录器实现
-type DebugLogger struct {
-	debugger *Debugger
-	fields   map[string]interface{}
-	logs     []LoggerLog // 存储收集的日志
-}
 
 // Config 调试器配置结构
 type Config struct {
@@ -141,8 +39,8 @@ type Config struct {
 	SampleRate float64 `json:"sample_rate" default:"1.0"` // 采样率（0-1之间），默认记录所有请求
 
 	// 核心组件配置 - 必须传入实例化的存储器
-	Storage Storage `json:"-"` // 存储实现（必须传入实例化的存储器）
-	Logger  Logger  `json:"-"` // 日志记录器（推荐直接传入实例化的日志记录器）
+	Storage Storage         `json:"-"` // 存储实现（必须传入实例化的存储器）
+	Logger  LoggerInterface `json:"-"` // 日志记录器（推荐直接传入实例化的日志记录器）
 }
 
 // Debugger 调试器主结构
@@ -150,7 +48,7 @@ type Debugger struct {
 	config     *Config
 	storage    Storage
 	controller *Controller
-	logger     Logger // 日志记录器实例
+	logger     LoggerInterface // 日志记录器实例
 }
 
 // New 创建新的调试器实例
@@ -384,6 +282,96 @@ func (d *Debugger) extractRequestBody(c *gin.Context) (string, error) {
 	return string(bodyBytes), nil
 }
 
+// responseWriter 自定义ResponseWriter用于捕获响应
+type responseWriter struct {
+	gin.ResponseWriter
+	body   *bytes.Buffer
+	status int
+}
+
+// Write 重写Write方法以捕获响应体
+func (w *responseWriter) Write(b []byte) (int, error) {
+	w.body.Write(b)
+	return w.ResponseWriter.Write(b)
+}
+
+// WriteHeader 重写WriteHeader方法以捕获状态码
+func (w *responseWriter) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// Status 获取状态码
+func (w *responseWriter) Status() int {
+	if w.status == 0 {
+		return http.StatusOK
+	}
+	return w.status
+}
+
+// GetStorage 获取存储实例（用于外部访问）
+func (d *Debugger) GetStorage() Storage {
+	return d.storage
+}
+
+// GetConfig 获取配置信息
+func (d *Debugger) GetConfig() *Config {
+	return d.config
+}
+
+// SetSessionData 设置会话数据（供外部调用）
+func (d *Debugger) SetSessionData(c *gin.Context, data map[string]interface{}) {
+	c.Set("session_data", data)
+}
+
+// GetLogger 获取调试器的日志记录器
+// 可以在控制器中通过此方法获取Logger实例来记录日志
+func (d *Debugger) GetLogger() LoggerInterface {
+	return d.logger
+}
+
+// GetLoggerWithFields 获取带有指定字段的日志记录器
+func (d *Debugger) GetLoggerWithFields(fields map[string]interface{}) LoggerInterface {
+	return d.logger.WithFields(fields)
+}
+
+// WithController 为调试器添加控制器支持
+// router: Gin引擎，用于注册调试器页面路由
+// config: 控制器配置（可选）
+func (d *Debugger) WithController(router *gin.Engine, config *ControllerConfig) *Debugger {
+	d.controller = NewController(d, router, config)
+	return d
+}
+
+// GetController 获取控制器实例
+func (d *Debugger) GetController() *Controller {
+	return d.controller
+}
+
+// RegisterRoutes 手动注册路由到指定的Gin引擎
+// 只支持 *gin.Engine 类型，使用更简洁
+func (d *Debugger) RegisterRoutes(router *gin.Engine) {
+	// 使用根路径创建路由组
+	if d.controller == nil {
+		d.controller = NewController(d, router, nil)
+	} else {
+		d.controller.RegisterRoutes(router)
+	}
+}
+
+// DefaultConfig 返回默认配置
+// 使用helper.CheckAndSetDefault方法设置默认值，符合jcbaseGo规范
+func DefaultConfig() *Config {
+	config := &Config{}
+
+	// 使用CheckAndSetDefault方法设置默认值
+	if err := helper.CheckAndSetDefault(config); err != nil {
+		panic(fmt.Sprintf("DefaultConfig failed: %v", err))
+	}
+
+	return config
+}
+
 // extractHeaders 提取HTTP头信息
 func extractHeaders(header http.Header) map[string]string {
 	result := make(map[string]string)
@@ -429,327 +417,6 @@ func GenerateID() string {
 	}
 
 	return encryptedID
-}
-
-// responseWriter 自定义ResponseWriter用于捕获响应
-type responseWriter struct {
-	gin.ResponseWriter
-	body   *bytes.Buffer
-	status int
-}
-
-// Write 重写Write方法以捕获响应体
-func (w *responseWriter) Write(b []byte) (int, error) {
-	w.body.Write(b)
-	return w.ResponseWriter.Write(b)
-}
-
-// WriteHeader 重写WriteHeader方法以捕获状态码
-func (w *responseWriter) WriteHeader(code int) {
-	w.status = code
-	w.ResponseWriter.WriteHeader(code)
-}
-
-// Status 获取状态码
-func (w *responseWriter) Status() int {
-	if w.status == 0 {
-		return http.StatusOK
-	}
-	return w.status
-}
-
-// GetStorage 获取存储实例（用于外部访问）
-func (d *Debugger) GetStorage() Storage {
-	return d.storage
-}
-
-// GetConfig 获取配置信息
-func (d *Debugger) GetConfig() *Config {
-	return d.config
-}
-
-// SetSessionData 设置会话数据（供外部调用）
-func (d *Debugger) SetSessionData(c *gin.Context, data map[string]interface{}) {
-	c.Set("session_data", data)
-}
-
-// DefaultConfig 返回默认配置
-// 使用helper.CheckAndSetDefault方法设置默认值，符合jcbaseGo规范
-func DefaultConfig() *Config {
-	config := &Config{}
-
-	// 使用CheckAndSetDefault方法设置默认值
-	if err := helper.CheckAndSetDefault(config); err != nil {
-		panic(fmt.Sprintf("DefaultConfig failed: %v", err))
-	}
-
-	return config
-}
-
-// JSONString 返回日志条目的JSON字符串表示
-func (e *LogEntry) JSONString() string {
-	data, _ := json.MarshalIndent(e, "", "  ")
-	return string(data)
-}
-
-// Summary 返回日志条目的摘要信息
-func (e *LogEntry) Summary() string {
-	return fmt.Sprintf("%s %s %d %s", e.Method, e.URL, e.StatusCode, e.Duration)
-}
-
-// CalculateStorageSize 计算日志条目的存储大小并格式化显示
-// 计算内容包括：基本字段、请求体、响应体、请求头、响应头、查询参数、会话数据等
-// 与总存储计算逻辑保持一致
-func (e *LogEntry) CalculateStorageSize() string {
-	totalSize := 0
-
-	// 计算基本字段大小（与总存储计算保持一致）
-	totalSize += len(e.ID) + len(e.URL) + len(e.Method) + len(e.ClientIP) + len(e.UserAgent) + len(e.RequestID)
-
-	// 计算请求体大小
-	totalSize += len(e.RequestBody)
-
-	// 计算响应体大小
-	totalSize += len(e.ResponseBody)
-
-	// 计算请求头大小
-	for key, value := range e.RequestHeaders {
-		totalSize += len(key) + len(value)
-	}
-
-	// 计算响应头大小
-	for key, value := range e.ResponseHeaders {
-		totalSize += len(key) + len(value)
-	}
-
-	// 计算查询参数大小
-	for key, value := range e.QueryParams {
-		totalSize += len(key) + len(value)
-	}
-
-	// 计算会话数据大小（JSON格式）
-	if e.SessionData != nil {
-		if sessionData, err := json.Marshal(e.SessionData); err == nil {
-			totalSize += len(sessionData)
-		}
-	}
-
-	// 计算错误信息大小
-	totalSize += len(e.Error)
-
-	// 计算Logger日志大小
-	for _, log := range e.LoggerLogs {
-		totalSize += len(log.Message)
-		if log.Fields != nil {
-			if fieldsData, err := json.Marshal(log.Fields); err == nil {
-				totalSize += len(fieldsData)
-			}
-		}
-	}
-
-	// 格式化显示
-	if totalSize < 1024 {
-		return fmt.Sprintf("%d B", totalSize)
-	} else if totalSize < 1024*1024 {
-		return fmt.Sprintf("%.2f KB", float64(totalSize)/1024)
-	} else {
-		return fmt.Sprintf("%.2f MB", float64(totalSize)/(1024*1024))
-	}
-}
-
-// DebugLogger 方法实现
-
-// Debug 记录调试级别日志
-func (l *DebugLogger) Debug(msg string, fields ...map[string]interface{}) {
-	l.log(LevelDebug, msg, fields...)
-}
-
-// Info 记录信息级别日志
-func (l *DebugLogger) Info(msg string, fields ...map[string]interface{}) {
-	l.log(LevelInfo, msg, fields...)
-}
-
-// Warn 记录警告级别日志
-func (l *DebugLogger) Warn(msg string, fields ...map[string]interface{}) {
-	l.log(LevelWarn, msg, fields...)
-}
-
-// Error 记录错误级别日志
-func (l *DebugLogger) Error(msg string, fields ...map[string]interface{}) {
-	l.log(LevelError, msg, fields...)
-}
-
-// WithFields 创建带有字段的日志记录器
-func (l *DebugLogger) WithFields(fields map[string]interface{}) Logger {
-	// 合并现有字段和新字段
-	newFields := make(map[string]interface{})
-	for k, v := range l.fields {
-		newFields[k] = v
-	}
-	for k, v := range fields {
-		newFields[k] = v
-	}
-
-	return &DebugLogger{
-		debugger: l.debugger,
-		fields:   newFields,
-		logs:     l.logs, // 继承父logger的日志
-	}
-}
-
-// log 内部日志记录方法
-func (l *DebugLogger) log(level, msg string, fields ...map[string]interface{}) {
-	// 检查日志级别是否启用
-	if !l.shouldLog(level) {
-		return
-	}
-
-	// 合并所有字段
-	allFields := make(map[string]interface{})
-
-	// 添加基础字段
-	allFields["level"] = level
-	allFields["message"] = msg
-	allFields["timestamp"] = time.Now().Format(time.RFC3339)
-
-	// 添加实例字段
-	for k, v := range l.fields {
-		allFields[k] = v
-	}
-
-	// 添加调用方传入的字段
-	if len(fields) > 0 {
-		for k, v := range fields[0] {
-			allFields[k] = v
-		}
-	}
-
-	// 收集日志信息到logs字段
-	loggerLog := LoggerLog{
-		Timestamp: time.Now(),
-		Level:     level,
-		Message:   msg,
-		Fields:    allFields,
-	}
-	l.logs = append(l.logs, loggerLog)
-
-	log.Println(msg)
-
-	// // 格式化日志输出
-	// logEntry := map[string]interface{}{
-	// 	"debug_log": allFields,
-	// }
-
-	// // 转换为JSON格式输出
-	// jsonData, err := json.Marshal(logEntry)
-	// if err != nil {
-	// 	// 如果JSON转换失败，使用简单格式输出
-	// 	log.Printf("[%s] %s: %s", level, time.Now().Format("2006-01-02 15:04:05"), msg)
-	// 	if len(l.fields) > 0 {
-	// 		log.Printf(" fields=%v", l.fields)
-	// 	}
-	// 	if len(fields) > 0 {
-	// 		log.Printf(" extra_fields=%v", fields[0])
-	// 	}
-	// 	return
-	// }
-
-	// log.Println(string(jsonData))
-}
-
-// shouldLog 检查是否应该记录指定级别的日志
-func (l *DebugLogger) shouldLog(level string) bool {
-	// 根据配置的日志级别决定是否记录
-	switch l.debugger.config.Level {
-	case LevelDebug:
-		// 调试级别记录所有日志
-		return true
-	case LevelInfo:
-		// 信息级别记录info、warn、error
-		return level == LevelInfo || level == LevelWarn || level == LevelError
-	case LevelWarn:
-		// 警告级别记录warn、error
-		return level == LevelWarn || level == LevelError
-	case LevelError:
-		// 错误级别只记录error
-		return level == LevelError
-	default:
-		// 默认记录所有日志
-		return true
-	}
-}
-
-// GetLogs 获取收集的日志信息
-func (l *DebugLogger) GetLogs() []LoggerLog {
-	return l.logs
-}
-
-// ClearLogs 清空收集的日志信息
-func (l *DebugLogger) ClearLogs() {
-	l.logs = []LoggerLog{}
-}
-
-// GetLogger 获取调试器的日志记录器
-// 可以在控制器中通过此方法获取Logger实例来记录日志
-func (d *Debugger) GetLogger() Logger {
-	return d.logger
-}
-
-// GetLoggerWithFields 获取带有指定字段的日志记录器
-func (d *Debugger) GetLoggerWithFields(fields map[string]interface{}) Logger {
-	return d.logger.WithFields(fields)
-}
-
-// GetLoggerFromContext 从Gin上下文中获取Logger实例
-// 控制器可以通过此函数获取Logger来记录日志
-func GetLoggerFromContext(c *gin.Context) Logger {
-	if logger, exists := c.Get("debugger_logger"); exists {
-		if l, ok := logger.(Logger); ok {
-			return l
-		}
-	}
-
-	// 如果上下文中没有Logger，创建一个默认的调试器实例
-	// 这种情况通常发生在调试器未启用或中间件未正确设置时
-	memoryStorage, _ := NewMemoryStorage(150)
-	config := &Config{
-		Enabled: true,
-		Storage: memoryStorage,
-		Level:   LevelDebug,
-	}
-	// 设置默认值
-	if err := helper.CheckAndSetDefault(config); err != nil {
-		fmt.Printf("设置默认值失败: %v\n", err)
-	}
-	debugger, _ := New(config)
-
-	return debugger.GetLogger().WithFields(map[string]interface{}{
-		"context_error": "logger_not_found_in_context",
-	})
-}
-
-// WithController 为调试器添加控制器支持
-// router: Gin引擎，用于注册调试器页面路由
-// config: 控制器配置（可选）
-func (d *Debugger) WithController(router *gin.Engine, config *ControllerConfig) *Debugger {
-	d.controller = NewController(d, router, config)
-	return d
-}
-
-// GetController 获取控制器实例
-func (d *Debugger) GetController() *Controller {
-	return d.controller
-}
-
-// RegisterRoutes 手动注册路由到指定的Gin引擎
-// 只支持 *gin.Engine 类型，使用更简洁
-func (d *Debugger) RegisterRoutes(router *gin.Engine) {
-	// 使用根路径创建路由组
-	if d.controller == nil {
-		d.controller = NewController(d, router, nil)
-	} else {
-		d.controller.RegisterRoutes(router)
-	}
 }
 
 // ==================== 便捷存储器构造函数 ====================
