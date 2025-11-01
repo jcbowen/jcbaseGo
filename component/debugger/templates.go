@@ -12,7 +12,7 @@ const indexTemplate = `<!DOCTYPE html>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
         .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
         .header h1 { color: #2c3e50; margin-bottom: 10px; font-size: 24px; word-break: break-word; }
         .header .stats { display: flex; gap: 20px; flex-wrap: wrap; }
@@ -21,7 +21,7 @@ const indexTemplate = `<!DOCTYPE html>
         .stat-item .value { font-size: 18px; font-weight: bold; color: #2c3e50; }
         
         .filters { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .filter-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+        .filter-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; align-items: end; }
         .filter-form input, .filter-form select { 
             padding: 10px 12px; 
             border: 1px solid #ddd; 
@@ -58,8 +58,8 @@ const indexTemplate = `<!DOCTYPE html>
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .table-content { min-width: 800px; }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(120px, 200px) 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 12px; font-weight: bold; font-size: 14px; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(120px, 200px) 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 12px; align-items: center; font-size: 14px; }
+        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 140px 100px 100px minmax(250px, 1fr); gap: 16px; font-weight: bold; font-size: 14px; }
+        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 140px 100px 100px minmax(250px, 1fr); gap: 16px; align-items: center; font-size: 14px; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
         .no-data-row { 
@@ -161,6 +161,29 @@ const indexTemplate = `<!DOCTYPE html>
                 padding: 4px 6px; 
                 min-width: 28px; 
                 font-size: 11px; 
+            }
+        }
+        
+        /* 超大屏幕优化 */
+        @media (min-width: 1600px) {
+            .container { max-width: 1800px; padding: 30px; }
+            .header { padding: 30px; }
+            .header h1 { font-size: 28px; }
+            .stat-item .value { font-size: 22px; }
+            .table-header, .log-row { 
+                grid-template-columns: minmax(160px, 250px) 180px 120px 140px 160px 120px 120px minmax(300px, 1fr); 
+                gap: 20px; 
+                font-size: 16px;
+            }
+            .log-row { padding: 20px; }
+            .filter-form { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+            .filter-form input, .filter-form select { 
+                padding: 12px 16px; 
+                font-size: 16px; 
+            }
+            .filter-form button { 
+                padding: 12px 24px; 
+                font-size: 16px; 
             }
         }
     </style>
