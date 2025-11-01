@@ -84,7 +84,7 @@ func New(config *Config) (*Debugger, error) {
 		d.logger = d.config.Logger
 	} else {
 		// 创建默认日志记录器
-		d.logger = &DebugLogger{
+		d.logger = &DefaultLogger{
 			debugger: d,
 			fields:   make(map[string]interface{}),
 		}
@@ -208,7 +208,7 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 
 		// 从上下文中获取logger并保存其收集的日志
 		if loggerValue, exists := c.Get("debugger_logger"); exists {
-			if logger, ok := loggerValue.(*DebugLogger); ok {
+			if logger, ok := loggerValue.(*DefaultLogger); ok {
 				// 获取logger收集的所有日志
 				entry.LoggerLogs = logger.GetLogs()
 				// 清空logger的日志记录，避免内存泄漏

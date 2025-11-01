@@ -29,37 +29,37 @@ type LoggerInterface interface {
 	WithFields(fields map[string]interface{}) LoggerInterface
 }
 
-// ----- DebugLogger 方法实现
+// ----- DefaultLogger 方法实现
 
-// DebugLogger 调试器内置的日志记录器实现
-type DebugLogger struct {
+// DefaultLogger 调试器内置的日志记录器实现（默认实现）
+type DefaultLogger struct {
 	debugger *Debugger
 	fields   map[string]interface{}
 	logs     []LoggerLog // 存储收集的日志
 }
 
 // Debug 记录调试级别日志
-func (l *DebugLogger) Debug(msg any, fields ...map[string]interface{}) {
+func (l *DefaultLogger) Debug(msg any, fields ...map[string]interface{}) {
 	l.log(LevelDebug, msg, fields...)
 }
 
 // Info 记录信息级别日志
-func (l *DebugLogger) Info(msg any, fields ...map[string]interface{}) {
+func (l *DefaultLogger) Info(msg any, fields ...map[string]interface{}) {
 	l.log(LevelInfo, msg, fields...)
 }
 
 // Warn 记录警告级别日志
-func (l *DebugLogger) Warn(msg any, fields ...map[string]interface{}) {
+func (l *DefaultLogger) Warn(msg any, fields ...map[string]interface{}) {
 	l.log(LevelWarn, msg, fields...)
 }
 
 // Error 记录错误级别日志
-func (l *DebugLogger) Error(msg any, fields ...map[string]interface{}) {
+func (l *DefaultLogger) Error(msg any, fields ...map[string]interface{}) {
 	l.log(LevelError, msg, fields...)
 }
 
 // WithFields 创建带有字段的日志记录器
-func (l *DebugLogger) WithFields(fields map[string]interface{}) LoggerInterface {
+func (l *DefaultLogger) WithFields(fields map[string]interface{}) LoggerInterface {
 	// 合并现有字段和新字段
 	newFields := make(map[string]interface{})
 	for k, v := range l.fields {
@@ -69,7 +69,7 @@ func (l *DebugLogger) WithFields(fields map[string]interface{}) LoggerInterface 
 		newFields[k] = v
 	}
 
-	return &DebugLogger{
+	return &DefaultLogger{
 		debugger: l.debugger,
 		fields:   newFields,
 		logs:     l.logs, // 继承父logger的日志
@@ -80,7 +80,7 @@ func (l *DebugLogger) WithFields(fields map[string]interface{}) LoggerInterface 
 // - level: 日志级别（debug/info/warn/error）
 // - msg: 日志消息（字符串、结构体、map、数组、实现了Stringer接口的类型等）
 // - fields: 可选的附加字段（键值对）
-func (l *DebugLogger) log(level string, msg any, fields ...map[string]interface{}) {
+func (l *DefaultLogger) log(level string, msg any, fields ...map[string]interface{}) {
 	// 检查日志级别是否启用
 	if !l.shouldLog(level) {
 		return
@@ -151,7 +151,7 @@ func (l *DebugLogger) log(level string, msg any, fields ...map[string]interface{
 }
 
 // shouldLog 检查是否应该记录指定级别的日志
-func (l *DebugLogger) shouldLog(level string) bool {
+func (l *DefaultLogger) shouldLog(level string) bool {
 	// 根据配置的日志级别决定是否记录
 	switch l.debugger.config.Level {
 	case LevelDebug:
@@ -173,12 +173,12 @@ func (l *DebugLogger) shouldLog(level string) bool {
 }
 
 // GetLogs 获取收集的日志信息
-func (l *DebugLogger) GetLogs() []LoggerLog {
+func (l *DefaultLogger) GetLogs() []LoggerLog {
 	return l.logs
 }
 
 // ClearLogs 清空收集的日志信息
-func (l *DebugLogger) ClearLogs() {
+func (l *DefaultLogger) ClearLogs() {
 	l.logs = []LoggerLog{}
 }
 
