@@ -35,6 +35,9 @@ type LoggerInterface interface {
 
 	// WithFields 创建带有字段的日志记录器
 	WithFields(fields map[string]interface{}) LoggerInterface
+
+	// GetLevel 获取当前日志记录器的日志级别
+	GetLevel() string
 }
 
 // ----- DefaultLogger 方法实现
@@ -42,6 +45,7 @@ type LoggerInterface interface {
 // DefaultLogger 调试器内置的日志记录器实现（默认实现）
 type DefaultLogger struct {
 	debugger *Debugger
+	level    string // 当前日志记录器的日志级别
 	fields   map[string]interface{}
 	logs     []LoggerLog // 存储收集的日志
 }
@@ -80,8 +84,14 @@ func (l *DefaultLogger) WithFields(fields map[string]interface{}) LoggerInterfac
 	return &DefaultLogger{
 		debugger: l.debugger,
 		fields:   newFields,
-		logs:     l.logs, // 继承父logger的日志
+		logs:     l.logs,  // 继承父logger的日志
+		level:    l.level, // 设置新的日志级别
 	}
+}
+
+// GetLevel 获取当前日志记录器的日志级别
+func (l *DefaultLogger) GetLevel() string {
+	return l.debugger.config.Level
 }
 
 // log 内部日志记录方法
@@ -161,7 +171,7 @@ func (l *DefaultLogger) log(level string, msg any, fields ...map[string]interfac
 // shouldLog 检查是否应该记录指定级别的日志
 func (l *DefaultLogger) shouldLog(level string) bool {
 	// 根据配置的日志级别决定是否记录
-	switch l.debugger.config.Level {
+	switch l.GetLevel() {
 	case LevelDebug:
 		// 调试级别记录所有日志
 		return true
