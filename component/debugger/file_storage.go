@@ -305,7 +305,7 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 				return false
 			}
 		case "client_ip":
-			if entry.ClientIP != value {
+			if entry.ClientIP != value && !strings.Contains(entry.ClientIP, value.(string)) && !strings.HasPrefix(entry.ClientIP, value.(string)) {
 				return false
 			}
 		case "has_error":

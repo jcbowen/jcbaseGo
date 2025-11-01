@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -128,11 +129,30 @@ func main() {
 		})
 	})
 
-	// 启动服务器
+	// 启动服务器（监听所有接口）
 	fmt.Println("启动调试器控制器示例服务器...")
 	fmt.Printf("调试器界面地址: http://localhost:8080%s\n", controllerConfig.BasePath)
+	fmt.Printf("网络访问地址: http://%s:8080%s\n", getLocalIP(), controllerConfig.BasePath)
 	fmt.Println("测试API地址: http://localhost:8080/")
 	fmt.Println("访问 http://localhost:8080/api/users 测试用户API")
 
-	r.Run(":8080")
+	r.Run("0.0.0.0:8080")
+}
+
+// getLocalIP 获取本地IP地址
+func getLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "localhost"
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+
+	return "localhost"
 }

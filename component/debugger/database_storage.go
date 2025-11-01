@@ -248,7 +248,7 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 		case "end_time":
 			db = db.Where("timestamp <= ?", value)
 		case "client_ip":
-			db = db.Where("client_ip = ?", value)
+			db = db.Where("client_ip LIKE ?", "%"+value.(string)+"%")
 		case "has_error":
 			if value.(bool) {
 				db = db.Where("error != ''")

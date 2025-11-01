@@ -357,6 +357,11 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 		}
 	}
 
+	// IP地址过滤
+	if ip := ctx.Query("client_ip"); ip != "" {
+		filters["client_ip"] = ip
+	}
+
 	// 时间范围过滤
 	if startTime := ctx.Query("start_time"); startTime != "" {
 		filters["start_time"] = startTime

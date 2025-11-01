@@ -204,7 +204,22 @@ const indexTemplate = `<!DOCTYPE html>
                     <option value="PUT" {{if eq .Filters.method "PUT"}}selected{{end}}>PUT</option>
                     <option value="DELETE" {{if eq .Filters.method "DELETE"}}selected{{end}}>DELETE</option>
                 </select>
-                <input type="number" name="status_code" placeholder="状态码" value="{{.Filters.status_code}}">
+                <select name="status_code">
+                    <option value="">所有状态码</option>
+                    <option value="200" {{if eq .Filters.status_code "200"}}selected{{end}}>200 - 成功</option>
+                    <option value="201" {{if eq .Filters.status_code "201"}}selected{{end}}>201 - 已创建</option>
+                    <option value="204" {{if eq .Filters.status_code "204"}}selected{{end}}>204 - 无内容</option>
+                    <option value="301" {{if eq .Filters.status_code "301"}}selected{{end}}>301 - 永久重定向</option>
+                    <option value="302" {{if eq .Filters.status_code "302"}}selected{{end}}>302 - 临时重定向</option>
+                    <option value="400" {{if eq .Filters.status_code "400"}}selected{{end}}>400 - 错误请求</option>
+                    <option value="401" {{if eq .Filters.status_code "401"}}selected{{end}}>401 - 未授权</option>
+                    <option value="403" {{if eq .Filters.status_code "403"}}selected{{end}}>403 - 禁止访问</option>
+                    <option value="404" {{if eq .Filters.status_code "404"}}selected{{end}}>404 - 未找到</option>
+                    <option value="500" {{if eq .Filters.status_code "500"}}selected{{end}}>500 - 服务器错误</option>
+                    <option value="502" {{if eq .Filters.status_code "502"}}selected{{end}}>502 - 网关错误</option>
+                    <option value="503" {{if eq .Filters.status_code "503"}}selected{{end}}>503 - 服务不可用</option>
+                </select>
+                <input type="text" name="client_ip" placeholder="IP地址" value="{{.Filters.client_ip}}">
                 <input type="text" name="url" placeholder="URL包含" value="{{.Filters.url}}">
                 <button type="submit">筛选</button>
                 <a href="{{.BasePath}}/list" style="margin-left: auto;">清除筛选</a>
@@ -248,7 +263,7 @@ const indexTemplate = `<!DOCTYPE html>
         {{if .Pagination}}
         <div class="pagination">
             {{if .Pagination.HasPrev}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">上一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">上一页</a>
             {{else}}
             <span class="disabled">上一页</span>
             {{end}}
@@ -267,13 +282,13 @@ const indexTemplate = `<!DOCTYPE html>
                 {{if eq $i $page}}
                 <span class="current">{{$i}}</span>
                 {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
                 {{end}}
                 {{end}}
             {{else}}
                 {{/* 总页数大于7时，使用智能分页 */}}
                 {{if gt $page 4}}
-                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">1</a>
+                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">1</a>
                     {{if gt $page 5}}
                     <span class="ellipsis">...</span>
                     {{end}}
@@ -294,7 +309,7 @@ const indexTemplate = `<!DOCTYPE html>
                 {{if eq $i $page}}
                 <span class="current">{{$i}}</span>
                 {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
                 {{end}}
                 {{end}}
                 
@@ -303,13 +318,13 @@ const indexTemplate = `<!DOCTYPE html>
                         {{if lt $page (sub $totalPages 4)}}
                         <span class="ellipsis">...</span>
                         {{end}}
-                        <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$totalPages}}</a>
+                        <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$totalPages}}</a>
                     {{end}}
                 {{end}}
             {{end}}
             
             {{if .Pagination.HasNext}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">下一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">下一页</a>
             {{else}}
             <span class="disabled">下一页</span>
             {{end}}

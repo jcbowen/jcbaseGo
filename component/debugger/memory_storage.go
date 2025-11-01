@@ -188,7 +188,7 @@ func (ms *MemoryStorage) filterEntry(entry *LogEntry, filters map[string]interfa
 				return false
 			}
 		case "client_ip":
-			if entry.ClientIP != value {
+			if !strings.Contains(entry.ClientIP, value.(string)) {
 				return false
 			}
 		case "has_error":
