@@ -16,6 +16,8 @@
 - **🔗 TLS 配置**: 完整的 TLS/SSL 证书管理
 - **🐘 PHP 集成**: 内置 PHP 解释器，支持混合开发
 - **🔗 中间件支持**: 跨域(CORS)、真实IP获取、请求参数解析(支持 JSON、表单、multipart、XML 格式)
+- **🔍 HTTP调试工具**: Gin框架HTTP请求调试，支持多存储方式、日志查询、全文搜索
+- **💬 消息提示组件**: 消息渲染和快捷函数，支持配置管理和模板应用
 
 ## 📦 安装
 
@@ -66,16 +68,27 @@ jcbaseGo/
 │   │       ├── oss.go          # 阿里云 OSS 存储
 │   │       ├── sftp.go         # SFTP 安全传输
 │   │       └── remote.go       # 远程存储接口定义
+│   ├── command/                # 💻 命令行工具
+│   │   └── main.go             # 命令执行封装
+│   ├── debugger/               # 🔍 HTTP请求调试工具
+│   │   ├── controller.go       # 调试控制器
+│   │   ├── storage.go          # 存储实现
+│   │   ├── debugger.go         # 调试器主文件
+│   │   ├── README.md           # 调试器文档
+│   │   └── 18个相关文件        # 完整的调试功能实现
 │   ├── helper/                 # 🛠️ 工具函数集合
 │   │   ├── convert.go          # 类型转换工具
 │   │   ├── file.go             # 文件操作工具
 │   │   ├── json.go             # JSON 处理工具
 │   │   ├── money.go            # 金额处理工具
-│   │   ├── ssh.go              # SSH 连接工具
 │   │   ├── string.go           # 字符串处理工具
 │   │   └── util.go             # 通用工具函数
 │   ├── mailer/                 # 📧 邮件发送组件
 │   │   └── mailer.go           # SMTP 邮件服务
+│   ├── message/                # 💬 消息提示组件
+│   │   ├── config.go           # 配置管理器
+│   │   ├── message.go          # 消息提示组件
+│   │   └── renderer.go         # 消息渲染
 │   ├── orm/                    # 🗄️ 数据库 ORM 抽象层
 │   │   ├── instance.go         # 数据库实例接口
 │   │   ├── base/               # 基础模型定义
@@ -98,6 +111,7 @@ jcbaseGo/
 │   │   ├── password.go         # 密码哈希处理
 │   │   ├── safe.go             # 安全验证工具
 │   │   └── sm4.go              # SM4 国密算法
+│   ├── tlsconfig.go            # 🔒 TLS 配置管理读取
 │   ├── trait/                  # 🎭 Trait 模式实现
 │   │   ├── controller/         # 控制器基础功能
 │   │   │   └── controller.go   # 控制器基类
@@ -112,8 +126,6 @@ jcbaseGo/
 │   │       ├── set-value.go    # 字段值设置
 │   │       ├── update.go       # 更新操作
 │   │       └── ReadMe.md       # CRUD 使用文档
-│   ├── tlsconfig/              # 🔒 TLS 配置管理
-│   │   └── tlsconfig.go        # TLS 证书配置
 │   ├── upgrade/                # 🔄 代码升级工具
 │   │   └── main.go             # Git 自动升级
 │   └── validator/              # ✅ 数据验证组件
@@ -746,6 +758,194 @@ func main() {
         panic(err)
     }
     fmt.Printf("PHP 数组处理结果: %s\n", result)
+}
+```
+
+### 9. 命令行工具
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo/component/command"
+)
+
+func main() {
+    // 执行简单的系统命令
+    output, err := command.Run("ls", "-la")
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("目录列表:\n%s\n", output)
+
+    // 执行带路径切换的命令
+    output, err = command.Run("cd /tmp && pwd")
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("当前路径: %s\n", output)
+
+    // 执行 Git 命令
+    output, err = command.Run("git", "status")
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("Git 状态:\n%s\n", output)
+
+    // 执行带参数的命令
+    output, err = command.Run("echo", "Hello, jcbaseGo!")
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("命令输出: %s\n", output)
+
+    // 批量执行命令
+    commands := []string{
+        "pwd",
+        "whoami",
+        "date",
+    }
+
+    for _, cmd := range commands {
+        output, err := command.Run(cmd)
+        if err != nil {
+            fmt.Printf("命令 %s 执行失败: %v\n", cmd, err)
+            continue
+        }
+        fmt.Printf("%s 输出: %s\n", cmd, output)
+    }
+}
+```
+
+### 10. HTTP 调试工具
+
+```go
+package main
+
+import (
+    "github.com/gin-gonic/gin"
+    "github.com/jcbowen/jcbaseGo/component/debugger"
+)
+
+func main() {
+    r := gin.Default()
+
+    // 使用默认配置启用调试器
+    debugMiddleware := debugger.New()
+    r.Use(debugMiddleware)
+
+    // 或者使用自定义配置
+    config := debugger.Config{
+        Enable:      true,
+        StorageType: "memory", // 支持 memory, file, redis
+        LogLevel:    "info",   // debug, info, warn, error
+    }
+    
+    customDebugMiddleware := debugger.NewWithConfig(config)
+    r.Use(customDebugMiddleware)
+
+    // 添加测试路由
+    r.GET("/api/users", func(c *gin.Context) {
+        c.JSON(200, gin.H{
+            "users": []map[string]interface{}{
+                {"id": 1, "name": "张三"},
+                {"id": 2, "name": "李四"},
+            },
+        })
+    })
+
+    r.POST("/api/users", func(c *gin.Context) {
+        var user struct {
+            Name  string `json:"name"`
+            Email string `json:"email"`
+        }
+        
+        if err := c.ShouldBindJSON(&user); err != nil {
+            c.JSON(400, gin.H{"error": err.Error()})
+            return
+        }
+        
+        c.JSON(201, gin.H{
+            "message": "用户创建成功",
+            "user": user,
+        })
+    })
+
+    // 启动服务器
+    r.Run(":8080")
+}
+```
+
+### 11. 消息提示组件
+
+```go
+package main
+
+import (
+    "github.com/gin-gonic/gin"
+    "github.com/jcbowen/jcbaseGo/component/message"
+)
+
+func main() {
+    r := gin.Default()
+
+    // 设置消息模板路径
+    message.SetTemplatePath("./templates/message.html")
+
+    r.GET("/success", func(c *gin.Context) {
+        // 成功消息
+        message.Success(c, "操作成功", "您的请求已成功处理")
+    })
+
+    r.GET("/error", func(c *gin.Context) {
+        // 错误消息
+        message.Error(c, "操作失败", "请检查输入参数")
+    })
+
+    r.GET("/info", func(c *gin.Context) {
+        // 信息消息
+        message.Info(c, "系统提示", "新版本即将发布")
+    })
+
+    r.GET("/warning", func(c *gin.Context) {
+        // 警告消息
+        message.Warning(c, "注意安全", "请及时修改密码")
+    })
+
+    r.GET("/custom", func(c *gin.Context) {
+        // 自定义消息
+        msg := message.Data{
+            Title:   "自定义标题",
+            Content: "自定义内容",
+            Type:    "custom",
+            Options: map[string]interface{}{
+                "autoRedirect": true,
+                "redirectUrl":  "/home",
+                "waitTime":     3,
+            },
+        }
+        message.Render(c, msg)
+    })
+
+    // API 响应格式
+    r.GET("/api/success", func(c *gin.Context) {
+        // JSON 格式的成功响应
+        message.ApiSuccess(c, "操作成功", map[string]interface{}{
+            "user": map[string]string{
+                "name":  "张三",
+                "email": "zhangsan@example.com",
+            },
+        })
+    })
+
+    r.GET("/api/error", func(c *gin.Context) {
+        // JSON 格式的错误响应
+        message.ApiError(c, "参数错误", 400)
+    })
+
+    // 启动服务器
+    r.Run(":8080")
 }
 ```
 
@@ -1401,12 +1601,25 @@ docs(README): 更新 CRUD 使用文档
 
 ## 🙏 致谢
 
-感谢以下开源项目和贡献者：
+感谢以下开源项目和贡献者为本项目提供的支持和灵感：
 
-- [GORM](https://gorm.io) - 优秀的 Go ORM 库
-- [Gin](https://gin-gonic.com) - 高性能的 Go Web 框架
-- [Redis](https://redis.io) - 内存数据结构存储
-- 所有为本项目做出贡献的开发者
+### 核心依赖
+- [GORM](https://gorm.io) - 优秀的 Go ORM 库，提供强大的数据库操作能力
+- [Gin](https://gin-gonic.com) - 高性能的 Go Web 框架，支撑 HTTP 调试工具
+- [Redis](https://redis.io) - 内存数据结构存储，提供缓存功能支持
+- [Go-Redis](https://github.com/redis/go-redis) - Redis 客户端库
+- [Golang SM4](https://github.com/tjfoc/gmsm) - 国密 SM4 算法实现
+
+### 工具和组件
+- [Cobra](https://github.com/spf13/cobra) - 命令行工具框架
+- [Viper](https://github.com/spf13/viper) - 配置管理工具
+- [Testify](https://github.com/stretchr/testify) - 测试工具集
+- [Go-Mail](https://github.com/go-mail/mail) - 邮件发送功能
+
+### 特别感谢
+- 所有为本项目提交 Issue、PR 和提供建议的开发者
+- 使用本项目的用户和社区成员
+- 开源社区的持续支持和贡献
 
 ## 🌟 支持项目
 
