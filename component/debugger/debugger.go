@@ -633,26 +633,28 @@ func (l *DebugLogger) log(level, msg string, fields ...map[string]interface{}) {
 	}
 	l.logs = append(l.logs, loggerLog)
 
-	// 格式化日志输出
-	logEntry := map[string]interface{}{
-		"debug_log": allFields,
-	}
+	log.Println(msg)
 
-	// 转换为JSON格式输出
-	jsonData, err := json.Marshal(logEntry)
-	if err != nil {
-		// 如果JSON转换失败，使用简单格式输出
-		log.Printf("[%s] %s: %s", level, time.Now().Format("2006-01-02 15:04:05"), msg)
-		if len(l.fields) > 0 {
-			log.Printf(" fields=%v", l.fields)
-		}
-		if len(fields) > 0 {
-			log.Printf(" extra_fields=%v", fields[0])
-		}
-		return
-	}
+	// // 格式化日志输出
+	// logEntry := map[string]interface{}{
+	// 	"debug_log": allFields,
+	// }
 
-	log.Println(string(jsonData))
+	// // 转换为JSON格式输出
+	// jsonData, err := json.Marshal(logEntry)
+	// if err != nil {
+	// 	// 如果JSON转换失败，使用简单格式输出
+	// 	log.Printf("[%s] %s: %s", level, time.Now().Format("2006-01-02 15:04:05"), msg)
+	// 	if len(l.fields) > 0 {
+	// 		log.Printf(" fields=%v", l.fields)
+	// 	}
+	// 	if len(fields) > 0 {
+	// 		log.Printf(" extra_fields=%v", fields[0])
+	// 	}
+	// 	return
+	// }
+
+	// log.Println(string(jsonData))
 }
 
 // shouldLog 检查是否应该记录指定级别的日志
