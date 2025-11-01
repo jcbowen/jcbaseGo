@@ -8,11 +8,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
+	"github.com/jcbowen/jcbaseGo/component/security"
 )
 
 // LogEntry 调试日志条目结构
@@ -220,7 +222,7 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 
 		// 创建日志条目
 		entry := &LogEntry{
-			ID:             generateID(),
+			ID:             GenerateID(),
 			Timestamp:      startTime,
 			Method:         c.Request.Method,
 			URL:            c.Request.URL.String(),
@@ -400,9 +402,36 @@ func extractQueryParams(values map[string][]string) map[string]string {
 	return result
 }
 
-// generateID 生成唯一标识
-func generateID() string {
-	return fmt.Sprintf("debug_%d_%d", time.Now().UnixNano(), time.Now().Unix())
+// GenerateID 生成唯一请求标识
+// 使用纳秒时间戳和进程ID确保唯一性，经过SM4加密后输出，密文结果不包含=字符
+func GenerateID() string {
+	// 使用纳秒时间戳的后8位作为基础
+	timestamp := time.Now().UnixNano()
+	idSuffix := timestamp % 100000000
+
+	// 添加进程ID的后2位作为额外标识，避免高并发下的重复
+	pid := os.Getpid() % 100
+
+	// 组合格式：d_时间戳后8位_进程ID后2位
+	originalID := fmt.Sprintf("d_%d_%02d", idSuffix, pid)
+
+	// 使用SM4加密原始ID，确保安全性和唯一性
+	sm4Instance := security.SM4{
+		Text:     originalID,
+		Key:      "jcbase.debug.key", // 16字节密钥
+		Iv:       "jcbase.debug.iv_", // 16字节初始化向量
+		Mode:     "CBC",
+		Encoding: "RawURL", // 使用RawURL编码避免=字符
+	}
+
+	var encryptedID string
+	err := sm4Instance.Encrypt(&encryptedID)
+	if err != nil {
+		// 如果加密失败，返回原始ID作为降级方案
+		return originalID
+	}
+
+	return encryptedID
 }
 
 // responseWriter 自定义ResponseWriter用于捕获响应

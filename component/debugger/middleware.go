@@ -40,7 +40,7 @@ func (m *Middleware) Handler() gin.HandlerFunc {
 
 		// 创建日志条目
 		entry := &LogEntry{
-			ID:        generateID(),
+			ID:        GenerateID(),
 			Timestamp: time.Now(),
 			Method:    c.Request.Method,
 			URL:       c.Request.URL.String(),
@@ -287,7 +287,7 @@ func RequestLogger(storage Storage) gin.HandlerFunc {
 
 		// 创建简化的日志条目
 		entry := &LogEntry{
-			ID:         generateID(),
+			ID:         GenerateID(),
 			Timestamp:  startTime,
 			Method:     c.Request.Method,
 			URL:        c.Request.URL.String(),
