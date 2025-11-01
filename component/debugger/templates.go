@@ -58,10 +58,12 @@ const indexTemplate = `<!DOCTYPE html>
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .table-content { min-width: 800px; }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px minmax(250px, 1fr) 80px 90px 100px 100px; gap: 12px; font-weight: bold; font-size: 14px; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px minmax(250px, 1fr) 80px 90px 100px 100px; gap: 12px; align-items: center; font-size: 14px; }
+        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 12px; font-weight: bold; font-size: 14px; }
+        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 12px; align-items: center; font-size: 14px; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
+        .request-id a { color: #3498db; text-decoration: none; font-weight: 600; }
+        .request-id a:hover { text-decoration: underline; }
         .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
         .method { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
         .method-get { background: #d4edda; color: #155724; }
@@ -74,6 +76,8 @@ const indexTemplate = `<!DOCTYPE html>
         .status-4xx { background: #f8d7da; color: #721c24; }
         .status-5xx { background: #f5c6cb; color: #721c24; }
         .duration { color: #666; font-size: 12px; }
+        .request-id a { color: #3498db; text-decoration: none; font-weight: 600; }
+        .request-id a:hover { text-decoration: underline; }
         .actions a { color: #3498db; text-decoration: none; margin-right: 10px; }
         .actions a:hover { text-decoration: underline; }
         
@@ -115,9 +119,9 @@ const indexTemplate = `<!DOCTYPE html>
             .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
             .table-content { min-width: 600px; }
             .table-header, .log-row { 
-                grid-template-columns: 100px minmax(150px, 1fr) 70px 80px 90px 90px; 
-                gap: 8px; 
-                font-size: 12px; 
+                grid-template-columns: 80px 100px 60px 80px 90px 60px 60px minmax(120px, 1fr); 
+                gap: 6px; 
+                font-size: 11px; 
             }
             .log-row { padding: 10px; }
             .method, .status-code { font-size: 10px; padding: 3px 6px; }
@@ -136,8 +140,8 @@ const indexTemplate = `<!DOCTYPE html>
         @media (max-width: 480px) {
             .table-content { min-width: 500px; }
             .table-header, .log-row { 
-                grid-template-columns: 90px minmax(120px, 1fr) 60px 70px 80px 80px; 
-                gap: 6px; 
+                grid-template-columns: 70px 80px 50px 70px 80px 50px 50px minmax(100px, 1fr); 
+                gap: 4px; 
             }
             .log-row { padding: 8px; }
             .header { padding: 12px; }
@@ -209,25 +213,26 @@ const indexTemplate = `<!DOCTYPE html>
             <div class="table-container">
                 <div class="table-content">
                     <div class="table-header">
+                        <div>请求Id</div>
                         <div>时间</div>
-                        <div>URL</div>
-                        <div>方法</div>
-                        <div>状态码</div>
                         <div>耗时</div>
-                        <div>操作</div>
+                        <div>存储大小</div>
+                        <div>IP</div>
+                        <div>方法</div>
+                        <div>状态</div>
+                        <div>URL</div>
                     </div>
                     
                     {{range .Entries}}
                     <div class="log-row">
+                        <div class="request-id"><a href="{{$.BasePath}}/detail/{{.ID}}" title="查看详情">{{.ID}}</a></div>
                         <div class="timestamp">{{.Timestamp.Format "2006-01-02 15:04:05"}}</div>
-                        <div class="url" title="{{.URL}}">{{.URL}}</div>
+                        <div class="duration">{{.Duration.Milliseconds}}ms</div>
+                        <div class="storage-size">{{.StorageSize}}</div>
+                        <div class="client-ip">{{.ClientIP}}</div>
                         <div class="method method-{{lower .Method}}">{{.Method}}</div>
                         <div class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.StatusCode}}</div>
-                        <div class="duration">{{.Duration.Milliseconds}}ms</div>
-                        <div class="actions">
-                            <a href="{{$.BasePath}}/detail/{{.ID}}">详情</a>
-                            <a href="{{$.BasePath}}/api/logs/{{.ID}}" target="_blank">JSON</a>
-                        </div>
+                        <div class="url" title="{{.URL}}">{{.URL}}</div>
                     </div>
                     {{else}}
                     <div class="log-row" style="text-align: center; padding: 40px;">
@@ -397,6 +402,23 @@ const detailTemplate = `<!DOCTYPE html>
         .header h1 { color: #2c3e50; margin-bottom: 10px; word-break: break-word; }
         .back-link { color: #3498db; text-decoration: none; margin-bottom: 10px; display: inline-block; }
         .back-link:hover { text-decoration: underline; }
+        
+        .json-view-link { 
+            color: #27ae60; 
+            text-decoration: none; 
+            font-size: 14px; 
+            font-weight: normal; 
+            margin-left: 10px; 
+            padding: 2px 6px; 
+            border: 1px solid #27ae60; 
+            border-radius: 3px; 
+            background: #f8fff9;
+        }
+        .json-view-link:hover { 
+            background: #27ae60; 
+            color: white; 
+            text-decoration: none; 
+        }
         
         .detail-sections { display: flex; flex-direction: column; gap: 20px; }
         .section { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -593,7 +615,7 @@ const detailTemplate = `<!DOCTYPE html>
         <a href="{{.BasePath}}/list" class="back-link" id="fallback-link" style="display: none;">← 返回日志列表</a>
         
         <div class="header">
-            <h1>{{.Title}}</h1>
+            <h1>{{.Title}} <a href="{{.BasePath}}/api/logs/{{.Entry.ID}}" target="_blank" class="json-view-link" title="查看JSON数据">[JSON]</a></h1>
         </div>
         
         {{if .Entry}}
@@ -802,8 +824,8 @@ const searchTemplate = `<!DOCTYPE html>
         .search-box button { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
         
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px minmax(200px, 1fr) 80px 100px 120px 100px; gap: 10px; font-weight: bold; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 100px minmax(200px, 1fr) 80px 100px 120px 100px; gap: 10px; align-items: center; }
+        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 10px; font-weight: bold; }
+        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 120px 140px 80px 100px 120px 80px 80px minmax(200px, 1fr); gap: 10px; align-items: center; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
         .method { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
@@ -855,25 +877,26 @@ const searchTemplate = `<!DOCTYPE html>
         
         <div class="logs-table">
             <div class="table-header">
+                <div>请求Id</div>
                 <div>时间</div>
-                <div>URL</div>
-                <div>方法</div>
-                <div>状态码</div>
                 <div>耗时</div>
-                <div>操作</div>
+                <div>存储大小</div>
+                <div>IP</div>
+                <div>方法</div>
+                <div>状态</div>
+                <div>URL</div>
             </div>
             
             {{range .Entries}}
             <div class="log-row">
+                <div class="request-id"><a href="{{$.BasePath}}/detail/{{.ID}}" title="查看详情">{{.ID}}</a></div>
                 <div class="timestamp">{{.Timestamp.Format "2006-01-02 15:04:05"}}</div>
-                <div class="url" title="{{.URL}}">{{.URL}}</div>
+                <div class="duration">{{.Duration.Milliseconds}}ms</div>
+                <div class="storage-size">{{.StorageSize}}</div>
+                <div class="client-ip">{{.ClientIP}}</div>
                 <div class="method method-{{lower .Method}}">{{.Method}}</div>
                 <div class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.StatusCode}}</div>
-                <div class="duration">{{.Duration.Milliseconds}}ms</div>
-                <div class="actions">
-                    <a href="{{$.BasePath}}/detail/{{.ID}}">详情</a>
-                    <a href="{{$.BasePath}}/api/logs/{{.ID}}" target="_blank">JSON</a>
-                </div>
+                <div class="url" title="{{.URL}}">{{.URL}}</div>
             </div>
             {{else}}
             {{if .Keyword}}

@@ -135,6 +135,9 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 	// 获取统计信息
 	stats, _ := c.debugger.GetStorage().GetStats()
 
+	// 计算每个日志条目的存储大小
+	c.calculateEntriesStorageSize(entries)
+
 	// 渲染页面
 	c.renderTemplate(ctx, "index.html", gin.H{
 		"Title":      "调试器 - 日志列表",
@@ -180,6 +183,9 @@ func (c *Controller) detailHandler(ctx *gin.Context) {
 		return
 	}
 
+	// 计算日志条目的存储大小
+	entry.StorageSize = entry.CalculateStorageSize()
+
 	// 渲染详情页面
 	c.renderTemplate(ctx, "detail.html", gin.H{
 		"Title":    "日志详情 - " + entry.ID,
@@ -213,6 +219,9 @@ func (c *Controller) searchHandler(ctx *gin.Context) {
 
 	// 计算分页信息
 	pagination := c.calculatePagination(page, pageSize, total)
+
+	// 计算每个日志条目的存储大小
+	c.calculateEntriesStorageSize(entries)
 
 	// 渲染搜索页面
 	c.renderTemplate(ctx, "search.html", gin.H{
@@ -513,4 +522,12 @@ func (c *Controller) SetBasePath(path string) {
 // GetDebugger 获取调试器实例
 func (c *Controller) GetDebugger() *Debugger {
 	return c.debugger
+}
+
+// calculateEntriesStorageSize 计算日志条目列表的存储大小
+// 遍历所有日志条目，为每个条目计算并设置StorageSize字段
+func (c *Controller) calculateEntriesStorageSize(entries []*LogEntry) {
+	for _, entry := range entries {
+		entry.StorageSize = entry.CalculateStorageSize()
+	}
 }

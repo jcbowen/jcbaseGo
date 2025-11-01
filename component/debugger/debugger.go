@@ -45,6 +45,9 @@ type LogEntry struct {
 
 	// Logger日志信息（新增）
 	LoggerLogs []LoggerLog `json:"logger_logs,omitempty"` // 通过logger记录的日志
+
+	// 存储大小（计算字段，不持久化到存储）
+	StorageSize string `json:"storage_size,omitempty"` // 存储大小（格式化显示）
 }
 
 // LoggerLog 记录通过logger打印的日志信息
@@ -468,6 +471,62 @@ func (e *LogEntry) JSONString() string {
 // Summary 返回日志条目的摘要信息
 func (e *LogEntry) Summary() string {
 	return fmt.Sprintf("%s %s %d %s", e.Method, e.URL, e.StatusCode, e.Duration)
+}
+
+// CalculateStorageSize 计算日志条目的存储大小并格式化显示
+// 计算内容包括：请求体、响应体、请求头、响应头、查询参数、会话数据等
+func (e *LogEntry) CalculateStorageSize() string {
+	totalSize := 0
+
+	// 计算请求体大小
+	totalSize += len(e.RequestBody)
+
+	// 计算响应体大小
+	totalSize += len(e.ResponseBody)
+
+	// 计算请求头大小
+	for key, value := range e.RequestHeaders {
+		totalSize += len(key) + len(value)
+	}
+
+	// 计算响应头大小
+	for key, value := range e.ResponseHeaders {
+		totalSize += len(key) + len(value)
+	}
+
+	// 计算查询参数大小
+	for key, value := range e.QueryParams {
+		totalSize += len(key) + len(value)
+	}
+
+	// 计算会话数据大小（JSON格式）
+	if e.SessionData != nil {
+		if sessionData, err := json.Marshal(e.SessionData); err == nil {
+			totalSize += len(sessionData)
+		}
+	}
+
+	// 计算错误信息大小
+	totalSize += len(e.Error)
+
+	// 计算Logger日志大小
+	for _, log := range e.LoggerLogs {
+		totalSize += len(log.Message)
+		if log.Fields != nil {
+			if fieldsData, err := json.Marshal(log.Fields); err == nil {
+				totalSize += len(fieldsData)
+			}
+		}
+	}
+
+	// 格式化显示
+	if totalSize < 1024 {
+		return fmt.Sprintf("%d B", totalSize)
+	} else if totalSize < 1024*1024 {
+		return fmt.Sprintf("%.2f KB", float64(totalSize)/1024)
+	} else {
+		return fmt.Sprintf("%.2f MB", float64(totalSize)/(1024*1024))
+	}
 }
 
 // DebugLogger 方法实现
