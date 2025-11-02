@@ -1112,7 +1112,7 @@ databaseStorage, err := debugger.NewDatabaseStorage(db, "debug_logs")
 // 推荐使用便捷构造函数直接创建调试器
 dbg, err := debugger.NewWithMemoryStorage(1000)  // 内存存储
 dbg, err := debugger.NewWithFileStorage("/var/log/debug_logs", 5000)  // 文件存储
-dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs", 1000)  // 生产环境配置
+dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs")  // 生产环境配置
 ```
 
 ## 性能优化建议
@@ -1223,16 +1223,16 @@ type LogEntry struct {
 #### Config
 ```go
 type Config struct {
-	Enabled         bool          // 是否启用调试器
-	Storage         Storage       // 存储器实例
-	MaxBodySize     int64         // 最大请求/响应体大小（KB）
-	RetentionPeriod time.Duration // 日志保留期限
-	Level           LogLevel      // 日志级别
-	MaxRecords      int           // 最大记录数量
-	SkipPaths       []string      // 跳过的路径
-	SkipMethods     []string      // 跳过的HTTP方法
-	SampleRate      float64       // 采样率（0-1之间）
-	Logger          Logger        // 日志记录器实例
+	Enabled         bool             // 是否启用调试器
+	Storage         Storage          // 存储器实例
+	MaxBodySize     int64            // 最大请求/响应体大小（KB）
+	RetentionPeriod time.Duration    // 日志保留期限
+	Level           LogLevel         // 日志级别
+	MaxRecords      int              // 最大记录数量
+	SkipPaths       []string         // 跳过的路径
+	SkipMethods     []string         // 跳过的HTTP方法
+	SampleRate      float64          // 采样率（0-1之间）
+	Logger          LoggerInterface  // 日志记录器实例
 }
 ```
 
@@ -1253,17 +1253,26 @@ type Storage interface {
 }
 ```
 
-#### Logger接口
+#### LoggerInterface接口
 ```go
-type Logger interface {
-	Debug(args ...interface{})
-	Debugf(format string, args ...interface{})
-	Info(args ...interface{})
-	Infof(format string, args ...interface{})
-	Warn(args ...interface{})
-	Warnf(format string, args ...interface{})
-	Error(args ...interface{})
-	Errorf(format string, args ...interface{})
+type LoggerInterface interface {
+	// Debug 记录调试级别日志
+	Debug(msg any, fields ...map[string]interface{})
+
+	// Info 记录信息级别日志
+	Info(msg any, fields ...map[string]interface{})
+
+	// Warn 记录警告级别日志
+	Warn(msg any, fields ...map[string]interface{})
+
+	// Error 记录错误级别日志
+	Error(msg any, fields ...map[string]interface{})
+
+	// WithFields 创建带有字段的日志记录器
+	WithFields(fields map[string]interface{}) LoggerInterface
+
+	// GetLevel 获取当前日志记录器的日志级别
+	GetLevel() string
 }
 ```
 
@@ -1275,7 +1284,7 @@ func NewSimpleDebugger() (*Debugger, error)
 func NewWithMemoryStorage(maxRecords int) (*Debugger, error)
 func NewWithFileStorage(path string, maxRecords int) (*Debugger, error)
 func NewWithCustomStorage(storage Storage) (*Debugger, error)
-func NewProductionDebugger(path string, maxRecords int) (*Debugger, error)
+func NewProductionDebugger(storagePath string) (*Debugger, error)
 
 // 存储器构造函数
 func NewMemoryStorage(maxRecords int) (Storage, error)
