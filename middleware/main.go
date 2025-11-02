@@ -70,11 +70,11 @@ func (b Base) Cors() gin.HandlerFunc {
 	}
 }
 
-// RealIP 获取真实IP
-func (b Base) RealIP(useCDN bool) gin.HandlerFunc {
+// SetRealIP 设置真实IP到gin上下文
+func (b Base) SetRealIP(useCDN bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		realIP := GetRealIP(c, useCDN)
-		c.Set("ClientIP", realIP)
+		c.Set("RealIP", realIP)
 		c.Next()
 	}
 }
