@@ -81,14 +81,6 @@ func (b Base) SetRealIP(useCDN bool) gin.HandlerFunc {
 
 // GetRealIP 如果开启了CDN之类的，获取真实IP需要从头部读取
 func GetRealIP(c *gin.Context, useCDN bool) (realIP string) {
-	// 从上下文中获取客户端IP
-	realIP = c.ClientIP()
-
-	// 没有使用CDN或者穿透，直接通过gin上下文获取的IP就是真实IP
-	if !useCDN {
-		return
-	}
-
 	// 尝试从 X-Forwarded-For 中获取
 	xForwardedFor := c.GetHeader("X-Forwarded-For")
 	if xForwardedFor != "" {
@@ -96,14 +88,22 @@ func GetRealIP(c *gin.Context, useCDN bool) (realIP string) {
 		ips := splitIps(xForwardedFor)
 		if len(ips) > 0 {
 			realIP = ips[0] // 获取第一个IP
-			return
 		}
 	}
 
-	// 尝试从 X-Real-IP 中获取
-	xRealIP := c.GetHeader("X-Real-IP")
-	if xRealIP != "" {
-		realIP = strings.TrimSpace(xRealIP)
+	if realIP == "" {
+		// 尝试从 X-Real-IP 中获取
+		xRealIP := c.GetHeader("X-Real-IP")
+		if xRealIP != "" {
+			realIP = strings.TrimSpace(xRealIP)
+		}
+	}
+
+	// 用gin的ip获取托底
+	// 没有使用CDN或者穿透，以gin上下文获取的IP为准
+	if realIP == "" || !useCDN {
+		// 从上下文中获取客户端IP
+		realIP = c.ClientIP()
 	}
 
 	return
