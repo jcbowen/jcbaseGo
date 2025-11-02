@@ -83,23 +83,28 @@ func TestControllerInitialization(t *testing.T) {
 		// 检查关键路由是否存在
 		foundIndex := false
 		foundDetail := false
-		foundSearch := false
+		foundList := false
+		foundAPI := false
 
 		for _, route := range routes {
 			if route.Path == "/jcbase/debug" && route.Method == "GET" {
 				foundIndex = true
 			}
+			if route.Path == "/jcbase/debug/list" && route.Method == "GET" {
+				foundList = true
+			}
 			if route.Path == "/jcbase/debug/detail/:id" && route.Method == "GET" {
 				foundDetail = true
 			}
-			if route.Path == "/jcbase/debug/search" && route.Method == "GET" {
-				foundSearch = true
+			if route.Path == "/jcbase/debug/api/search" && route.Method == "GET" {
+				foundAPI = true
 			}
 		}
 
 		assert.True(t, foundIndex, "索引路由未注册")
+		assert.True(t, foundList, "列表路由未注册")
 		assert.True(t, foundDetail, "详情路由未注册")
-		assert.True(t, foundSearch, "搜索路由未注册")
+		assert.True(t, foundAPI, "搜索API路由未注册")
 	})
 }
 
@@ -146,8 +151,8 @@ func TestControllerHandlers(t *testing.T) {
 		router := gin.New()
 		dbg.RegisterRoutes(router)
 
-		// 创建测试请求
-		req := httptest.NewRequest("GET", "/jcbase/debug", nil)
+		// 创建测试请求（直接请求列表页面，而不是根路径）
+		req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
 		w := httptest.NewRecorder()
 
 		// 执行请求
@@ -213,8 +218,8 @@ func TestControllerHandlers(t *testing.T) {
 		router := gin.New()
 		dbg.RegisterRoutes(router)
 
-		// 创建测试请求
-		req := httptest.NewRequest("GET", "/jcbase/debug/search", nil)
+		// 创建测试请求（使用搜索查询参数，而不是单独的搜索路径）
+		req := httptest.NewRequest("GET", "/jcbase/debug/list?q=测试", nil)
 		w := httptest.NewRecorder()
 
 		// 执行请求
@@ -223,7 +228,7 @@ func TestControllerHandlers(t *testing.T) {
 		// 验证响应
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Contains(t, w.Body.String(), "搜索")
-		assert.Contains(t, w.Body.String(), "搜索日志内容")
+		assert.Contains(t, w.Body.String(), "测试")
 	})
 
 	t.Run("不存在的详情页面", func(t *testing.T) {
@@ -612,6 +617,246 @@ func TestControllerPagination(t *testing.T) {
 		// 验证默认值
 		assert.Equal(t, 1, page)
 		assert.Equal(t, 20, pageSize) // 默认页面大小
+	})
+}
+
+// TestIPAccessControl 测试IP访问控制功能
+func TestIPAccessControl(t *testing.T) {
+	// 创建测试数据
+	testLogs := []*LogEntry{
+		{
+			ID:         "test-id-1",
+			Timestamp:  time.Now(),
+			Method:     "GET",
+			URL:        "/api/test",
+			StatusCode: 200,
+			Duration:   100 * time.Millisecond,
+			ClientIP:   "127.0.0.1",
+		},
+	}
+
+	t.Run("无IP限制配置-允许所有访问", func(t *testing.T) {
+		// 创建内存存储并添加测试数据
+		storage, _ := NewMemoryStorage()
+		for _, log := range testLogs {
+			_ = storage.Save(log)
+		}
+
+		// 创建调试器实例，不配置IP白名单
+		config := &Config{
+			Enabled:    true,
+			SkipPaths:  []string{},
+			SampleRate: 1.0,
+			AllowedIPs: []string{}, // 空数组表示不限制
+		}
+		config.Storage = storage
+		dbg, _ := New(config)
+
+		// 创建Gin引擎和测试请求
+		router := gin.New()
+		dbg.RegisterRoutes(router)
+
+		// 使用不同IP地址的请求
+		req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
+		req.Header.Set("X-Forwarded-For", "192.168.1.100,10.0.0.1")
+		w := httptest.NewRecorder()
+
+		// 执行请求
+		router.ServeHTTP(w, req)
+
+		// 验证响应 - 应该允许访问
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "日志列表")
+	})
+
+	t.Run("有IP限制配置-允许白名单IP访问", func(t *testing.T) {
+		// 创建内存存储并添加测试数据
+		storage, _ := NewMemoryStorage()
+		for _, log := range testLogs {
+			_ = storage.Save(log)
+		}
+
+		// 创建调试器实例，配置IP白名单
+		config := &Config{
+			Enabled:    true,
+			SkipPaths:  []string{},
+			SampleRate: 1.0,
+			AllowedIPs: []string{"192.168.1.100", "10.0.0.0/8"}, // 允许特定IP和CIDR
+		}
+		config.Storage = storage
+		dbg, _ := New(config)
+
+		// 创建Gin引擎和测试请求
+		router := gin.New()
+		dbg.RegisterRoutes(router)
+
+		// 使用白名单中的IP地址
+		req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
+		req.Header.Set("X-Forwarded-For", "192.168.1.100,10.0.0.1")
+		w := httptest.NewRecorder()
+
+		// 执行请求
+		router.ServeHTTP(w, req)
+
+		// 验证响应 - 应该允许访问
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "日志列表")
+	})
+
+	t.Run("有IP限制配置-拒绝非白名单IP访问", func(t *testing.T) {
+		// 创建内存存储并添加测试数据
+		storage, _ := NewMemoryStorage()
+		for _, log := range testLogs {
+			_ = storage.Save(log)
+		}
+
+		// 创建调试器实例，配置IP白名单
+		config := &Config{
+			Enabled:    true,
+			SkipPaths:  []string{},
+			SampleRate: 1.0,
+			AllowedIPs: []string{"192.168.1.100", "10.0.0.0/8"}, // 允许特定IP和CIDR
+		}
+		config.Storage = storage
+		dbg, _ := New(config)
+
+		// 创建Gin引擎和测试请求
+		router := gin.New()
+		dbg.RegisterRoutes(router)
+
+		// 使用不在白名单中的IP地址
+		req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
+		req.Header.Set("X-Forwarded-For", "172.16.1.100,192.168.2.100") // 不在白名单中
+		w := httptest.NewRecorder()
+
+		// 执行请求
+		router.ServeHTTP(w, req)
+
+		// 验证响应 - 应该拒绝访问
+		assert.Equal(t, http.StatusForbidden, w.Code)
+
+		// 解析JSON响应
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+
+		assert.Contains(t, response["error"], "禁止访问")
+		assert.Equal(t, "172.16.1.100", response["client_ip"])
+	})
+
+	t.Run("CIDR范围测试-允许在范围内的IP", func(t *testing.T) {
+		// 创建内存存储并添加测试数据
+		storage, _ := NewMemoryStorage()
+		for _, log := range testLogs {
+			_ = storage.Save(log)
+		}
+
+		// 创建调试器实例，配置CIDR范围
+		config := &Config{
+			Enabled:    true,
+			SkipPaths:  []string{},
+			SampleRate: 1.0,
+			AllowedIPs: []string{"192.168.1.0/24"}, // 允许192.168.1.0-255
+		}
+		config.Storage = storage
+		dbg, _ := New(config)
+
+		// 创建Gin引擎和测试请求
+		router := gin.New()
+		dbg.RegisterRoutes(router)
+
+		// 使用在CIDR范围内的IP地址
+		req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
+		req.Header.Set("X-Forwarded-For", "192.168.1.50,10.0.0.1")
+		w := httptest.NewRecorder()
+
+		// 执行请求
+		router.ServeHTTP(w, req)
+
+		// 验证响应 - 应该允许访问
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "日志列表")
+	})
+
+	t.Run("CIDR范围测试-拒绝不在范围内的IP", func(t *testing.T) {
+		// 创建内存存储并添加测试数据
+		storage, _ := NewMemoryStorage()
+		for _, log := range testLogs {
+			_ = storage.Save(log)
+		}
+
+		// 创建调试器实例，配置CIDR范围
+		config := &Config{
+			Enabled:    true,
+			SkipPaths:  []string{},
+			SampleRate: 1.0,
+			AllowedIPs: []string{"192.168.1.0/24"}, // 允许192.168.1.0-255
+		}
+		config.Storage = storage
+		dbg, _ := New(config)
+
+		// 创建Gin引擎和测试请求
+		router := gin.New()
+		dbg.RegisterRoutes(router)
+
+		// 使用不在CIDR范围内的IP地址
+		req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
+		req.Header.Set("X-Forwarded-For", "192.168.2.50,10.0.0.1") // 不在192.168.1.0/24范围内
+		w := httptest.NewRecorder()
+
+		// 执行请求
+		router.ServeHTTP(w, req)
+
+		// 验证响应 - 应该拒绝访问
+		assert.Equal(t, http.StatusForbidden, w.Code)
+
+		// 解析JSON响应
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+
+		assert.Contains(t, response["error"], "禁止访问")
+		assert.Equal(t, "192.168.2.50", response["client_ip"])
+	})
+
+	t.Run("API接口IP限制测试", func(t *testing.T) {
+		// 创建内存存储并添加测试数据
+		storage, _ := NewMemoryStorage()
+		for _, log := range testLogs {
+			_ = storage.Save(log)
+		}
+
+		// 创建调试器实例，配置IP白名单
+		config := &Config{
+			Enabled:    true,
+			SkipPaths:  []string{},
+			SampleRate: 1.0,
+			AllowedIPs: []string{"192.168.1.100"}, // 只允许特定IP
+		}
+		config.Storage = storage
+		dbg, _ := New(config)
+
+		// 创建Gin引擎和测试请求
+		router := gin.New()
+		dbg.RegisterRoutes(router)
+
+		// 测试API接口 - 使用不在白名单中的IP
+		req := httptest.NewRequest("GET", "/jcbase/debug/api/logs", nil)
+		req.Header.Set("X-Forwarded-For", "172.16.1.100") // 不在白名单中
+		w := httptest.NewRecorder()
+
+		// 执行请求
+		router.ServeHTTP(w, req)
+
+		// 验证响应 - 应该拒绝访问
+		assert.Equal(t, http.StatusForbidden, w.Code)
+
+		// 解析JSON响应
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+
+		assert.Contains(t, response["error"], "禁止访问")
 	})
 }
 

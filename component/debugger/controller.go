@@ -3,6 +3,7 @@ package debugger
 import (
 	"fmt"
 	"html/template"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -83,6 +84,9 @@ func (c *Controller) registerRoutes() {
 	// 创建路由组
 	routerGroup := c.router.Group("/" + c.basePath)
 
+	// 添加IP访问控制中间件
+	routerGroup.Use(c.ipAccessControlMiddleware())
+
 	// 重定向根目录到 /list
 	routerGroup.GET("", func(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, helper.GetHostInfo(ctx.Request)+c.basePath+"/list")
@@ -108,6 +112,101 @@ func (c *Controller) registerRoutes() {
 
 	// 清理过期日志API
 	routerGroup.POST("/api/cleanup", c.cleanupAPIHandler)
+}
+
+// ipAccessControlMiddleware IP访问控制中间件
+// 检查客户端IP是否在允许的白名单中，如果配置了白名单但IP不在其中，返回403禁止访问
+func (c *Controller) ipAccessControlMiddleware() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		// 获取调试器配置
+		config := c.debugger.GetConfig()
+
+		// 如果没有配置IP白名单，允许所有访问
+		if len(config.AllowedIPs) == 0 {
+			ctx.Next()
+			return
+		}
+
+		// 获取客户端IP
+		clientIP := c.getClientIP(ctx)
+
+		// 检查IP是否在白名单中
+		if c.isIPAllowed(clientIP, config.AllowedIPs) {
+			ctx.Next()
+			return
+		}
+
+		// IP不在白名单中，返回403禁止访问
+		ctx.JSON(http.StatusForbidden, gin.H{
+			"error":     "禁止访问：您的IP地址不在允许列表中",
+			"client_ip": clientIP,
+		})
+		ctx.Abort()
+	}
+}
+
+// getClientIP 获取客户端真实IP地址
+// 支持从X-Forwarded-For等代理头中获取真实IP
+func (c *Controller) getClientIP(ctx *gin.Context) string {
+	// 尝试从X-Forwarded-For获取
+	if forwardedFor := ctx.GetHeader("X-Forwarded-For"); forwardedFor != "" {
+		ips := strings.Split(forwardedFor, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+
+	// 尝试从X-Real-IP获取
+	if realIP := ctx.GetHeader("X-Real-IP"); realIP != "" {
+		return realIP
+	}
+
+	// 使用远程地址
+	return ctx.ClientIP()
+}
+
+// isIPAllowed 检查IP是否在允许的白名单中
+// 支持IP地址和CIDR格式（如192.168.1.0/24）
+func (c *Controller) isIPAllowed(clientIP string, allowedIPs []string) bool {
+	// 如果客户端IP为空，拒绝访问
+	if clientIP == "" {
+		return false
+	}
+
+	// 检查每个允许的IP规则
+	for _, allowedIP := range allowedIPs {
+		// 如果是CIDR格式
+		if strings.Contains(allowedIP, "/") {
+			if c.isIPInCIDR(clientIP, allowedIP) {
+				return true
+			}
+		} else {
+			// 直接比较IP地址
+			if clientIP == allowedIP {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// isIPInCIDR 检查IP是否在CIDR范围内
+func (c *Controller) isIPInCIDR(ip, cidr string) bool {
+	// 解析CIDR
+	_, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return false
+	}
+
+	// 解析IP
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return false
+	}
+
+	// 检查IP是否在CIDR范围内
+	return ipNet.Contains(parsedIP)
 }
 
 // indexHandler 调试器主页处理器（支持搜索功能）

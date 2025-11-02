@@ -147,6 +147,9 @@ config := &debugger.Config{
 	// 采样配置
 	SampleRate: 1.0,                            // 采样率（0-1之间），默认1.0（记录所有请求）
 
+	// IP访问控制配置
+	AllowedIPs: []string{},                     // 允许访问的IP白名单，空数组表示不限制
+
 	// 日志记录器配置（可选）
 	Logger:  nil,                              // 日志记录器实例
 }
@@ -166,6 +169,78 @@ router.Use(dbg.Middleware())
 - **LevelInfo**: 记录基本信息，包括请求头、响应头等（生产环境）
 - **LevelWarn**: 只记录警告级别的信息
 - **LevelError**: 只记录错误级别的信息
+
+### IP访问控制
+
+调试器组件支持IP访问控制功能，可以限制只有特定IP地址或IP段的客户端才能访问调试器界面和API接口。
+
+#### 配置说明
+
+```go
+config := &debugger.Config{
+    // ... 其他配置
+    
+    // IP访问控制配置
+    AllowedIPs: []string{
+        "192.168.1.100",      // 允许单个IP
+        "10.0.0.0/8",         // 允许10.0.0.0-10.255.255.255整个B类网络
+        "172.16.0.0/12",      // 允许172.16.0.0-172.31.255.255
+        "192.168.1.0/24",     // 允许192.168.1.0-192.168.1.255
+    },
+}
+```
+
+#### 使用规则
+
+1. **无限制访问**：当`AllowedIPs`为空数组或未配置时，允许所有IP地址访问
+2. **白名单限制**：当配置了IP白名单时，只有白名单中的IP地址可以访问
+3. **CIDR支持**：支持CIDR格式的IP段配置（如`192.168.1.0/24`）
+4. **优先级检查**：支持`X-Forwarded-For`头，优先检查代理链中的第一个客户端IP
+
+#### 示例配置
+
+```go
+// 开发环境：允许本地和内部网络访问
+config := &debugger.Config{
+    Enabled: true,
+    Storage: memoryStorage,
+    AllowedIPs: []string{
+        "127.0.0.1",           // 本地回环
+        "::1",                 // IPv6本地回环
+        "192.168.1.0/24",      // 内部网络
+        "10.0.0.0/8",          // 私有网络A类
+    },
+}
+
+// 生产环境：只允许管理员IP访问
+config := &debugger.Config{
+    Enabled: true,
+    Storage: fileStorage,
+    AllowedIPs: []string{
+        "203.0.113.100",       // 管理员IP
+        "203.0.113.101",       // 备用管理员IP
+    },
+}
+
+// 完全开放：不限制IP访问
+config := &debugger.Config{
+    Enabled: true,
+    Storage: memoryStorage,
+    AllowedIPs: []string{},     // 空数组表示不限制
+}
+```
+
+#### 错误响应
+
+当IP不在白名单中时，调试器会返回HTTP 403状态码和JSON格式的错误信息：
+
+```json
+{
+    "error": "禁止访问：IP地址 172.16.1.100 不在允许列表中",
+    "client_ip": "172.16.1.100",
+    "allowed_ips": ["192.168.1.100", "10.0.0.0/8"]
+}
+```
 
 ## Logger功能使用
 

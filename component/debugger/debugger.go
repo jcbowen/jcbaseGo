@@ -30,6 +30,9 @@ type Config struct {
 	// 采样配置
 	SampleRate float64 `json:"sample_rate" default:"1.0"` // 采样率（0-1之间），默认记录所有请求
 
+	// IP访问控制配置
+	AllowedIPs []string `json:"allowed_ips" default:""` // 允许访问的IP白名单，空数组表示不限制
+
 	// 核心组件配置 - 必须传入实例化的存储器
 	Storage Storage         `json:"-"` // 存储实现（必须传入实例化的存储器）
 	Logger  LoggerInterface `json:"-"` // 日志记录器（推荐直接传入实例化的日志记录器）
