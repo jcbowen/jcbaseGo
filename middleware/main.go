@@ -73,18 +73,18 @@ func (b Base) Cors() gin.HandlerFunc {
 // RealIP 获取真实IP
 func (b Base) RealIP(useCDN bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		realIP := getRealIP(c, useCDN)
+		realIP := GetRealIP(c, useCDN)
 		c.Set("ClientIP", realIP)
 		c.Next()
 	}
 }
 
-// 如果开启了CDN之类的，获取真实IP需要从头部读取
-func getRealIP(c *gin.Context, useCDN bool) (realIP string) {
+// GetRealIP 如果开启了CDN之类的，获取真实IP需要从头部读取
+func GetRealIP(c *gin.Context, useCDN bool) (realIP string) {
 	// 从上下文中获取客户端IP
 	realIP = c.ClientIP()
 
-	// 如果没有使用CDN或穿透什么的
+	// 没有使用CDN或者穿透，直接通过gin上下文获取的IP就是真实IP
 	if !useCDN {
 		return
 	}
@@ -103,7 +103,7 @@ func getRealIP(c *gin.Context, useCDN bool) (realIP string) {
 	// 尝试从 X-Real-IP 中获取
 	xRealIP := c.GetHeader("X-Real-IP")
 	if xRealIP != "" {
-		realIP = xRealIP
+		realIP = strings.TrimSpace(xRealIP)
 	}
 
 	return
