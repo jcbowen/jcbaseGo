@@ -34,6 +34,22 @@ func NewMemoryStorage(maxSize ...int) (*MemoryStorage, error) {
 }
 
 // Save 保存日志条目到内存
+// 将HTTP记录或进程记录保存到内存存储中，支持自动清理和更新机制
+// 该方法确保存储的线程安全性，并维护ID索引以提高查询性能
+//
+// 参数:
+//
+//	entry: 要保存的日志条目，包含HTTP记录或进程记录的完整信息
+//
+// 返回值:
+//
+//	error: 如果保存过程中发生错误返回错误信息，否则返回nil
+//
+// 保存逻辑:
+//   - 如果条目ID已存在，则更新现有条目（支持进程记录的动态更新）
+//   - 如果超过最大存储限制，自动删除最旧的条目（FIFO策略）
+//   - 维护ID到索引的映射，提高FindByID等操作的性能
+//   - 使用读写锁确保多线程环境下的数据一致性
 func (ms *MemoryStorage) Save(entry *LogEntry) error {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
@@ -76,6 +92,26 @@ func (ms *MemoryStorage) FindByID(id string) (*LogEntry, error) {
 }
 
 // FindAll 查找所有日志条目，支持分页和过滤
+// 查询内存存储中的所有日志记录，支持多种过滤条件和分页功能
+// 该方法提供统一的查询接口，适用于HTTP记录和进程记录的检索
+//
+// 参数:
+//
+//	page: 页码（从1开始）
+//	pageSize: 每页显示数量
+//	filters: 过滤条件映射，支持record_type、method、status_code、url、process_name、process_id等字段
+//
+// 返回值:
+//
+//	[]*LogEntry: 符合条件的日志条目列表（按时间倒序排列）
+//	int: 符合条件的总条目数
+//	error: 如果查询过程中发生错误返回错误信息，否则返回nil
+//
+// 查询逻辑:
+//   - 首先应用过滤器筛选符合条件的条目（支持进程相关字段过滤）
+//   - 按时间戳倒序排序，确保最新的记录显示在前面
+//   - 计算分页信息，返回指定页面的数据
+//   - 支持空过滤条件，返回所有记录
 func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error) {
 	ms.mutex.RLock()
 	defer ms.mutex.RUnlock()
@@ -110,6 +146,29 @@ func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interfac
 }
 
 // Search 搜索日志内容
+// 在日志条目的多个字段中进行全文搜索，支持HTTP记录和进程记录的关键词检索
+// 该方法提供不区分大小写的搜索功能，适用于快速查找特定内容的日志记录
+//
+// 参数:
+//
+//	keyword: 搜索关键词，支持在进程名称、URL、请求体、响应体、错误信息等字段中搜索
+//	page: 页码（从1开始）
+//	pageSize: 每页显示数量
+//
+// 返回值:
+//
+//	[]*LogEntry: 包含关键词的日志条目列表（按时间倒序排列）
+//	int: 包含关键词的总条目数
+//	error: 如果搜索过程中发生错误返回错误信息，否则返回nil
+//
+// 搜索范围:
+//   - 进程名称（process_name）
+//   - URL路径（url）
+//   - 请求体（request_body）
+//   - 响应体（response_body）
+//   - 错误信息（error）
+//   - 请求头（request_headers）的所有值
+//   - 响应头（response_headers）的所有值
 func (ms *MemoryStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, int, error) {
 	ms.mutex.RLock()
 	defer ms.mutex.RUnlock()
@@ -164,9 +223,39 @@ func (ms *MemoryStorage) Cleanup(before time.Time) error {
 }
 
 // filterEntry 应用过滤器
+// 根据过滤条件检查日志条目是否匹配，支持HTTP记录和进程记录的多种过滤条件
+// 该方法用于内存存储的查询过滤，确保只有符合条件的记录被返回
+//
+// 参数:
+//
+//	entry: 要检查的日志条目
+//	filters: 过滤条件映射，键为字段名，值为过滤值
+//
+// 返回值:
+//
+//	bool: 如果条目匹配所有过滤条件返回true，否则返回false
+//
+// 支持的过滤条件:
+//   - record_type: 记录类型精确匹配（http/process）
+//   - method: HTTP方法精确匹配（GET/POST/PUT/DELETE等）
+//   - status_code: HTTP状态码精确匹配（200/404/500等）
+//   - url: URL路径包含匹配（支持模糊匹配）
+//   - start_time: 开始时间过滤（大于等于指定时间）
+//   - end_time: 结束时间过滤（小于等于指定时间）
+//   - client_ip: 客户端IP地址包含匹配（支持模糊匹配）
+//   - process_name: 进程名称包含匹配（支持模糊匹配）
+//   - process_id: 进程ID精确匹配
+//   - process_status: 进程状态精确匹配（running/completed/failed/error）
+//   - has_error: 错误状态过滤（true表示有错误，false表示无错误）
+//   - min_duration: 最小持续时间过滤（大于等于指定时长）
+//   - max_duration: 最大持续时间过滤（小于等于指定时长）
 func (ms *MemoryStorage) filterEntry(entry *LogEntry, filters map[string]interface{}) bool {
 	for key, value := range filters {
 		switch key {
+		case "record_type":
+			if entry.RecordType != value {
+				return false
+			}
 		case "method":
 			if entry.Method != value {
 				return false
@@ -189,6 +278,18 @@ func (ms *MemoryStorage) filterEntry(entry *LogEntry, filters map[string]interfa
 			}
 		case "client_ip":
 			if !strings.Contains(entry.ClientIP, value.(string)) {
+				return false
+			}
+		case "process_name":
+			if !strings.Contains(entry.ProcessName, value.(string)) {
+				return false
+			}
+		case "process_id":
+			if entry.ProcessID != value {
+				return false
+			}
+		case "process_status":
+			if entry.Status != value {
 				return false
 			}
 		case "has_error":
@@ -214,6 +315,11 @@ func (ms *MemoryStorage) filterEntry(entry *LogEntry, filters map[string]interfa
 
 // containsKeyword 检查日志条目是否包含关键词
 func (ms *MemoryStorage) containsKeyword(entry *LogEntry, keyword string) bool {
+	// 检查进程名称
+	if strings.Contains(strings.ToLower(entry.ProcessName), strings.ToLower(keyword)) {
+		return true
+	}
+
 	// 检查URL
 	if strings.Contains(strings.ToLower(entry.URL), strings.ToLower(keyword)) {
 		return true

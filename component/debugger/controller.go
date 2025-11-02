@@ -443,8 +443,39 @@ func (c *Controller) cleanupAPIHandler(ctx *gin.Context) {
 }
 
 // parseFilters 解析过滤参数
+// 从HTTP请求中解析查询参数，构建用于日志查询的过滤条件
+// 支持HTTP记录和进程记录的多种过滤条件，包括记录类型、方法、状态码、IP地址、进程名称、进程ID、时间范围和URL路径
+//
+// 参数:
+//
+//	ctx: Gin上下文，包含HTTP请求信息
+//
+// 返回值:
+//
+//	map[string]interface{}: 过滤条件映射，键为字段名，值为过滤值
+//
+// 支持的查询参数:
+//   - record_type: 记录类型（http/process）
+//   - method: HTTP方法（GET/POST/PUT/DELETE等）
+//   - status_code: HTTP状态码（200/404/500等）
+//   - client_ip: 客户端IP地址
+//   - process_name: 进程名称
+//   - process_id: 进程ID
+//   - process_status: 进程状态（running/completed/failed/error）
+//   - start_time: 开始时间（ISO格式）
+//   - end_time: 结束时间（ISO格式）
+//   - url: URL路径（支持模糊匹配）
+//
+// 示例:
+//
+//	GET /logs?record_type=process&process_name=数据同步任务&start_time=2024-01-01T00:00:00Z
 func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 	filters := make(map[string]interface{})
+
+	// 记录类型过滤
+	if recordType := ctx.Query("record_type"); recordType != "" {
+		filters["record_type"] = recordType
+	}
 
 	// 方法过滤
 	if method := ctx.Query("method"); method != "" {
@@ -459,6 +490,21 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 	// IP地址过滤
 	if ip := ctx.Query("client_ip"); ip != "" {
 		filters["client_ip"] = ip
+	}
+
+	// 进程名称过滤
+	if processName := ctx.Query("process_name"); processName != "" {
+		filters["process_name"] = processName
+	}
+
+	// 进程ID过滤
+	if processID := ctx.Query("process_id"); processID != "" {
+		filters["process_id"] = processID
+	}
+
+	// 进程状态过滤
+	if processStatus := ctx.Query("process_status"); processStatus != "" {
+		filters["process_status"] = processStatus
 	}
 
 	// 时间范围过滤

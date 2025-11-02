@@ -18,7 +18,7 @@ type DatabaseStorage struct {
 }
 
 // LogEntryModel 数据库模型结构
-// 对应数据库中的日志条目表
+// 对应数据库中的日志条目表，支持HTTP记录和进程记录
 type LogEntryModel struct {
 	ID         string    `gorm:"column:id;type:VARCHAR(64);primaryKey" json:"id"`
 	Timestamp  time.Time `gorm:"column:timestamp;type:DATETIME;index" json:"timestamp"`
@@ -29,6 +29,14 @@ type LogEntryModel struct {
 	ClientIP   string    `gorm:"column:client_ip;type:VARCHAR(45)" json:"client_ip"`
 	UserAgent  string    `gorm:"column:user_agent;type:TEXT" json:"user_agent"`
 	RequestID  string    `gorm:"column:request_id;type:VARCHAR(64);index" json:"request_id"`
+
+	// 记录类型和进程相关字段
+	RecordType  string    `gorm:"column:record_type;type:VARCHAR(20);index" json:"record_type"` // 记录类型：http/process
+	ProcessID   string    `gorm:"column:process_id;type:VARCHAR(64);index" json:"process_id"`   // 进程唯一标识
+	ProcessName string    `gorm:"column:process_name;type:VARCHAR(255)" json:"process_name"`    // 进程名称
+	ProcessType string    `gorm:"column:process_type;type:VARCHAR(50)" json:"process_type"`     // 进程类型
+	EndTime     time.Time `gorm:"column:end_time;type:DATETIME" json:"end_time"`                // 进程结束时间
+	Status      string    `gorm:"column:status;type:VARCHAR(20);index" json:"status"`           // 进程状态
 
 	// JSON格式存储的字段
 	RequestHeaders  string `gorm:"column:request_headers;type:JSON" json:"request_headers"`
@@ -119,8 +127,21 @@ func (ds *DatabaseStorage) Save(entry *LogEntry) error {
 		return fmt.Errorf("转换日志条目失败: %v", err)
 	}
 
-	// 保存到数据库
-	result := ds.db.Table(ds.tableName).Create(model)
+	// 检查记录是否已存在
+	var existingModel LogEntryModel
+	result := ds.db.Table(ds.tableName).Where("id = ?", entry.ID).First(&existingModel)
+
+	if result.Error == nil {
+		// 记录已存在，执行更新操作
+		result = ds.db.Table(ds.tableName).Where("id = ?", entry.ID).Save(model)
+	} else if result.Error == gorm.ErrRecordNotFound {
+		// 记录不存在，执行创建操作
+		result = ds.db.Table(ds.tableName).Create(model)
+	} else {
+		// 其他错误
+		return fmt.Errorf("检查记录是否存在失败: %v", result.Error)
+	}
+
 	if result.Error != nil {
 		return fmt.Errorf("保存日志条目失败: %v", result.Error)
 	}
@@ -234,9 +255,27 @@ func (ds *DatabaseStorage) Cleanup(before time.Time) error {
 }
 
 // applyFilters 应用过滤器到查询
+// 支持HTTP记录和进程记录的多种过滤条件，确保查询结果符合筛选要求
+//
+// 支持的过滤条件:
+//   - record_type: 记录类型精确匹配（http/process）
+//   - method: HTTP方法精确匹配（GET/POST/PUT/DELETE等）
+//   - status_code: HTTP状态码精确匹配（200/404/500等）
+//   - url: URL路径包含匹配（支持模糊匹配）
+//   - start_time: 开始时间过滤（大于等于指定时间）
+//   - end_time: 结束时间过滤（小于等于指定时间）
+//   - client_ip: 客户端IP地址包含匹配（支持模糊匹配）
+//   - process_name: 进程名称包含匹配（支持模糊匹配）
+//   - process_id: 进程ID精确匹配
+//   - process_status: 进程状态精确匹配（running/completed/failed/error）
+//   - has_error: 错误状态过滤（true表示有错误，false表示无错误）
+//   - min_duration: 最小持续时间过滤（大于等于指定时长）
+//   - max_duration: 最大持续时间过滤（小于等于指定时长）
 func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interface{}) *gorm.DB {
 	for key, value := range filters {
 		switch key {
+		case "record_type":
+			db = db.Where("record_type = ?", value)
 		case "method":
 			db = db.Where("method = ?", value)
 		case "status_code":
@@ -249,6 +288,12 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 			db = db.Where("timestamp <= ?", value)
 		case "client_ip":
 			db = db.Where("client_ip LIKE ?", "%"+value.(string)+"%")
+		case "process_name":
+			db = db.Where("process_name LIKE ?", "%"+value.(string)+"%")
+		case "process_id":
+			db = db.Where("process_id = ?", value)
+		case "process_status":
+			db = db.Where("status = ?", value)
 		case "has_error":
 			if value.(bool) {
 				db = db.Where("error != ''")
@@ -280,6 +325,14 @@ func (ds *DatabaseStorage) entryToModel(entry *LogEntry) (*LogEntryModel, error)
 		RequestBody:  entry.RequestBody,
 		ResponseBody: entry.ResponseBody,
 		Error:        entry.Error,
+
+		// 进程相关字段
+		RecordType:  entry.RecordType,
+		ProcessID:   entry.ProcessID,
+		ProcessName: entry.ProcessName,
+		ProcessType: entry.ProcessType,
+		EndTime:     entry.EndTime,
+		Status:      entry.Status,
 	}
 
 	// 转换JSON字段
@@ -320,6 +373,14 @@ func (ds *DatabaseStorage) modelToEntry(model *LogEntryModel) (*LogEntry, error)
 		RequestBody:  model.RequestBody,
 		ResponseBody: model.ResponseBody,
 		Error:        model.Error,
+
+		// 进程相关字段
+		RecordType:  model.RecordType,
+		ProcessID:   model.ProcessID,
+		ProcessName: model.ProcessName,
+		ProcessType: model.ProcessType,
+		EndTime:     model.EndTime,
+		Status:      model.Status,
 	}
 
 	// 解析JSON字段

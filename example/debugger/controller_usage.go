@@ -19,7 +19,11 @@ func main() {
 	r := gin.Default()
 
 	// 创建调试器配置（使用内存存储器）
-	memoryStorage, _ := debugger.NewMemoryStorage(1000)
+	memoryStorage, err := debugger.NewMemoryStorage(1000)
+	if err != nil {
+		panic(fmt.Sprintf("创建内存存储器失败: %v", err))
+	}
+
 	config := &debugger.Config{
 		Enabled:         true,
 		Storage:         memoryStorage,

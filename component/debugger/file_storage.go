@@ -281,9 +281,39 @@ func (fs *FileStorage) extractTimestampFromFilename(filePath string) (time.Time,
 }
 
 // filterEntry 应用过滤器
+// 根据过滤条件检查日志条目是否匹配，支持HTTP记录和进程记录的多种过滤条件
+// 该方法用于文件存储的查询过滤，确保只有符合条件的记录被返回
+//
+// 参数:
+//
+//	entry: 要检查的日志条目
+//	filters: 过滤条件映射，键为字段名，值为过滤值
+//
+// 返回值:
+//
+//	bool: 如果条目匹配所有过滤条件返回true，否则返回false
+//
+// 支持的过滤条件:
+//   - record_type: 记录类型精确匹配（http/process）
+//   - method: HTTP方法精确匹配（GET/POST/PUT/DELETE等）
+//   - status_code: HTTP状态码精确匹配（200/404/500等）
+//   - url: URL路径包含匹配（支持模糊匹配）
+//   - start_time: 开始时间过滤（大于等于指定时间）
+//   - end_time: 结束时间过滤（小于等于指定时间）
+//   - client_ip: 客户端IP地址匹配（支持精确匹配、包含匹配和前缀匹配）
+//   - process_name: 进程名称包含匹配（支持模糊匹配）
+//   - process_id: 进程ID精确匹配
+//   - process_status: 进程状态精确匹配（running/completed/failed/error）
+//   - has_error: 错误状态过滤（true表示有错误，false表示无错误）
+//   - min_duration: 最小持续时间过滤（大于等于指定时长）
+//   - max_duration: 最大持续时间过滤（小于等于指定时长）
 func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface{}) bool {
 	for key, value := range filters {
 		switch key {
+		case "record_type":
+			if entry.RecordType != value {
+				return false
+			}
 		case "method":
 			if entry.Method != value {
 				return false
@@ -308,11 +338,31 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 			if entry.ClientIP != value && !strings.Contains(entry.ClientIP, value.(string)) && !strings.HasPrefix(entry.ClientIP, value.(string)) {
 				return false
 			}
+		case "process_name":
+			if !strings.Contains(entry.ProcessName, value.(string)) {
+				return false
+			}
+		case "process_id":
+			if entry.ProcessID != value {
+				return false
+			}
+		case "process_status":
+			if entry.Status != value {
+				return false
+			}
 		case "has_error":
 			if value.(bool) && entry.Error == "" {
 				return false
 			}
 			if !value.(bool) && entry.Error != "" {
+				return false
+			}
+		case "min_duration":
+			if entry.Duration < value.(time.Duration) {
+				return false
+			}
+		case "max_duration":
+			if entry.Duration > value.(time.Duration) {
 				return false
 			}
 		}
@@ -322,7 +372,32 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 }
 
 // containsKeyword 检查日志条目是否包含关键词
+// 在日志条目的多个字段中搜索指定的关键词，支持HTTP记录和进程记录的全文搜索
+// 该方法用于文件存储的关键词搜索功能，不区分大小写进行匹配
+//
+// 参数:
+//
+//	entry: 要检查的日志条目
+//	keyword: 要搜索的关键词
+//
+// 返回值:
+//
+//	bool: 如果条目包含关键词返回true，否则返回false
+//
+// 搜索范围:
+//   - 进程名称（process_name）
+//   - URL路径（url）
+//   - 请求体（request_body）
+//   - 响应体（response_body）
+//   - 错误信息（error）
+//   - 请求头（request_headers）的所有值
+//   - 响应头（response_headers）的所有值
 func (fs *FileStorage) containsKeyword(entry *LogEntry, keyword string) bool {
+	// 检查进程名称
+	if strings.Contains(strings.ToLower(entry.ProcessName), strings.ToLower(keyword)) {
+		return true
+	}
+
 	// 检查URL
 	if strings.Contains(strings.ToLower(entry.URL), strings.ToLower(keyword)) {
 		return true
@@ -361,6 +436,26 @@ func (fs *FileStorage) containsKeyword(entry *LogEntry, keyword string) bool {
 }
 
 // GetStats 获取存储统计信息
+// 计算文件存储的详细统计信息，包括存储大小、请求数量、错误率等指标
+// 该方法提供与内存存储器相同的统计接口，确保存储组件的一致性
+//
+// 返回值:
+//
+//	map[string]interface{}: 统计信息映射，包含以下字段:
+//	  - total_requests: 总请求数（HTTP记录和进程记录的总数）
+//	  - storage_size: 存储大小（格式化显示，单位KB）
+//	  - max_size: 最大存储条目数
+//	  - storage_type: 存储类型（固定为"file"）
+//	  - storage_path: 存储路径
+//	  - avg_duration: 平均响应时间（仅当有记录时计算）
+//	  - error_rate: 错误率（仅当有记录时计算）
+//	  - error_count: 错误数量（仅当有记录时计算）
+//	error: 如果获取统计信息失败返回错误
+//
+// 统计计算说明:
+//   - 存储大小计算采用精确算法，与内存存储器和单个条目计算逻辑保持一致
+//   - 统计信息包含所有有效的日志文件（HTTP记录和进程记录）
+//   - 跳过读取失败的文件，确保统计的准确性
 func (fs *FileStorage) GetStats() (map[string]interface{}, error) {
 	files, err := fs.listLogFiles()
 	if err != nil {

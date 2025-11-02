@@ -242,6 +242,270 @@ config := &debugger.Config{
 }
 ```
 
+## 进程级Debugger功能
+
+### 概述
+
+debugger组件现在支持进程级日志记录功能，可以在非HTTP请求场景下记录进程执行日志。进程级debugger允许您为后台任务、批处理作业、定时任务等非HTTP进程创建独立的日志记录器，并支持与HTTP请求日志共存于同一存储中。
+
+### 功能特性
+
+- ✅ **进程记录管理**: 支持创建、获取、结束进程记录
+- ✅ **多级日志记录**: 支持Debug、Info、Warn、Error四种日志级别
+- ✅ **结构化字段**: 支持添加自定义字段到日志记录
+- ✅ **存储共存**: 进程记录与HTTP请求记录共存于同一存储
+- ✅ **查询过滤**: 支持按进程名称、进程ID、记录类型等条件过滤
+- ✅ **Web界面支持**: 在调试器Web界面中可查看进程记录
+
+### 基本使用示例
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/jcbowen/jcbaseGo/component/debugger"
+)
+
+func main() {
+	// 创建调试器实例
+	dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs")
+	if err != nil {
+		panic(err)
+	}
+
+	// 启动一个进程记录
+	logger := dbg.StartProcess("数据同步任务", "batch")
+	defer logger.EndProcess("completed") // 确保进程结束时记录结束时间
+
+	// 记录进程执行日志
+	logger.Info("开始执行数据同步任务", map[string]interface{}{
+		"source": "MySQL",
+		"target": "Elasticsearch",
+		"batch_size": 1000,
+	})
+
+	// 模拟数据处理
+	for i := 0; i < 5; i++ {
+		logger.Debug(fmt.Sprintf("处理第%d批数据", i+1), map[string]interface{}{
+			"current_batch": i + 1,
+			"total_batches": 5,
+		})
+		time.Sleep(100 * time.Millisecond)
+
+		if i == 2 {
+			logger.Warn("遇到网络延迟", map[string]interface{}{
+				"retry_count": 1,
+				"delay_ms": 500,
+			})
+		}
+	}
+
+	// 记录任务完成
+	logger.Info("数据同步任务完成", map[string]interface{}{
+		"processed_records": 5000,
+		"duration_seconds": 2.5,
+		"status": "success",
+	})
+}
+```
+
+### 进程记录方法
+
+#### 启动进程记录
+
+```go
+// 启动进程记录，返回进程级Logger实例
+logger := dbg.StartProcess(processName string, processType string)
+```
+
+#### 获取进程Logger
+
+```go
+// 通过进程ID获取对应的Logger实例
+logger, err := dbg.GetProcessLogger(processID string)
+```
+
+#### 结束进程记录
+
+```go
+// 结束进程记录，记录结束时间和状态
+err := dbg.EndProcess(processID string, status string)
+```
+
+#### 获取进程记录列表
+
+```go
+// 获取进程记录列表，支持分页和过滤
+records, total, err := dbg.GetProcessRecords(page int, pageSize int, filters map[string]interface{})
+```
+
+### 高级使用示例
+
+#### 并发进程管理
+
+```go
+package main
+
+import (
+	"sync"
+	"time"
+
+	"github.com/jcbowen/jcbaseGo/component/debugger"
+)
+
+func processWorker(dbg *debugger.Debugger, wg *sync.WaitGroup, workerID int) {
+	defer wg.Done()
+
+	// 为每个工作进程创建独立的记录
+	logger := dbg.StartProcess(fmt.Sprintf("工作进程-%d", workerID), "worker")
+	defer logger.EndProcess("completed")
+
+	logger.Info("工作进程启动", map[string]interface{}{
+		"worker_id": workerID,
+		"start_time": time.Now().Format(time.RFC3339),
+	})
+
+	// 模拟工作负载
+	for i := 0; i < 3; i++ {
+		logger.Debug(fmt.Sprintf("处理任务批次 %d", i+1), map[string]interface{}{
+			"batch": i + 1,
+			"worker": workerID,
+		})
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	logger.Info("工作进程完成", map[string]interface{}{
+		"worker_id": workerID,
+		"end_time": time.Now().Format(time.RFC3339),
+		"tasks_processed": 3,
+	})
+}
+
+func main() {
+	dbg, _ := debugger.NewWithMemoryStorage(1000)
+	
+	var wg sync.WaitGroup
+	
+	// 启动3个并发工作进程
+	for i := 1; i <= 3; i++ {
+		wg.Add(1)
+		go processWorker(dbg, &wg, i)
+	}
+	
+	wg.Wait()
+	
+	// 获取所有进程记录
+	records, total, err := dbg.GetProcessRecords(1, 20, nil)
+	if err != nil {
+		fmt.Printf("获取进程记录失败: %v\n", err)
+	} else {
+		fmt.Printf("共完成 %d 个进程记录，总计 %d 条记录\n", len(records), total)
+	}
+}
+```
+
+#### 批处理任务监控
+
+```go
+package main
+
+import (
+	"time"
+
+	"github.com/jcbowen/jcbaseGo/component/debugger"
+)
+
+func batchProcessor(dbg *debugger.Debugger) {
+	// 创建批处理任务记录
+	logger := dbg.StartProcess("夜间批处理任务", "batch")
+	defer logger.EndProcess("completed")
+
+	logger.Info("开始夜间批处理", map[string]interface{}{
+		"scheduled_time": "02:00",
+		"estimated_duration": "2小时",
+	})
+
+	// 模拟多个处理步骤
+	steps := []string{"数据备份", "统计计算", "报告生成", "清理临时文件"}
+	
+	for i, step := range steps {
+		stepLogger := logger.WithFields(map[string]interface{}{
+			"step_number": i + 1,
+			"step_name": step,
+		})
+		
+		stepLogger.Info("开始处理步骤")
+		time.Sleep(500 * time.Millisecond) // 模拟处理时间
+		
+		if i == 1 {
+			stepLogger.Warn("统计计算耗时较长", map[string]interface{}{
+				"actual_duration": "45分钟",
+				"expected_duration": "30分钟",
+			})
+		}
+		
+		stepLogger.Info("步骤处理完成")
+	}
+
+	logger.Info("夜间批处理任务完成", map[string]interface{}{
+		"total_steps": len(steps),
+		"completion_time": time.Now().Format(time.RFC3339),
+		"status": "success",
+	})
+}
+
+func main() {
+	dbg, _ := debugger.NewWithFileStorage("/var/log/batch_logs", 5000)
+	batchProcessor(dbg)
+}
+```
+
+### 查询和过滤进程记录
+
+进程记录支持与HTTP请求记录相同的查询和过滤功能：
+
+```go
+// 查询所有进程记录
+filters := map[string]interface{}{
+	"record_type": "process", // 按记录类型过滤
+}
+logs, total, err := storage.FindAll(1, 20, filters)
+
+// 按进程名称过滤
+filters = map[string]interface{}{
+	"process_name": "数据同步任务",
+}
+logs, total, err := storage.FindAll(1, 10, filters)
+
+// 按进程ID过滤
+filters = map[string]interface{}{
+	"process_id": "process-123456",
+}
+logs, total, err := storage.FindAll(1, 10, filters)
+
+// 搜索进程记录
+result, total, err := storage.Search("同步", 1, 10)
+```
+
+### Web界面查看
+
+在调试器Web界面中，您可以：
+
+1. 在日志列表页面使用"记录类型"过滤器查看进程记录
+2. 通过"进程名称"或"进程ID"进行精确过滤
+3. 在详情页面查看进程的完整执行日志和时间线
+4. 使用关键词搜索功能查找特定进程记录
+
+访问调试器界面：`http://localhost:8080/jcbase/debug/list`
+
+### 查看完整示例
+
+更多详细的使用示例，请查看：
+- `example/debugger/process_usage.go` - 完整的进程级debugger使用示例
+
 ## Logger功能使用
 
 ### 在控制器中使用Logger
@@ -752,6 +1016,7 @@ Gin控制器提供以下功能：
 - **`file_storage.go`** - 文件存储使用示例，支持日志文件管理
 - **`controller_usage.go`** - 控制器使用示例，提供调试器Web界面
 - **`config_examples.go`** - 配置示例，包含6种不同的配置方式
+- **`process_usage.go`** - 进程级debugger使用示例，演示进程级日志记录功能
 
 运行示例代码：
 ```bash

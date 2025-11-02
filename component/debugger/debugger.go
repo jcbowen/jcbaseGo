@@ -166,6 +166,7 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 		ClientIP:       middleware.GetRealIP(c, d.config.UseCDN),
 		UserAgent:      c.Request.UserAgent(),
 		RequestID:      c.GetHeader("X-Request-ID"),
+		RecordType:     "http", // 设置记录类型为HTTP
 		RequestHeaders: extractHeaders(c.Request.Header),
 		QueryParams:    extractQueryParams(c.Request.URL.Query()),
 	}
@@ -525,4 +526,158 @@ func NewSimpleDebugger() (*Debugger, error) {
 // 使用文件存储，适合生产环境
 func NewProductionDebugger(storagePath string) (*Debugger, error) {
 	return NewWithFileStorage(storagePath, 1000)
+}
+
+// ==================== 进程级Debugger支持 ====================
+
+// StartProcess 开始进程记录
+// 创建一个进程级日志记录器，用于在进程中记录不同级别的debugger日志
+// 该方法适用于后台任务、批处理作业、定时任务等非HTTP进程场景
+//
+// 参数:
+//
+//	processName: 进程名称，用于标识进程用途（如"数据同步任务"）
+//	processType: 进程类型，可选值：background/worker/cron/batch等
+//
+// 返回值:
+//
+//	ProcessLoggerInterface: 进程级日志记录器实例
+//
+// 示例:
+//
+//	logger := dbg.StartProcess("数据同步任务", "batch")
+//	defer dbg.EndProcess(logger.GetProcessID(), "completed")
+func (d *Debugger) StartProcess(processName, processType string) ProcessLoggerInterface {
+	return NewProcessLogger(d, processName, processType)
+}
+
+// GetProcessLogger 获取进程级日志记录器
+// 通过进程ID获取已存在的进程记录器，用于在进程执行过程中获取记录器实例
+// 该方法适用于需要跨函数或协程共享同一进程记录器的场景
+//
+// 参数:
+//
+//	processID: 进程ID，由StartProcess方法返回
+//
+// 返回值:
+//
+//	ProcessLoggerInterface: 进程级日志记录器实例
+//	error: 错误信息，当进程记录不存在、类型不匹配或进程已结束时返回错误
+//
+// 示例:
+//
+//	logger, err := dbg.GetProcessLogger("process-123456")
+//	if err != nil {
+//	    // 处理错误
+//	}
+//	logger.Info("继续处理任务")
+func (d *Debugger) GetProcessLogger(processID string) (ProcessLoggerInterface, error) {
+	// 查找进程记录
+	entry, err := d.storage.FindByID(processID)
+	if err != nil {
+		return nil, fmt.Errorf("进程记录不存在: %w", err)
+	}
+
+	// 检查记录类型
+	if entry.RecordType != "process" {
+		return nil, fmt.Errorf("记录类型不是进程记录")
+	}
+
+	// 检查进程状态
+	if entry.Status != "running" {
+		return nil, fmt.Errorf("进程已结束，无法获取记录器")
+	}
+
+	// 创建进程记录器实例
+	logger := &ProcessLogger{
+		debugger:    d,
+		processID:   entry.ProcessID,
+		processName: entry.ProcessName,
+		processType: entry.ProcessType,
+		startTime:   entry.Timestamp,
+		logger: &DefaultLogger{
+			debugger: d,
+			fields: map[string]interface{}{
+				"process_id":   entry.ProcessID,
+				"process_name": entry.ProcessName,
+				"process_type": entry.ProcessType,
+			},
+		},
+	}
+
+	return logger, nil
+}
+
+// EndProcess 结束进程记录
+// 通过进程ID结束指定的进程记录，记录进程的结束时间和状态
+// 该方法应在进程执行完成时调用，以确保记录完整的执行时间线
+//
+// 参数:
+//
+//	processID: 进程ID，由StartProcess方法返回
+//	status: 进程结束状态，如"completed"、"failed"、"cancelled"等
+//
+// 返回值:
+//
+//	error: 错误信息，当进程记录不存在、类型不匹配或保存失败时返回错误
+//
+// 示例:
+//
+//	err := dbg.EndProcess("process-123456", "completed")
+//	if err != nil {
+//	    // 处理错误
+//	}
+func (d *Debugger) EndProcess(processID, status string) error {
+	// 查找进程记录
+	entry, err := d.storage.FindByID(processID)
+	if err != nil {
+		return fmt.Errorf("进程记录不存在: %w", err)
+	}
+
+	// 检查记录类型
+	if entry.RecordType != "process" {
+		return fmt.Errorf("记录类型不是进程记录")
+	}
+
+	// 更新进程记录
+	entry.EndTime = time.Now()
+	entry.Duration = entry.EndTime.Sub(entry.Timestamp)
+	entry.Status = status
+
+	// 保存更新后的记录
+	if err := d.storage.Save(entry); err != nil {
+		return fmt.Errorf("保存进程记录失败: %w", err)
+	}
+
+	return nil
+}
+
+// GetProcessRecords 获取进程记录列表
+// 支持分页和过滤查询进程记录，可用于监控和分析进程执行情况
+//
+// 参数:
+//
+//	page: 页码，从1开始
+//	pageSize: 每页记录数
+//	filters: 过滤条件，支持record_type/process_name/process_id等字段
+//
+// 返回值:
+//
+//	[]*LogEntry: 进程记录列表
+//	int: 总记录数
+//	error: 错误信息
+//
+// 示例:
+//
+//	records, total, err := dbg.GetProcessRecords(1, 20, map[string]interface{}{
+//	    "process_name": "数据同步任务",
+//	})
+func (d *Debugger) GetProcessRecords(page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error) {
+	// 添加记录类型过滤
+	if filters == nil {
+		filters = make(map[string]interface{})
+	}
+	filters["record_type"] = "process"
+
+	return d.storage.FindAll(page, pageSize, filters)
 }

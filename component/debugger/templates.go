@@ -21,13 +21,99 @@ const indexTemplate = `<!DOCTYPE html>
         .stat-item .value { font-size: 18px; font-weight: bold; color: #2c3e50; }
         
         .filters { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .filter-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; align-items: end; }
+        .filter-header { 
+            margin-bottom: 16px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .filter-header .filter-actions { 
+            display: flex; 
+            gap: 12px; 
+            align-items: center; 
+            margin: 0; 
+            padding: 0; 
+            border-top: none; 
+        }
+        .filter-header .filter-actions button { 
+            background: #3498db; 
+            color: white; 
+            border: none; 
+            padding: 8px 16px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-size: 14px; 
+            font-weight: 600; 
+            transition: background-color 0.2s ease; 
+            grid-column: auto; 
+            justify-self: auto; 
+        }
+        .filter-header .filter-actions button:hover { 
+            background: #2980b9; 
+        }
+        .filter-header .filter-actions a { 
+            color: #666; 
+            text-decoration: none; 
+            font-size: 14px; 
+            padding: 6px 12px; 
+            border: 1px solid #ddd; 
+            border-radius: 6px; 
+            transition: all 0.2s ease; 
+        }
+        .filter-header .filter-actions a:hover { 
+            color: #3498db; 
+            border-color: #3498db; 
+            background: #f8f9fa; 
+        }
+        .filter-header h3 { 
+            margin: 0; 
+            font-size: 16px; 
+            font-weight: 600; 
+            color: #2c3e50; 
+            display: flex; 
+            align-items: center; 
+            gap: 8px;
+        }
+        .filter-header h3::before { 
+            content: "📊"; 
+            font-size: 14px; 
+        }
+        .filter-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: end; }
+        .filter-group { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px; 
+            padding: 16px; 
+            background: #f8f9fa; 
+            border-radius: 6px; 
+            border: 1px solid #e9ecef;
+        }
+        .filter-group h4 { 
+            margin: 0 0 8px 0; 
+            font-size: 14px; 
+            font-weight: 600; 
+            color: #495057; 
+            display: flex; 
+            align-items: center; 
+            gap: 6px;
+        }
+        .filter-group h4::before { 
+            content: "🔍"; 
+            font-size: 12px; 
+        }
+        .filter-group .filter-row { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
+            gap: 8px; 
+            align-items: end;
+        }
         .filter-form input, .filter-form select { 
             padding: 10px 12px; 
             border: 1px solid #ddd; 
             border-radius: 6px; 
             font-size: 14px; 
             transition: border-color 0.2s ease;
+            background: #fff;
         }
         .filter-form input:focus, .filter-form select:focus { 
             outline: none; 
@@ -44,22 +130,38 @@ const indexTemplate = `<!DOCTYPE html>
             font-size: 14px;
             font-weight: 600;
             transition: background-color 0.2s ease;
+            grid-column: 1 / -1;
+            justify-self: start;
         }
         .filter-form button:hover { background: #2980b9; }
-        .filter-form a { 
+        .filter-actions { 
+            display: flex; 
+            gap: 12px; 
+            align-items: center; 
+            margin-top: 16px; 
+            padding-top: 16px; 
+            border-top: 1px solid #eee;
+        }
+        .filter-actions a { 
             color: #666; 
             text-decoration: none; 
             font-size: 14px; 
-            padding: 10px 0;
-            text-align: center;
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            transition: all 0.2s ease;
         }
-        .filter-form a:hover { color: #3498db; }
+        .filter-actions a:hover { 
+            color: #3498db; 
+            border-color: #3498db;
+            background: #f8f9fa;
+        }
         
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .table-content { min-width: 800px; }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 140px 100px 100px minmax(250px, 1fr); gap: 16px; font-weight: bold; font-size: 14px; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 140px 100px 100px minmax(250px, 1fr); gap: 16px; align-items: center; font-size: 14px; }
+        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 70px 100px minmax(110px, 150px) minmax(200px, 1fr); gap: 16px; font-weight: bold; font-size: 14px; }
+        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 70px 100px minmax(110px, 150px) minmax(200px, 1fr); gap: 16px; align-items: center; font-size: 14px; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
         .no-data-row { 
@@ -85,6 +187,25 @@ const indexTemplate = `<!DOCTYPE html>
         .status-3xx { background: #fff3cd; color: #856404; }
         .status-4xx { background: #f8d7da; color: #721c24; }
         .status-5xx { background: #f5c6cb; color: #721c24; }
+        
+        /* 进程记录样式 */
+        .process-badge { background: #e8f4fd; color: #1976d2; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .http-badge { background: #f3e5f5; color: #7b1fa2; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .process-status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
+        .process-status-running { background: #fff3cd; color: #856404; }
+        .process-status-completed { background: #d4edda; color: #155724; }
+        .process-status-failed { background: #f5c6cb; color: #721c24; }
+        .process-status-cancelled { background: #f8d7da; color: #721c24; }
+        
+        .process-details { display: flex; flex-direction: column; gap: 4px; }
+        .process-name { font-weight: 600; color: #2c3e50; }
+        .process-type { color: #666; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; }
+        
+        .http-details { display: flex; flex-direction: column; gap: 4px; }
+        .method { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; display: inline-block; width: fit-content; }
+        .url { color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .client-ip { color: #666; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; }
+        
         .duration { color: #666; font-size: 12px; }
         .request-id a { color: #3498db; text-decoration: none; font-weight: 600; }
         .request-id a:hover { text-decoration: underline; }
@@ -106,10 +227,7 @@ const indexTemplate = `<!DOCTYPE html>
             .pagination .ellipsis { padding: 6px 4px; }
         }
         
-        .search-box { margin-bottom: 20px; }
-        .search-box form { display: flex; gap: 10px; }
-        .search-box input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
-        .search-box button { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+
         
         .nav { display: flex; gap: 20px; margin-bottom: 20px; }
         .nav a { color: #3498db; text-decoration: none; padding: 10px 15px; border-radius: 4px; }
@@ -123,13 +241,21 @@ const indexTemplate = `<!DOCTYPE html>
             .stat-item { padding: 8px 12px; }
             .stat-item .value { font-size: 16px; }
             
-            .filter-form { flex-direction: column; align-items: stretch; gap: 8px; }
+            .filter-header { padding: 12px 16px; }
+            .filter-header h3 { font-size: 14px; }
+            .filter-content { padding: 16px; }
+            .filter-form { grid-template-columns: 1fr; gap: 12px; }
+            .filter-group { padding: 12px; }
+            .filter-group h4 { font-size: 13px; }
+            .filter-row { grid-template-columns: 1fr; gap: 8px; }
             .filter-form input, .filter-form select { width: 100%; }
+            .filter-actions { flex-direction: column; gap: 8px; }
+            .filter-actions button, .filter-actions a { width: 100%; text-align: center; }
             
             .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
             .table-content { min-width: 600px; }
             .table-header, .log-row { 
-                grid-template-columns: minmax(80px, 120px) 100px 60px 80px 90px 60px 60px minmax(120px, 1fr); 
+                grid-template-columns: minmax(80px, 120px) 100px 60px 80px 90px 60px minmax(100px, 1fr) minmax(100px, 1fr); 
                 gap: 6px; 
                 font-size: 11px; 
             }
@@ -150,7 +276,7 @@ const indexTemplate = `<!DOCTYPE html>
         @media (max-width: 480px) {
             .table-content { min-width: 500px; }
             .table-header, .log-row { 
-                grid-template-columns: minmax(70px, 100px) 80px 50px 70px 80px 50px 50px minmax(100px, 1fr); 
+                grid-template-columns: minmax(70px, 100px) 80px 50px 70px 80px 50px minmax(80px, 1fr) minmax(80px, 1fr); 
                 gap: 4px; 
             }
             .log-row { padding: 8px; }
@@ -218,59 +344,93 @@ const indexTemplate = `<!DOCTYPE html>
             <a href="{{.BasePath}}/list" class="active">日志列表</a>
         </div>
         
-        <div class="search-box">
-            <form action="{{.BasePath}}/list" method="get">
-                <input type="text" name="q" placeholder="搜索日志内容..." value="{{.Keyword}}">
-                <button type="submit">搜索</button>
-                {{if .Keyword}}
-                <a href="{{.BasePath}}/list" style="margin-left: 10px; color: #666; text-decoration: none; padding: 10px 15px; border: 1px solid #ddd; border-radius: 4px;">清除搜索</a>
-                {{end}}
-            </form>
-        </div>
-        
         <div class="filters">
-            <form class="filter-form" method="get">
-                <select name="method" onchange="this.form.submit()">
-                    <option value="">所有方法</option>
-                    <option value="GET" {{if eq .Filters.method "GET"}}selected{{end}}>GET</option>
-                    <option value="POST" {{if eq .Filters.method "POST"}}selected{{end}}>POST</option>
-                    <option value="PUT" {{if eq .Filters.method "PUT"}}selected{{end}}>PUT</option>
-                    <option value="DELETE" {{if eq .Filters.method "DELETE"}}selected{{end}}>DELETE</option>
-                </select>
-                <select name="status_code" onchange="this.form.submit()">
-                    <option value="">所有状态码</option>
-                    <option value="200" {{if eq .Filters.status_code "200"}}selected{{end}}>200 - 成功</option>
-                    <option value="201" {{if eq .Filters.status_code "201"}}selected{{end}}>201 - 已创建</option>
-                    <option value="204" {{if eq .Filters.status_code "204"}}selected{{end}}>204 - 无内容</option>
-                    <option value="301" {{if eq .Filters.status_code "301"}}selected{{end}}>301 - 永久重定向</option>
-                    <option value="302" {{if eq .Filters.status_code "302"}}selected{{end}}>302 - 临时重定向</option>
-                    <option value="400" {{if eq .Filters.status_code "400"}}selected{{end}}>400 - 错误请求</option>
-                    <option value="401" {{if eq .Filters.status_code "401"}}selected{{end}}>401 - 未授权</option>
-                    <option value="403" {{if eq .Filters.status_code "403"}}selected{{end}}>403 - 禁止访问</option>
-                    <option value="404" {{if eq .Filters.status_code "404"}}selected{{end}}>404 - 未找到</option>
-                    <option value="500" {{if eq .Filters.status_code "500"}}selected{{end}}>500 - 服务器错误</option>
-                    <option value="502" {{if eq .Filters.status_code "502"}}selected{{end}}>502 - 网关错误</option>
-                    <option value="503" {{if eq .Filters.status_code "503"}}selected{{end}}>503 - 服务不可用</option>
-                </select>
-                <input type="text" name="client_ip" placeholder="IP地址" value="{{.Filters.client_ip}}">
-                <input type="text" name="url" placeholder="URL包含" value="{{.Filters.url}}">
-                <button type="submit">筛选</button>
-                <a href="{{.BasePath}}/list" style="margin-left: auto;">清除筛选</a>
-            </form>
+            <div class="filter-header">
+                <h3>筛选条件</h3>
+                <div class="filter-actions">
+                    <button type="submit" form="filter-form">筛选</button>
+                    <a href="{{.BasePath}}/list">重置</a>
+                </div>
+            </div>
+            <form class="filter-form" method="get" id="filter-form">
+                    <!-- 基础筛选组 -->
+                    <div class="filter-group">
+                        <h4>基础筛选</h4>
+                        <div class="filter-row">
+                            <select name="record_type" onchange="this.form.submit()">
+                                <option value="">所有记录类型</option>
+                                <option value="http" {{if eq .Filters.record_type "http"}}selected{{end}}>HTTP记录</option>
+                                <option value="process" {{if eq .Filters.record_type "process"}}selected{{end}}>进程记录</option>
+                            </select>
+                        </div>
+                        <div class="filter-row">
+                            <input type="text" name="q" placeholder="搜索日志内容..." value="{{.Keyword}}">
+                        </div>
+                    </div>
+                    
+                    <!-- HTTP记录筛选组 -->
+                    <div class="filter-group">
+                        <h4>HTTP记录筛选</h4>
+                        <div class="filter-row">
+                            <select name="method" onchange="this.form.submit()">
+                                <option value="">所有方法</option>
+                                <option value="GET" {{if eq .Filters.method "GET"}}selected{{end}}>GET</option>
+                                <option value="POST" {{if eq .Filters.method "POST"}}selected{{end}}>POST</option>
+                                <option value="PUT" {{if eq .Filters.method "PUT"}}selected{{end}}>PUT</option>
+                                <option value="DELETE" {{if eq .Filters.method "DELETE"}}selected{{end}}>DELETE</option>
+                            </select>
+                            <select name="status_code" onchange="this.form.submit()">
+                                <option value="">所有状态码</option>
+                                <option value="200" {{if eq .Filters.status_code "200"}}selected{{end}}>200 - 成功</option>
+                                <option value="201" {{if eq .Filters.status_code "201"}}selected{{end}}>201 - 已创建</option>
+                                <option value="204" {{if eq .Filters.status_code "204"}}selected{{end}}>204 - 无内容</option>
+                                <option value="301" {{if eq .Filters.status_code "301"}}selected{{end}}>301 - 永久重定向</option>
+                                <option value="302" {{if eq .Filters.status_code "302"}}selected{{end}}>302 - 临时重定向</option>
+                                <option value="400" {{if eq .Filters.status_code "400"}}selected{{end}}>400 - 错误请求</option>
+                                <option value="401" {{if eq .Filters.status_code "401"}}selected{{end}}>401 - 未授权</option>
+                                <option value="403" {{if eq .Filters.status_code "403"}}selected{{end}}>403 - 禁止访问</option>
+                                <option value="404" {{if eq .Filters.status_code "404"}}selected{{end}}>404 - 未找到</option>
+                                <option value="500" {{if eq .Filters.status_code "500"}}selected{{end}}>500 - 服务器错误</option>
+                                <option value="502" {{if eq .Filters.status_code "502"}}selected{{end}}>502 - 网关错误</option>
+                                <option value="503" {{if eq .Filters.status_code "503"}}selected{{end}}>503 - 服务不可用</option>
+                            </select>
+                        </div>
+                        <div class="filter-row">
+                            <input type="text" name="client_ip" placeholder="客户端IP地址" value="{{.Filters.client_ip}}">
+                            <input type="text" name="url" placeholder="URL路径包含" value="{{.Filters.url}}">
+                        </div>
+                    </div>
+                    
+                    <!-- 进程记录筛选组 -->
+                    <div class="filter-group">
+                        <h4>进程记录筛选</h4>
+                        <div class="filter-row">
+                            <input type="text" name="process_name" placeholder="进程名称" value="{{.Filters.process_name}}">
+                            <input type="text" name="process_id" placeholder="进程ID" value="{{.Filters.process_id}}">
+                            <select name="process_status" onchange="this.form.submit()">
+                                <option value="">所有进程状态</option>
+                                <option value="running" {{if eq .Filters.process_status "running"}}selected{{end}}>运行中</option>
+                                <option value="completed" {{if eq .Filters.process_status "completed"}}selected{{end}}>已完成</option>
+                                <option value="failed" {{if eq .Filters.process_status "failed"}}selected{{end}}>失败</option>
+                                <option value="cancelled" {{if eq .Filters.process_status "cancelled"}}selected{{end}}>已取消</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
         </div>
         
         <div class="logs-table">
             <div class="table-container">
                 <div class="table-content">
                     <div class="table-header">
-                        <div>请求Id</div>
+                        <div>记录Id</div>
                         <div>时间</div>
                         <div>耗时</div>
                         <div>存储大小</div>
-                        <div>IP</div>
-                        <div>方法</div>
+                        <div>类型</div>
                         <div>状态</div>
-                        <div>URL</div>
+                        <div>详细信息</div>
+                        <div>URL/进程信息</div>
                     </div>
                     
                     {{range .Entries}}
@@ -279,10 +439,40 @@ const indexTemplate = `<!DOCTYPE html>
                         <div class="timestamp">{{.Timestamp.Format "2006-01-02 15:04:05"}}</div>
                         <div class="duration">{{.Duration.Milliseconds}}ms</div>
                         <div class="storage-size">{{.StorageSize}}</div>
-                        <div class="client-ip">{{.ClientIP}}</div>
-                        <div class="method method-{{lower .Method}}">{{.Method}}</div>
-                        <div class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.StatusCode}}</div>
-                        <div class="url" title="{{.URL}}">{{.URL}}</div>
+                        <div class="record-type">
+                            {{if eq .RecordType "process"}}
+                            <span class="process-badge" title="进程记录">进程</span>
+                            {{else}}
+                            <span class="http-badge" title="HTTP记录">HTTP</span>
+                            {{end}}
+                        </div>
+                        <div class="status-info">
+                            {{if eq .RecordType "process"}}
+                            <span class="process-status process-status-{{lower .Status}}" title="进程状态: {{.Status}}">{{.Status}}</span>
+                            {{else}}
+                            <span class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.StatusCode}}</span>
+                            {{end}}
+                        </div>
+                        <div class="details">
+                            {{if eq .RecordType "process"}}
+                            <div class="process-details">
+                                <div class="process-name" title="进程名称: {{.ProcessName}}">{{.ProcessName}}</div>
+                                {{if .ProcessType}}<div class="process-type" title="进程类型: {{.ProcessType}}">{{.ProcessType}}</div>{{end}}
+                            </div>
+                            {{else}}
+                            <div class="http-details">
+                                <div class="method method-{{lower .Method}}">{{.Method}}</div>
+                                {{if .ClientIP}}<div class="client-ip">{{.ClientIP}}</div>{{end}}
+                            </div>
+                            {{end}}
+                        </div>
+                        <div class="url-info">
+                            {{if eq .RecordType "process"}}
+                            <div class="process-info" title="进程ID: {{.ProcessID}}">PID: {{.ProcessID}}</div>
+                            {{else}}
+                            <div class="url" title="{{.URL}}">{{.URL}}</div>
+                            {{end}}
+                        </div>
                     </div>
                     {{else}}
                     <div class="no-data-row">
@@ -556,6 +746,13 @@ const detailTemplate = `<!DOCTYPE html>
         .status-4xx { background: #f8d7da; color: #721c24; }
         .status-5xx { background: #f5c6cb; color: #721c24; }
         
+        /* 进程状态样式 */
+        .process-status { padding: 4px 8px; border-radius: 4px; font-size: 12px; display: inline-block; }
+        .process-status-running { background: #fff3cd; color: #856404; }
+        .process-status-completed { background: #d4edda; color: #155724; }
+        .process-status-failed { background: #f5c6cb; color: #721c24; }
+        .process-status-cancelled { background: #f8d7da; color: #721c24; }
+        
         /* Logger日志样式 */
         .logger-logs { margin-top: 15px; }
         .log-item { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 4px; padding: 12px; margin-bottom: 10px; }
@@ -726,9 +923,33 @@ const detailTemplate = `<!DOCTYPE html>
                 <h2>基本信息</h2>
                 <div class="basic-info">
                     <div class="info-item">
-                        <div class="info-label">请求ID</div>
+                        <div class="info-label">{{if eq .Entry.RecordType "process"}}进程ID{{else}}请求ID{{end}}</div>
                         <div class="info-value">{{.Entry.ID}}</div>
                     </div>
+                    {{if eq .Entry.RecordType "process"}}
+                    <!-- 进程记录专用信息 -->
+                    <div class="info-item">
+                        <div class="info-label">进程名称</div>
+                        <div class="info-value">{{.Entry.ProcessName}}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">进程类型</div>
+                        <div class="info-value">{{.Entry.ProcessType}}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">进程状态</div>
+                        <div class="info-value status-badge process-status-{{.Entry.Status}}">{{.Entry.Status}}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">开始时间</div>
+                        <div class="info-value">{{.Entry.Timestamp.Format "2006-01-02 15:04:05"}}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">结束时间</div>
+                        <div class="info-value">{{if .Entry.EndTime.IsZero}}进行中{{else}}{{.Entry.EndTime.Format "2006-01-02 15:04:05"}}{{end}}</div>
+                    </div>
+                    {{else}}
+                    <!-- HTTP记录信息 -->
                     <div class="info-item">
                         <div class="info-label">时间</div>
                         <div class="info-value">{{.Entry.Timestamp.Format "2006-01-02 15:04:05"}}</div>
@@ -741,17 +962,22 @@ const detailTemplate = `<!DOCTYPE html>
                         <div class="info-label">状态码</div>
                         <div class="info-value status-badge status-{{if ge .Entry.StatusCode 200}}{{if lt .Entry.StatusCode 300}}2xx{{else if lt .Entry.StatusCode 400}}3xx{{else if lt .Entry.StatusCode 500}}4xx{{else}}5xx{{end}}{{else}}4xx{{end}}">{{.Entry.StatusCode}}</div>
                     </div>
+                    {{end}}
                     <div class="info-item">
                         <div class="info-label">耗时</div>
                         <div class="info-value">{{.Entry.Duration.Milliseconds}}ms</div>
                     </div>
+                    {{if ne .Entry.RecordType "process"}}
                     <div class="info-item">
                         <div class="info-label">客户端IP</div>
                         <div class="info-value">{{.Entry.ClientIP}}</div>
                     </div>
+                    {{end}}
                 </div>
             </div>
             
+            <!-- 详细信息 -->
+            {{if ne .Entry.RecordType "process"}}
             <!-- URL和参数 -->
             <div class="section">
                 <h2>请求信息</h2>
@@ -824,8 +1050,51 @@ const detailTemplate = `<!DOCTYPE html>
                 </div>
                 {{end}}
             </div>
+            {{end}}
             
-            <!-- 响应体 -->
+            <!-- 响应信息 -->
+            {{if eq .Entry.RecordType "process"}}
+            <!-- 进程输出信息 -->
+            {{if or .Entry.ResponseBody .Entry.ResponseHeaders}}
+            <div class="section">
+                <h2>进程输出</h2>
+                
+                {{if .Entry.ResponseHeaders}}
+                <div style="margin-top: 15px;">
+                    <h3>进程参数</h3>
+                    <div class="table-container">
+                        <table class="headers-table">
+                            <thead>
+                                <tr>
+                                    <th>参数名</th>
+                                    <th>值</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range $key, $value := .Entry.ResponseHeaders}}
+                                <tr>
+                                    <td>{{$key}}</td>
+                                    <td>{{$value}}</td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {{end}}
+                
+                {{if .Entry.ResponseBody}}
+                <div style="margin-top: 15px;">
+                    <h3>输出内容</h3>
+                    <div class="json-viewer">
+                        <pre>{{.Entry.ResponseBody | html}}</pre>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+            {{end}}
+            {{else}}
+            <!-- HTTP响应信息 -->
             {{if .Entry.ResponseBody}}
             <div class="section">
                 <h2>响应信息</h2>
@@ -833,6 +1102,7 @@ const detailTemplate = `<!DOCTYPE html>
                     <pre>{{.Entry.ResponseBody | html}}</pre>
                 </div>
             </div>
+            {{end}}
             {{end}}
 
             <!-- Logger -->

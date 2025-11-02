@@ -209,24 +209,34 @@ type LoggerLog struct {
 }
 
 // LogEntry 调试日志条目结构
-// 用于记录单个HTTP请求的完整调试信息
+// 用于记录单个HTTP请求或进程的完整调试信息
 type LogEntry struct {
 	ID         string        `json:"id"`          // 日志唯一标识
-	Timestamp  time.Time     `json:"timestamp"`   // 请求时间戳
-	Method     string        `json:"method"`      // HTTP方法
-	URL        string        `json:"url"`         // 请求URL
-	StatusCode int           `json:"status_code"` // HTTP状态码
+	Timestamp  time.Time     `json:"timestamp"`   // 请求/进程开始时间戳
+	Method     string        `json:"method"`      // HTTP方法（HTTP记录专用）
+	URL        string        `json:"url"`         // 请求URL（HTTP记录专用）
+	StatusCode int           `json:"status_code"` // HTTP状态码（HTTP记录专用）
 	Duration   time.Duration `json:"duration"`    // 处理耗时
-	ClientIP   string        `json:"client_ip"`   // 客户端IP
-	UserAgent  string        `json:"user_agent"`  // 用户代理
+	ClientIP   string        `json:"client_ip"`   // 客户端IP（HTTP记录专用）
+	UserAgent  string        `json:"user_agent"`  // 用户代理（HTTP记录专用）
 	RequestID  string        `json:"request_id"`  // 请求ID（用于追踪）
 
-	// 请求信息
+	// 记录类型标识
+	RecordType string `json:"record_type" default:"http"` // 记录类型：http/process
+
+	// 进程记录专用字段
+	ProcessID   string    `json:"process_id,omitempty"`   // 进程唯一标识
+	ProcessName string    `json:"process_name,omitempty"` // 进程名称
+	ProcessType string    `json:"process_type,omitempty"` // 进程类型（background/worker/cron等）
+	EndTime     time.Time `json:"end_time,omitempty"`     // 进程结束时间
+	Status      string    `json:"status,omitempty"`       // 进程状态（running/completed/failed）
+
+	// 请求信息（HTTP记录专用）
 	RequestHeaders map[string]string `json:"request_headers"` // 请求头
 	QueryParams    map[string]string `json:"query_params"`    // 查询参数
 	RequestBody    string            `json:"request_body"`    // 请求体内容
 
-	// 响应信息
+	// 响应信息（HTTP记录专用）
 	ResponseHeaders map[string]string `json:"response_headers"` // 响应头
 	ResponseBody    string            `json:"response_body"`    // 响应体内容
 
@@ -312,6 +322,276 @@ func (e *LogEntry) CalculateStorageSize() string {
 	} else {
 		return fmt.Sprintf("%.2f MB", float64(totalSize)/(1024*1024))
 	}
+}
+
+// ProcessLogger 进程级日志记录器
+// 用于在进程中记录不同级别的debugger日志，所有日志属于同一条进程记录
+// 该记录器适用于后台任务、批处理作业、定时任务等非HTTP进程场景
+type ProcessLogger struct {
+	debugger    *Debugger
+	processID   string
+	processName string
+	processType string
+	startTime   time.Time
+	logger      *DefaultLogger
+}
+
+// ProcessLoggerInterface 进程级日志记录器接口
+// 提供进程级日志记录功能，继承基础日志接口并添加进程管理方法
+type ProcessLoggerInterface interface {
+	LoggerInterface // 继承基础日志接口
+
+	// GetProcessID 获取进程ID
+	GetProcessID() string
+
+	// GetProcessName 获取进程名称
+	GetProcessName() string
+
+	// GetProcessType 获取进程类型
+	GetProcessType() string
+
+	// SetProcessInfo 设置进程信息
+	SetProcessInfo(info map[string]interface{})
+
+	// EndProcess 结束进程记录
+	EndProcess(status string) error
+}
+
+// NewProcessLogger 创建新的进程级日志记录器
+// 该方法会创建进程记录并初始化进程级日志记录器，适用于需要监控的非HTTP进程
+//
+// 参数:
+//
+//	debugger: 调试器实例，用于存储和配置管理
+//	processName: 进程名称，用于标识进程用途（如"数据同步任务"）
+//	processType: 进程类型，可选值：background/worker/cron/batch等
+//
+// 返回值:
+//
+//	*ProcessLogger: 进程级日志记录器实例
+//
+// 示例:
+//
+//	logger := NewProcessLogger(dbg, "数据同步任务", "batch")
+//	defer logger.EndProcess("completed")
+func NewProcessLogger(debugger *Debugger, processName, processType string) *ProcessLogger {
+	processID := GenerateID()
+
+	logger := &ProcessLogger{
+		debugger:    debugger,
+		processID:   processID,
+		processName: processName,
+		processType: processType,
+		startTime:   time.Now(),
+		logger: &DefaultLogger{
+			debugger: debugger,
+			fields: map[string]interface{}{
+				"process_id":   processID,
+				"process_name": processName,
+				"process_type": processType,
+			},
+		},
+	}
+
+	// 创建进程记录条目
+	entry := &LogEntry{
+		ID:          processID,
+		Timestamp:   logger.startTime,
+		RecordType:  "process",
+		ProcessID:   processID,
+		ProcessName: processName,
+		ProcessType: processType,
+		Status:      "running",
+	}
+
+	// 保存初始进程记录
+	if err := debugger.GetStorage().Save(entry); err != nil {
+		fmt.Printf("创建进程记录失败: %v\n", err)
+	}
+
+	return logger
+}
+
+// Debug 记录调试级别日志
+// 记录详细的调试信息，适用于开发阶段的问题排查
+//
+// 参数:
+//
+//	msg: 日志消息，可以是字符串、结构体或实现了Stringer接口的类型
+//	fields: 可选的附加字段，用于记录额外的调试信息
+//
+// 示例:
+//
+//	logger.Debug("开始处理数据", map[string]interface{}{"file_count": 100})
+func (p *ProcessLogger) Debug(msg any, fields ...map[string]interface{}) {
+	p.logger.Debug(msg, fields...)
+}
+
+// Info 记录信息级别日志
+// 记录进程执行的关键信息，适用于监控和状态跟踪
+//
+// 参数:
+//
+//	msg: 日志消息，可以是字符串、结构体或实现了Stringer接口的类型
+//	fields: 可选的附加字段，用于记录额外的状态信息
+//
+// 示例:
+//
+//	logger.Info("数据同步完成", map[string]interface{}{"processed": 1000})
+func (p *ProcessLogger) Info(msg any, fields ...map[string]interface{}) {
+	p.logger.Info(msg, fields...)
+}
+
+// Warn 记录警告级别日志
+// 记录可能影响进程正常执行的警告信息
+//
+// 参数:
+//
+//	msg: 日志消息，可以是字符串、结构体或实现了Stringer接口的类型
+//	fields: 可选的附加字段，用于记录警告相关的上下文信息
+//
+// 示例:
+//
+//	logger.Warn("磁盘空间不足", map[string]interface{}{"available": "1GB"})
+func (p *ProcessLogger) Warn(msg any, fields ...map[string]interface{}) {
+	p.logger.Warn(msg, fields...)
+}
+
+// Error 记录错误级别日志
+// 记录进程执行过程中发生的错误信息
+//
+// 参数:
+//
+//	msg: 日志消息，可以是字符串、结构体或实现了Stringer接口的类型
+//	fields: 可选的附加字段，用于记录错误相关的详细信息
+//
+// 示例:
+//
+//	logger.Error("数据库连接失败", map[string]interface{}{"error": err.Error()})
+func (p *ProcessLogger) Error(msg any, fields ...map[string]interface{}) {
+	p.logger.Error(msg, fields...)
+}
+
+// WithFields 创建带有字段的日志记录器
+// 创建一个新的日志记录器实例，继承当前记录器的所有字段并添加新字段
+//
+// 参数:
+//
+//	fields: 要添加的字段映射
+//
+// 返回值:
+//
+//	LoggerInterface: 新的日志记录器实例
+//
+// 示例:
+//
+//	subLogger := logger.WithFields(map[string]interface{}{"module": "data_processor"})
+func (p *ProcessLogger) WithFields(fields map[string]interface{}) LoggerInterface {
+	return p.logger.WithFields(fields)
+}
+
+// GetLevel 获取当前日志记录器的日志级别
+// 返回当前调试器配置的日志级别
+//
+// 返回值:
+//
+//	string: 日志级别（debug/info/warn/error）
+func (p *ProcessLogger) GetLevel() string {
+	return p.logger.GetLevel()
+}
+
+// GetProcessID 获取进程ID
+// 返回当前进程的唯一标识符，可用于后续查询和监控
+//
+// 返回值:
+//
+//	string: 进程ID
+//
+// 示例:
+//
+//	processID := logger.GetProcessID()
+func (p *ProcessLogger) GetProcessID() string {
+	return p.processID
+}
+
+// GetProcessName 获取进程名称
+// 返回当前进程的名称，用于标识进程用途
+//
+// 返回值:
+//
+//	string: 进程名称
+func (p *ProcessLogger) GetProcessName() string {
+	return p.processName
+}
+
+// GetProcessType 获取进程类型
+// 返回当前进程的类型，如background/worker/cron等
+//
+// 返回值:
+//
+//	string: 进程类型
+func (p *ProcessLogger) GetProcessType() string {
+	return p.processType
+}
+
+// SetProcessInfo 设置进程信息
+// 动态更新进程的附加信息，适用于进程执行过程中需要记录额外上下文信息的场景
+//
+// 参数:
+//
+//	info: 进程信息映射，可以包含任意键值对
+//
+// 示例:
+//
+//	logger.SetProcessInfo(map[string]interface{}{"progress": "50%", "current_file": "data.csv"})
+func (p *ProcessLogger) SetProcessInfo(info map[string]interface{}) {
+	// 更新logger的字段
+	for k, v := range info {
+		p.logger.fields[k] = v
+	}
+}
+
+// EndProcess 结束进程记录
+// 结束当前进程记录，记录进程的结束时间、状态和所有收集的日志
+// 该方法应在进程执行完成时调用，以确保记录完整的执行时间线
+//
+// 参数:
+//
+//	status: 进程结束状态，如"completed"、"failed"、"cancelled"等
+//
+// 返回值:
+//
+//	error: 错误信息，当进程记录不存在或保存失败时返回错误
+//
+// 示例:
+//
+//	err := logger.EndProcess("completed")
+//	if err != nil {
+//	    // 处理错误
+//	}
+func (p *ProcessLogger) EndProcess(status string) error {
+	endTime := time.Now()
+
+	// 获取进程记录
+	entry, err := p.debugger.GetStorage().FindByID(p.processID)
+	if err != nil {
+		return fmt.Errorf("获取进程记录失败: %w", err)
+	}
+
+	// 更新进程记录
+	entry.EndTime = endTime
+	entry.Duration = endTime.Sub(p.startTime)
+	entry.Status = status
+
+	// 添加logger收集的日志
+	entry.LoggerLogs = p.logger.GetLogs()
+
+	// 保存更新后的记录
+	if err := p.debugger.GetStorage().Save(entry); err != nil {
+		return fmt.Errorf("保存进程记录失败: %w", err)
+	}
+
+	return nil
 }
 
 // GetLoggerFromContext 从Gin上下文中获取Logger实例

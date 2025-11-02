@@ -36,6 +36,11 @@ type DetailView struct {
 	FormattedSessionData     string `json:"formatted_session_data"`     // 格式化会话数据
 	FormattedQueryParams     string `json:"formatted_query_params"`     // 格式化查询参数
 
+	// 进程记录专用格式化字段
+	FormattedProcessInfo   string `json:"formatted_process_info"`   // 格式化进程信息
+	FormattedEndTime       string `json:"formatted_end_time"`       // 格式化结束时间
+	FormattedProcessStatus string `json:"formatted_process_status"` // 格式化进程状态
+
 	// 统计信息
 	RequestSize  int `json:"request_size"`  // 请求大小（字节）
 	ResponseSize int `json:"response_size"` // 响应大小（字节）
@@ -81,6 +86,20 @@ func (dv *DetailViewer) formatDetailView(detailView *DetailView) {
 	// 格式化持续时间
 	detailView.FormattedDuration = formatDuration(entry.Duration)
 
+	// 根据记录类型进行不同的格式化处理
+	if entry.RecordType == "process" {
+		// 进程记录格式化
+		dv.formatProcessDetail(detailView)
+	} else {
+		// HTTP记录格式化（默认）
+		dv.formatHTTPDetail(detailView)
+	}
+}
+
+// formatHTTPDetail 格式化HTTP记录详情
+func (dv *DetailViewer) formatHTTPDetail(detailView *DetailView) {
+	entry := detailView.LogEntry
+
 	// 格式化请求头
 	detailView.FormattedRequestHeaders = formatHeaders(entry.RequestHeaders)
 
@@ -100,6 +119,71 @@ func (dv *DetailViewer) formatDetailView(detailView *DetailView) {
 
 	// 格式化会话数据
 	detailView.FormattedSessionData = formatSessionData(entry.SessionData)
+}
+
+// formatProcessDetail 格式化进程记录详情
+func (dv *DetailViewer) formatProcessDetail(detailView *DetailView) {
+	entry := detailView.LogEntry
+
+	// 格式化进程信息
+	detailView.FormattedProcessInfo = dv.formatProcessInfo(entry)
+
+	// 格式化结束时间
+	if !entry.EndTime.IsZero() {
+		detailView.FormattedEndTime = entry.EndTime.Format("2006-01-02 15:04:05.000")
+	} else {
+		detailView.FormattedEndTime = "进行中"
+	}
+
+	// 格式化进程状态
+	detailView.FormattedProcessStatus = formatProcessStatus(entry.Status)
+
+	// 对于进程记录，清空HTTP相关的格式化字段
+	detailView.FormattedRequestHeaders = ""
+	detailView.FormattedResponseHeaders = ""
+	detailView.FormattedQueryParams = ""
+	detailView.FormattedRequestBody = ""
+	detailView.FormattedResponseBody = ""
+	detailView.RequestSize = 0
+	detailView.ResponseSize = 0
+}
+
+// formatProcessInfo 格式化进程信息
+func (dv *DetailViewer) formatProcessInfo(entry *LogEntry) string {
+	var buf bytes.Buffer
+
+	buf.WriteString(fmt.Sprintf("进程ID: %s\n", entry.ProcessID))
+	buf.WriteString(fmt.Sprintf("进程名称: %s\n", entry.ProcessName))
+	buf.WriteString(fmt.Sprintf("进程类型: %s\n", entry.ProcessType))
+
+	if !entry.EndTime.IsZero() {
+		buf.WriteString(fmt.Sprintf("开始时间: %s\n", entry.Timestamp.Format("2006-01-02 15:04:05.000")))
+		buf.WriteString(fmt.Sprintf("结束时间: %s\n", entry.EndTime.Format("2006-01-02 15:04:05.000")))
+	} else {
+		buf.WriteString(fmt.Sprintf("开始时间: %s\n", entry.Timestamp.Format("2006-01-02 15:04:05.000")))
+		buf.WriteString("结束时间: 进行中\n")
+	}
+
+	buf.WriteString(fmt.Sprintf("状态: %s\n", formatProcessStatus(entry.Status)))
+	buf.WriteString(fmt.Sprintf("耗时: %s\n", formatDuration(entry.Duration)))
+
+	return buf.String()
+}
+
+// formatProcessStatus 格式化进程状态
+func formatProcessStatus(status string) string {
+	switch status {
+	case "running":
+		return "运行中"
+	case "completed":
+		return "已完成"
+	case "failed":
+		return "失败"
+	case "cancelled":
+		return "已取消"
+	default:
+		return status
+	}
 }
 
 // getRelatedEntries 获取相关日志条目
