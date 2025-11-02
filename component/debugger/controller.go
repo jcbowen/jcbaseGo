@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
+	"github.com/jcbowen/jcbaseGo/middleware"
 )
 
 // Controller 调试器控制器结构
@@ -24,6 +25,7 @@ type Controller struct {
 // ControllerConfig 控制器配置
 type ControllerConfig struct {
 	BasePath string `json:"base_path" default:"/jcbase/debug"` // 基础路径，默认为 "/jcbase/debug"
+	UseCDN   bool   `json:"use_cdn" default:"false"`           // 是否使用CDN，默认为 false
 	Title    string `json:"title" default:"调试器"`               // 页面标题，默认为 "调试器"
 	PageSize int    `json:"page_size" default:"20"`            // 页面大小，默认为 20
 }
@@ -73,19 +75,19 @@ func NewController(debugger *Debugger, router *gin.Engine, config *ControllerCon
 
 	// 如果提供了路由引擎，自动注册路由
 	if router != nil {
-		controller.registerRoutes()
+		controller.registerRoutes(config.UseCDN)
 	}
 
 	return controller
 }
 
 // registerRoutes 注册调试器页面的路由
-func (c *Controller) registerRoutes() {
+func (c *Controller) registerRoutes(useCDN bool) {
 	// 创建路由组
 	routerGroup := c.router.Group("/" + c.basePath)
 
 	// 添加IP访问控制中间件
-	routerGroup.Use(c.ipAccessControlMiddleware())
+	routerGroup.Use(c.ipAccessControlMiddleware(useCDN))
 
 	// 重定向根目录到 /list
 	routerGroup.GET("", func(ctx *gin.Context) {
@@ -116,7 +118,7 @@ func (c *Controller) registerRoutes() {
 
 // ipAccessControlMiddleware IP访问控制中间件
 // 检查客户端IP是否在允许的白名单中，如果配置了白名单但IP不在其中，返回403禁止访问
-func (c *Controller) ipAccessControlMiddleware() gin.HandlerFunc {
+func (c *Controller) ipAccessControlMiddleware(useCDN bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		// 获取调试器配置
 		config := c.debugger.GetConfig()
@@ -128,7 +130,7 @@ func (c *Controller) ipAccessControlMiddleware() gin.HandlerFunc {
 		}
 
 		// 获取客户端IP
-		clientIP := c.getClientIP(ctx)
+		clientIP := middleware.GetRealIP(ctx, useCDN) // 默认不使用CDN
 
 		// 检查IP是否在白名单中
 		if c.isIPAllowed(clientIP, config.AllowedIPs) {
@@ -272,7 +274,7 @@ func (c *Controller) detailHandler(ctx *gin.Context) {
 	if err != nil {
 		// 检查是否是"未找到"的错误
 		if strings.Contains(err.Error(), "未找到") {
-			// 日志不存在，返回404状态码
+			// 日志不存在，返回 404 状态码
 			ctx.Status(http.StatusNotFound)
 			c.renderTemplate(ctx, "error.html", gin.H{
 				"Title":    "404 - 页面未找到",
@@ -287,7 +289,7 @@ func (c *Controller) detailHandler(ctx *gin.Context) {
 	}
 
 	if entry == nil {
-		// 日志不存在，返回404状态码
+		// 日志不存在，返回 404 状态码
 		ctx.Status(http.StatusNotFound)
 		c.renderTemplate(ctx, "error.html", gin.H{
 			"Title":    "404 - 页面未找到",
@@ -339,14 +341,14 @@ func (c *Controller) logDetailAPIHandler(ctx *gin.Context) {
 
 	entry, err := c.debugger.GetStorage().FindByID(id)
 	if err != nil {
-		// 如果错误消息包含"未找到"，则返回404状态码
+		// 如果错误消息包含"未找到"，则返回 404 状态码
 		if strings.Contains(err.Error(), "未找到") {
 			ctx.JSON(http.StatusNotFound, gin.H{
 				"error": err.Error(),
 			})
 			return
 		}
-		// 其他错误返回500状态码
+		// 其他错误返回 500 状态码
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"error": "获取日志详情失败: " + err.Error(),
 		})
@@ -582,7 +584,7 @@ func getTemplateContent(templateName string) string {
 // 用于在初始化时没有传入路由组的情况
 func (c *Controller) RegisterRoutes(router *gin.Engine) {
 	c.router = router
-	c.registerRoutes()
+	c.registerRoutes(c.config.UseCDN)
 }
 
 // GetBasePath 获取基础路径

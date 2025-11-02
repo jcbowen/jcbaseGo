@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/security"
+	"github.com/jcbowen/jcbaseGo/middleware"
 )
 
 // Config 调试器配置结构
@@ -31,7 +32,8 @@ type Config struct {
 	SampleRate float64 `json:"sample_rate" default:"1.0"` // 采样率（0-1之间），默认记录所有请求
 
 	// IP访问控制配置
-	AllowedIPs []string `json:"allowed_ips" default:""` // 允许访问的IP白名单，空数组表示不限制
+	AllowedIPs []string `json:"allowed_ips" default:""`  // 允许访问的IP白名单，空数组表示不限制
+	UseCDN     bool     `json:"use_cdn" default:"false"` // 是否使用CDN，影响真实IP获取方式
 
 	// 核心组件配置 - 必须传入实例化的存储器
 	Storage Storage         `json:"-"` // 存储实现（必须传入实例化的存储器）
@@ -114,22 +116,7 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 		startTime := time.Now()
 
 		// 创建日志条目
-		entry := &LogEntry{
-			ID:             GenerateID(),
-			Timestamp:      startTime,
-			Method:         c.Request.Method,
-			URL:            c.Request.URL.String(),
-			ClientIP:       c.ClientIP(),
-			UserAgent:      c.Request.UserAgent(),
-			RequestID:      c.GetHeader("X-Request-ID"),
-			RequestHeaders: extractHeaders(c.Request.Header),
-			QueryParams:    extractQueryParams(c.Request.URL.Query()),
-		}
-
-		// 记录请求体
-		if body, err := d.extractRequestBody(c); err == nil {
-			entry.RequestBody = body
-		}
+		entry := d.createLogEntry(c, startTime)
 
 		// 设置请求ID到上下文
 		c.Set("debugger_request_id", entry.ID)
@@ -153,69 +140,121 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 		c.Next()
 
 		// 记录响应信息
-		entry.StatusCode = writer.Status()
-		entry.Duration = time.Since(startTime)
-		entry.ResponseHeaders = extractHeaders(writer.Header())
-
-		// 记录响应体
-		if writer.body.Len() > 0 {
-			// 检查响应头是否包含gzip压缩
-			contentEncoding := writer.Header().Get("Content-Encoding")
-
-			// 如果是gzip压缩的响应，尝试解压缩
-			if strings.Contains(contentEncoding, "gzip") {
-				// 解压缩gzip数据
-				reader, err := gzip.NewReader(bytes.NewReader(writer.body.Bytes()))
-				if err == nil {
-					defer reader.Close()
-					decompressed, err := io.ReadAll(reader)
-					if err == nil {
-						entry.ResponseBody = string(decompressed)
-					} else {
-						// 解压缩失败，记录原始数据并添加错误标记
-						entry.ResponseBody = "[GZIP解压缩失败] " + string(writer.body.Bytes())
-					}
-				} else {
-					// 创建gzip读取器失败，记录原始数据
-					entry.ResponseBody = "[GZIP格式错误] " + string(writer.body.Bytes())
-				}
-			} else {
-				// 非gzip压缩的响应，直接使用原始数据
-				entry.ResponseBody = string(writer.body.Bytes())
-			}
-		}
+		d.recordResponseInfo(entry, writer, startTime)
 
 		// 记录会话数据（如果存在）
-		if sessionData, exists := c.Get("session_data"); exists {
-			if data, ok := sessionData.(map[string]interface{}); ok {
-				entry.SessionData = data
-			}
-		}
+		d.recordSessionData(entry, c)
 
 		// 记录错误信息
-		if len(c.Errors) > 0 {
-			var errorMsgs []string
-			for _, err := range c.Errors {
-				errorMsgs = append(errorMsgs, err.Error())
-			}
-			entry.Error = strings.Join(errorMsgs, "; ")
-		}
+		d.recordErrorInfo(entry, c)
 
 		// 从上下文中获取logger并保存其收集的日志
-		if loggerValue, exists := c.Get("debugger_logger"); exists {
-			if logger, ok := loggerValue.(*DefaultLogger); ok {
-				// 获取logger收集的所有日志
-				entry.LoggerLogs = logger.GetLogs()
-				// 清空logger的日志记录，避免内存泄漏
-				logger.ClearLogs()
-			}
-		}
+		d.recordLoggerLogs(entry, c)
 
 		// 保存日志条目
-		if err := d.storage.Save(entry); err != nil {
-			// 记录保存错误，但不影响正常请求处理
-			fmt.Printf("保存调试日志失败: %v\n", err)
+		d.saveLogEntry(entry)
+	}
+}
+
+// createLogEntry 创建日志条目
+func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry {
+	entry := &LogEntry{
+		ID:             GenerateID(),
+		Timestamp:      startTime,
+		Method:         c.Request.Method,
+		URL:            c.Request.URL.String(),
+		ClientIP:       middleware.GetRealIP(c, d.config.UseCDN),
+		UserAgent:      c.Request.UserAgent(),
+		RequestID:      c.GetHeader("X-Request-ID"),
+		RequestHeaders: extractHeaders(c.Request.Header),
+		QueryParams:    extractQueryParams(c.Request.URL.Query()),
+	}
+
+	// 记录请求体
+	if body, err := d.extractRequestBody(c); err == nil {
+		entry.RequestBody = body
+	}
+
+	return entry
+}
+
+// recordResponseInfo 记录响应信息
+func (d *Debugger) recordResponseInfo(entry *LogEntry, writer *responseWriter, startTime time.Time) {
+	entry.StatusCode = writer.Status()
+	entry.Duration = time.Since(startTime)
+	entry.ResponseHeaders = extractHeaders(writer.Header())
+
+	// 记录响应体
+	if writer.body.Len() > 0 {
+		// 检查响应头是否包含gzip压缩
+		contentEncoding := writer.Header().Get("Content-Encoding")
+
+		// 如果是gzip压缩的响应，尝试解压缩
+		if strings.Contains(contentEncoding, "gzip") {
+			// 解压缩gzip数据
+			reader, err := gzip.NewReader(bytes.NewReader(writer.body.Bytes()))
+			if err == nil {
+				defer func(reader *gzip.Reader) {
+					err = reader.Close()
+					if err != nil {
+						d.logger.Error("关闭gzip读取器失败" + err.Error())
+					}
+				}(reader)
+				decompressed, err := io.ReadAll(reader)
+				if err == nil {
+					entry.ResponseBody = string(decompressed)
+				} else {
+					// 解压缩失败，记录原始数据并添加错误标记
+					entry.ResponseBody = "[GZIP解压缩失败] " + string(writer.body.Bytes())
+				}
+			} else {
+				// 创建gzip读取器失败，记录原始数据
+				entry.ResponseBody = "[GZIP格式错误] " + string(writer.body.Bytes())
+			}
+		} else {
+			// 非gzip压缩的响应，直接使用原始数据
+			entry.ResponseBody = string(writer.body.Bytes())
 		}
+	}
+}
+
+// recordSessionData 记录会话数据
+func (d *Debugger) recordSessionData(entry *LogEntry, c *gin.Context) {
+	if sessionData, exists := c.Get("session_data"); exists {
+		if data, ok := sessionData.(map[string]interface{}); ok {
+			entry.SessionData = data
+		}
+	}
+}
+
+// recordErrorInfo 记录错误信息
+func (d *Debugger) recordErrorInfo(entry *LogEntry, c *gin.Context) {
+	if len(c.Errors) > 0 {
+		var errorMsgs []string
+		for _, err := range c.Errors {
+			errorMsgs = append(errorMsgs, err.Error())
+		}
+		entry.Error = strings.Join(errorMsgs, "; ")
+	}
+}
+
+// recordLoggerLogs 记录logger收集的日志
+func (d *Debugger) recordLoggerLogs(entry *LogEntry, c *gin.Context) {
+	if loggerValue, exists := c.Get("debugger_logger"); exists {
+		if logger, ok := loggerValue.(*DefaultLogger); ok {
+			// 获取logger收集的所有日志
+			entry.LoggerLogs = logger.GetLogs()
+			// 清空logger的日志记录，避免内存泄漏
+			logger.ClearLogs()
+		}
+	}
+}
+
+// saveLogEntry 保存日志条目
+func (d *Debugger) saveLogEntry(entry *LogEntry) {
+	if err := d.storage.Save(entry); err != nil {
+		// 记录保存错误，但不影响正常请求处理
+		fmt.Printf("保存调试日志失败: %v\n", err)
 	}
 }
 
@@ -348,7 +387,7 @@ func (d *Debugger) GetController() *Controller {
 func (d *Debugger) RegisterRoutes(router *gin.Engine) {
 	// 使用根路径创建路由组
 	if d.controller == nil {
-		d.controller = NewController(d, router, nil)
+		d.controller = NewController(d, router, &ControllerConfig{UseCDN: d.config.UseCDN})
 	} else {
 		d.controller.RegisterRoutes(router)
 	}
