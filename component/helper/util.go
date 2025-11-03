@@ -85,10 +85,119 @@ func (d *MapHelper) GetData() map[string]interface{} {
 	return d.Data
 }
 
-// SetMapStrInterface
-// Deprecated: 请使用 NewMap
-func SetMapStrInterface(data map[string]interface{}) *MapHelper {
-	return NewMap(data)
+// ExtractString 从多级map中提取字符串字段值
+// path: 字段路径，使用点号分隔，如 "data.member_data.gender_text"
+// 返回：提取到的字符串值，如果路径不存在或类型不匹配返回空字符串
+func (d *MapHelper) ExtractString(path string) string {
+	if d.Data == nil {
+		return ""
+	}
+
+	keys := strings.Split(path, ".")
+	current := d.Data
+
+	// 遍历路径中的每个键
+	for i, key := range keys {
+		// 如果是最后一个键，返回字符串值
+		if i == len(keys)-1 {
+			if val, ok := current[key]; ok && val != nil {
+				return fmt.Sprintf("%v", val)
+			}
+			return ""
+		}
+
+		// 如果不是最后一个键，继续深入
+		if next, ok := current[key]; ok && next != nil {
+			if nextMap, ok := next.(map[string]interface{}); ok {
+				current = nextMap
+			} else {
+				// 如果中间路径不是map，返回空字符串
+				return ""
+			}
+		} else {
+			// 如果键不存在，返回空字符串
+			return ""
+		}
+	}
+
+	return ""
+}
+
+// Extract 从多级map中提取任意类型的字段值
+// path: 字段路径，使用点号分隔，如 "data.member_data.age"
+// 返回：提取到的原始值，如果路径不存在返回nil
+func (d *MapHelper) Extract(path string) interface{} {
+	if d.Data == nil {
+		return nil
+	}
+
+	keys := strings.Split(path, ".")
+	current := d.Data
+
+	// 遍历路径中的每个键
+	for i, key := range keys {
+		// 如果是最后一个键，返回原始值
+		if i == len(keys)-1 {
+			if val, ok := current[key]; ok && val != nil {
+				return val
+			}
+			return nil
+		}
+
+		// 如果不是最后一个键，继续深入
+		if next, ok := current[key]; ok && next != nil {
+			if nextMap, ok := next.(map[string]interface{}); ok {
+				current = nextMap
+			} else {
+				// 如果中间路径不是map，返回nil
+				return nil
+			}
+		} else {
+			// 如果键不存在，返回nil
+			return nil
+		}
+	}
+
+	return nil
+}
+
+// ExtractWithDefault 从多级map中提取字段值，支持默认值
+// path: 字段路径，使用点号分隔
+// defaultValue: 默认值，当路径不存在时返回此值
+// 返回：提取到的值或默认值
+func (d *MapHelper) ExtractWithDefault(path string, defaultValue interface{}) interface{} {
+	if d.Data == nil {
+		return defaultValue
+	}
+
+	keys := strings.Split(path, ".")
+	current := d.Data
+
+	// 遍历路径中的每个键
+	for i, key := range keys {
+		// 如果是最后一个键，返回值或默认值
+		if i == len(keys)-1 {
+			if val, ok := current[key]; ok && val != nil {
+				return val
+			}
+			return defaultValue
+		}
+
+		// 如果不是最后一个键，继续深入
+		if next, ok := current[key]; ok && next != nil {
+			if nextMap, ok := next.(map[string]interface{}); ok {
+				current = nextMap
+			} else {
+				// 如果中间路径不是map，返回默认值
+				return defaultValue
+			}
+		} else {
+			// 如果键不存在，返回默认值
+			return defaultValue
+		}
+	}
+
+	return defaultValue
 }
 
 // ----- []string 类型相关操作 -----/
