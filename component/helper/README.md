@@ -465,6 +465,76 @@ SSH 密钥的生成和获取：
 - **Map操作**: ArrayKeys(), ArrayValues(), GetData()
 - **排序支持**: DoSort()
 
+### Map字段提取功能
+
+提供多级Map字段提取功能，支持点号分隔的路径访问：
+
+- **ExtractString()**: 从多级map中提取字符串字段值
+- **Extract()**: 从多级map中提取任意类型的字段值
+- **ExtractWithDefault()**: 从多级map中提取字段值，支持默认值
+
+#### 使用示例
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func main() {
+	// 创建多层嵌套的Map数据
+	data := map[string]interface{}{
+		"api": map[string]interface{}{
+			"response": map[string]interface{}{
+				"status": "success",
+				"code":   200,
+				"data": map[string]interface{}{
+					"user": map[string]interface{}{
+						"id":       123,
+						"username": "john_doe",
+						"profile": map[string]interface{}{
+							"name":  "John Doe",
+							"email": "john@example.com",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	mapHelper := helper.NewMap(data)
+
+	// 使用 ExtractString 提取字符串值
+	username := mapHelper.ExtractString("api.response.data.user.username")
+	fmt.Printf("用户名: %s\n", username) // 输出: john_doe
+
+	// 使用 Extract 提取原始值
+	userID := mapHelper.Extract("api.response.data.user.id")
+	fmt.Printf("用户ID: %v\n", userID) // 输出: 123
+
+	// 使用 ExtractWithDefault 处理可能不存在的字段
+	avatar := mapHelper.ExtractWithDefault("api.response.data.user.avatar", "default.png")
+	fmt.Printf("头像: %v\n", avatar) // 输出: default.png
+
+	// 处理多层嵌套
+	email := mapHelper.ExtractString("api.response.data.user.profile.email")
+	fmt.Printf("邮箱: %s\n", email) // 输出: john@example.com
+
+	// 处理不存在的路径
+	nonexistent := mapHelper.ExtractString("api.response.data.user.nonexistent")
+	fmt.Printf("不存在的字段: '%s'\n", nonexistent) // 输出: ''
+}
+```
+
+#### 功能特点
+
+- **路径支持**: 使用点号分隔的多级路径访问
+- **类型安全**: 自动处理类型转换和边界情况
+- **默认值**: 支持自定义默认值处理
+- **链式调用**: 与现有 MapHelper 方法兼容
+
 ## 高级用法
 
 ### 组合使用示例
@@ -649,6 +719,25 @@ func (m *MoneyHelper) Divide(divisor float64) *MoneyHelper
 func (m *MoneyHelper) FloatString(parts ...string) string
 func (m *MoneyHelper) GreaterThan(other *MoneyHelper) bool
 func (m *MoneyHelper) GetError() error
+```
+
+### MapHelper 类型
+
+```go
+type MapHelper struct {
+    Data map[string]interface{}
+    Keys []string
+    Sort bool
+}
+
+func NewMap(mapData map[string]interface{}) *MapHelper
+func (m *MapHelper) DoSort() *MapHelper
+func (m *MapHelper) ArrayKeys() []string
+func (m *MapHelper) ArrayValues() []interface{}
+func (m *MapHelper) GetData() map[string]interface{}
+func (m *MapHelper) ExtractString(path string) string
+func (m *MapHelper) Extract(path string) interface{}
+func (m *MapHelper) ExtractWithDefault(path string, defaultValue interface{}) interface{}
 ```
 
 ### 工具函数
