@@ -17,6 +17,8 @@ type Context struct {
 	ActionName string       // Action名称(如: "create", "update", "delete", "detail", "list", "all", "set-value")
 	Debug      bool         // 调试模式
 	GinContext *gin.Context // 请求上下文
+
+	SafeMapGPCAll map[string]any // GPC数据映射
 }
 
 // NewContextOpt 目前由于配置项没有分离，所以直接用相等，后续有可能会分离
@@ -308,9 +310,19 @@ func (ctx *Context) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 	return
 }
 
+// ensureSafeMapGPCAll 确保SafeMapGPC字段已初始化
+// 这个方法用于安全地初始化SafeMapGPC字段，避免重复计算和线程安全问题。
+// 它检查SafeMapGPC是否为nil，如果是则调用GetSafeMapGPC方法进行初始化。
+// 这个方法应该在所有需要访问SafeMapGPC字段的方法中调用。
+func (ctx *Context) ensureSafeMapGPCAll() {
+	if ctx.SafeMapGPCAll == nil {
+		ctx.SafeMapGPCAll = ctx.GetSafeMapGPC("all")
+	}
+}
+
 // GetSafeGPCValStr 安全获取GPC字符串值
 // 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取指定路径的字段值。
-// 它首先调用GetSafeMapGPC方法获取所有GPC数据，然后使用helper.NewMap方法将其转换为可操作的Map类型，
+// 它首先调用ensureSafeMapGPC方法确保GPC数据已初始化，然后使用helper.NewMap方法将其转换为可操作的Map类型，
 // 最后使用ExtractString方法根据指定的字段路径提取对应的值。
 // 参数：
 //   - fieldPath string: 要获取的字段路径，支持嵌套路径（如"user.name"）。
@@ -318,14 +330,13 @@ func (ctx *Context) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 // 返回值：
 //   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回空字符串。
 func (ctx *Context) GetSafeGPCValStr(fieldPath string) (value string) {
-	mapData := ctx.GetSafeMapGPC("all")
-
-	return helper.NewMap(mapData).ExtractString(fieldPath)
+	ctx.ensureSafeMapGPCAll()
+	return helper.NewMap(ctx.SafeMapGPCAll).ExtractString(fieldPath)
 }
 
 // GetSafeGPCValInt 安全获取GPC整数值
 // 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取指定路径的字段值。
-// 它首先调用GetSafeMapGPC方法获取所有GPC数据，然后使用helper.NewMap方法将其转换为可操作的Map类型，
+// 它首先调用ensureSafeMapGPC方法确保GPC数据已初始化，然后使用helper.NewMap方法将其转换为可操作的Map类型，
 // 最后使用ExtractInt方法根据指定的字段路径提取对应的值。
 // 参数：
 //   - fieldPath string: 要获取的字段路径，支持嵌套路径（如"user.age"）。
@@ -333,14 +344,13 @@ func (ctx *Context) GetSafeGPCValStr(fieldPath string) (value string) {
 // 返回值：
 //   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回0。
 func (ctx *Context) GetSafeGPCValInt(fieldPath string) (value int) {
-	mapData := ctx.GetSafeMapGPC("all")
-
-	return helper.NewMap(mapData).ExtractInt(fieldPath)
+	ctx.ensureSafeMapGPCAll()
+	return helper.NewMap(ctx.SafeMapGPCAll).ExtractInt(fieldPath)
 }
 
 // GetSafeGPCValBool 安全获取GPC布尔值
 // 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取指定路径的字段值。
-// 它首先调用GetSafeMapGPC方法获取所有GPC数据，然后使用helper.NewMap方法将其转换为可操作的Map类型，
+// 它首先调用ensureSafeMapGPC方法确保GPC数据已初始化，然后使用helper.NewMap方法将其转换为可操作的Map类型，
 // 最后使用ExtractBool方法根据指定的字段路径提取对应的值。
 // 参数：
 //   - fieldPath string: 要获取的字段路径，支持嵌套路径（如"user.isActive"）。
@@ -348,14 +358,13 @@ func (ctx *Context) GetSafeGPCValInt(fieldPath string) (value int) {
 // 返回值：
 //   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回false。
 func (ctx *Context) GetSafeGPCValBool(fieldPath string) (value bool) {
-	mapData := ctx.GetSafeMapGPC("all")
-
-	return helper.NewMap(mapData).ExtractBool(fieldPath)
+	ctx.ensureSafeMapGPCAll()
+	return helper.NewMap(ctx.SafeMapGPCAll).ExtractBool(fieldPath)
 }
 
 // GetSafeGPCValTime 安全获取GPC时间值
 // 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取指定路径的字段值。
-// 它首先调用GetSafeMapGPC方法获取所有GPC数据，然后使用helper.NewMap方法将其转换为可操作的Map类型，
+// 它首先调用ensureSafeMapGPC方法确保GPC数据已初始化，然后使用helper.NewMap方法将其转换为可操作的Map类型，
 // 最后使用ExtractTime方法根据指定的字段路径提取对应的值。
 // 参数：
 //   - fieldPath string: 要获取的字段路径，支持嵌套路径（如"user.birthday"）。
@@ -363,14 +372,13 @@ func (ctx *Context) GetSafeGPCValBool(fieldPath string) (value bool) {
 // 返回值：
 //   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回time.Time零值。
 func (ctx *Context) GetSafeGPCValTime(fieldPath string) (value time.Time) {
-	mapData := ctx.GetSafeMapGPC("all")
-
-	return helper.NewMap(mapData).ExtractTime(fieldPath)
+	ctx.ensureSafeMapGPCAll()
+	return helper.NewMap(ctx.SafeMapGPCAll).ExtractTime(fieldPath)
 }
 
 // GetSafeGPCVal 安全获取GPC值
 // 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取指定路径的字段值。
-// 它首先调用GetSafeMapGPC方法获取所有GPC数据，然后使用helper.NewMap方法将其转换为可操作的Map类型，
+// 它首先调用ensureSafeMapGPC方法确保GPC数据已初始化，然后使用helper.NewMap方法将其转换为可操作的Map类型，
 // 最后使用Extract方法根据指定的字段路径提取对应的值。
 // 参数：
 //   - fieldPath string: 要获取的字段路径，支持嵌套路径（如"user.name"）。
@@ -378,7 +386,6 @@ func (ctx *Context) GetSafeGPCValTime(fieldPath string) (value time.Time) {
 // 返回值：
 //   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回nil。
 func (ctx *Context) GetSafeGPCVal(fieldPath string) (value any) {
-	mapData := ctx.GetSafeMapGPC("all")
-
-	return helper.NewMap(mapData).Extract(fieldPath)
+	ctx.ensureSafeMapGPCAll()
+	return helper.NewMap(ctx.SafeMapGPCAll).Extract(fieldPath)
 }
