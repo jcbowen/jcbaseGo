@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
+	"github.com/jcbowen/jcbaseGo/middleware"
 )
 
 // Controller 调试器控制器结构
@@ -128,8 +129,8 @@ func (c *Controller) ipAccessControlMiddleware(useCDN bool) gin.HandlerFunc {
 			return
 		}
 
-		// 获取客户端IP
-		clientIP := helper.GetRealIPFromHeaders(helper.ExtractHeaders(ctx.Request.Header)) // 默认不使用CDN
+		// 获取客户端IP地址
+		clientIP := middleware.GetRealIP(ctx, useCDN) // 默认不使用CDN
 
 		// 检查IP是否在白名单中
 		if c.isIPAllowed(clientIP, config.AllowedIPs) {

@@ -113,39 +113,6 @@ func (ip *IP) IsPrivate() bool {
 	return false
 }
 
-// SplitIPs 分割多个IP地址字符串
-// 参数:
-//   - s: 包含多个IP地址的字符串，用逗号分隔
-//
-// 返回值:
-//   - []string: 分割后的IP地址列表
-func SplitIPs(s string) []string {
-	var result []string
-	for _, item := range strings.Split(s, ",") {
-		result = append(result, strings.TrimSpace(item))
-	}
-	return result
-}
-
-// SplitAndValidateIPs 分割并验证多个IP地址
-// 参数:
-//   - s: 包含多个IP地址的字符串，用逗号分隔
-//
-// 返回值:
-//   - []string: 经过验证的有效IP地址列表
-func SplitAndValidateIPs(s string) []string {
-	var result []string
-	ips := SplitIPs(s)
-
-	for _, ip := range ips {
-		if NewIP(ip).IsValid() {
-			result = append(result, ip)
-		}
-	}
-
-	return result
-}
-
 // IsAllowed 检查IP是否被允许（基于白名单和黑名单）
 // 参数:
 //   - whitelist: IP白名单列表，如果提供则只允许白名单内的IP
@@ -205,6 +172,8 @@ func (ip *IP) IsInCIDR(cidr string) bool {
 }
 
 // GetValidClientIP 从IP列表中获取有效的客户端IP
+// 该方法会优先选择公网IP，如果没有公网IP则选择私有IP，最后选择第一个有效IP
+//
 // 参数:
 //   - ips: IP地址列表
 //
@@ -246,6 +215,8 @@ func GetValidClientIP(ips []string) string {
 }
 
 // GetRealIPFromHeaders 从HTTP头信息中获取真实IP地址
+// 该方法会依次检查X-Real-IP、X-Forwarded-For等代理头信息来获取真实客户端IP
+//
 // 参数:
 //   - headers: HTTP头信息映射
 //
@@ -254,12 +225,12 @@ func GetValidClientIP(ips []string) string {
 func GetRealIPFromHeaders(headers map[string]string) string {
 	var realIP string
 
-	// 1. 尝试从 X-Real-IP 中获取
+	// 尝试从 X-Real-IP 中获取
 	if xRealIP, ok := headers["X-Real-IP"]; ok && xRealIP != "" {
 		realIP = strings.TrimSpace(xRealIP)
 	}
 
-	// 2. 如果X-Real-IP为空，尝试从 X-Forwarded-For 中获取
+	// 如果X-Real-IP为空，尝试从 X-Forwarded-For 中获取
 	if realIP == "" {
 		if xForwardedFor, ok := headers["X-Forwarded-For"]; ok && xForwardedFor != "" {
 			// X-Forwarded-For 可能包含多个IP地址，用逗号分隔
@@ -271,7 +242,14 @@ func GetRealIPFromHeaders(headers map[string]string) string {
 		}
 	}
 
-	// 3. 如果仍然为空，尝试从其他常见代理头中获取
+	// 如果仍然为空，尝试从其他常见代理头中获取
+	if realIP == "" {
+		// 尝试从 X-Forwarded 中获取
+		if xForwarded, ok := headers["X-Forwarded"]; ok && xForwarded != "" {
+			realIP = strings.TrimSpace(xForwarded)
+		}
+	}
+
 	if realIP == "" {
 		// 尝试从 X-Forwarded-Host 中获取
 		if xForwardedHost, ok := headers["X-Forwarded-Host"]; ok && xForwardedHost != "" {
@@ -287,6 +265,13 @@ func GetRealIPFromHeaders(headers map[string]string) string {
 	}
 
 	if realIP == "" {
+		// 尝试从 X-Originating-IP 中获取
+		if xClusterClientIP, ok := headers["X-Cluster-Client-IP"]; ok && xClusterClientIP != "" {
+			realIP = strings.TrimSpace(xClusterClientIP)
+		}
+	}
+
+	if realIP == "" {
 		// 尝试从 True-Client-IP 中获取
 		if trueClientIP, ok := headers["True-Client-IP"]; ok && trueClientIP != "" {
 			realIP = strings.TrimSpace(trueClientIP)
@@ -294,4 +279,41 @@ func GetRealIPFromHeaders(headers map[string]string) string {
 	}
 
 	return realIP
+}
+
+// SplitIPs 分割多个IP地址字符串
+// 该方法会将逗号分隔的IP字符串分割成数组
+//
+// 参数:
+//   - s: 包含多个IP地址的字符串，用逗号分隔
+//
+// 返回值:
+//   - []string: 分割后的IP地址列表
+func SplitIPs(s string) []string {
+	var result []string
+	for _, item := range strings.Split(s, ",") {
+		result = append(result, strings.TrimSpace(item))
+	}
+	return result
+}
+
+// SplitAndValidateIPs 分割并验证多个IP地址
+// 该方法会将逗号分隔的IP字符串分割成数组，并验证每个IP的有效性
+//
+// 参数:
+//   - s: 包含多个IP地址的字符串，用逗号分隔
+//
+// 返回值:
+//   - []string: 经过验证的有效IP地址列表
+func SplitAndValidateIPs(s string) []string {
+	var result []string
+	ips := SplitIPs(s)
+
+	for _, ip := range ips {
+		if NewIP(ip).IsValid() {
+			result = append(result, ip)
+		}
+	}
+
+	return result
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/security"
+	"github.com/jcbowen/jcbaseGo/middleware"
 )
 
 // Config 调试器配置结构
@@ -125,7 +126,7 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 			"request_id": entry.ID,
 			"method":     c.Request.Method,
 			"url":        c.Request.URL.String(),
-			"client_ip":  c.ClientIP(),
+			"client_ip":  middleware.GetRealIP(c, d.config.UseCDN),
 		}))
 
 		// 创建自定义的ResponseWriter来捕获响应
@@ -162,7 +163,7 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 		Timestamp:      startTime,
 		Method:         c.Request.Method,
 		URL:            c.Request.URL.String(),
-		ClientIP:       helper.GetRealIPFromHeaders(helper.ExtractHeaders(c.Request.Header)),
+		ClientIP:       middleware.GetRealIP(c, d.config.UseCDN),
 		UserAgent:      c.Request.UserAgent(),
 		RequestID:      c.GetHeader("X-Request-ID"),
 		RecordType:     "http", // 设置记录类型为HTTP

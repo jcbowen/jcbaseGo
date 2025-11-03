@@ -7,6 +7,8 @@ import (
 	"html"
 	"strings"
 	"time"
+
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 // DetailViewer 日志详情查看器
@@ -101,10 +103,10 @@ func (dv *DetailViewer) formatHTTPDetail(detailView *DetailView) {
 	entry := detailView.LogEntry
 
 	// 格式化请求头
-	detailView.FormattedRequestHeaders = formatHeaders(entry.RequestHeaders)
+	detailView.FormattedRequestHeaders = helper.FormatHeaders(entry.RequestHeaders)
 
 	// 格式化响应头
-	detailView.FormattedResponseHeaders = formatHeaders(entry.ResponseHeaders)
+	detailView.FormattedResponseHeaders = helper.FormatHeaders(entry.ResponseHeaders)
 
 	// 格式化查询参数
 	detailView.FormattedQueryParams = formatQueryParams(entry.QueryParams)
@@ -258,20 +260,6 @@ func formatDuration(duration time.Duration) string {
 	} else {
 		return fmt.Sprintf("%.2fs", duration.Seconds())
 	}
-}
-
-// formatHeaders 格式化头部信息
-func formatHeaders(headers map[string]string) string {
-	if len(headers) == 0 {
-		return "无"
-	}
-
-	var buf bytes.Buffer
-	for key, value := range headers {
-		buf.WriteString(fmt.Sprintf("%s: %s\n", key, html.EscapeString(value)))
-	}
-
-	return buf.String()
 }
 
 // formatQueryParams 格式化查询参数

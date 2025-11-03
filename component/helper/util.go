@@ -9,7 +9,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"reflect"
 	"runtime"
 	"sort"
@@ -561,44 +560,6 @@ func ParseChineseIDCard(idCard string) (gender string, age int, birthDay string,
 	regionCode = idCard[:6]
 
 	return gender, age, birthDay, regionCode, sequenceCode, nil
-}
-
-// GetHostInfo 从http.Request中获取hostInfo
-func GetHostInfo(req *http.Request) string {
-	hostInfo := ""
-
-	// 判断是http还是https
-	if req.TLS != nil || req.Header.Get("X-Scheme") == "https" {
-		hostInfo = "https://"
-	} else {
-		hostInfo = "http://"
-	}
-
-	// 获取host
-	if req.Header.Get("X-Forwarded-Host") != "" {
-		hostInfo += req.Header.Get("X-Forwarded-Host")
-	} else if req.Header.Get("X-Original-Host") != "" {
-		hostInfo += req.Header.Get("X-Original-Host")
-	} else if req.Header.Get("X-Host") != "" {
-		hostInfo += req.Header.Get("X-Host")
-	} else if req.Host != "" {
-		hostInfo += req.Host
-	} else {
-		hostInfo += req.URL.Host
-	}
-
-	// 补充端口号
-	if req.URL.Port() != "" {
-		hostInfo += ":" + req.URL.Port()
-	}
-
-	// 判断hostInfo中是否有80或者443的端口号，如果有，应当移除
-	if strings.Contains(hostInfo, ":80") || strings.Contains(hostInfo, ":443") {
-		hostInfo = strings.ReplaceAll(hostInfo, ":80", "")
-		hostInfo = strings.ReplaceAll(hostInfo, ":443", "")
-	}
-
-	return hostInfo
 }
 
 // Base64Encode base64加密
