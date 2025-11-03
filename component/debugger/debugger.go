@@ -13,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/security"
-	"github.com/jcbowen/jcbaseGo/middleware"
 )
 
 // Config 调试器配置结构
@@ -163,7 +162,7 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 		Timestamp:      startTime,
 		Method:         c.Request.Method,
 		URL:            c.Request.URL.String(),
-		ClientIP:       middleware.GetRealIP(c, d.config.UseCDN),
+		ClientIP:       helper.GetRealIPFromHeaders(extractHeaders(c.Request.Header)),
 		UserAgent:      c.Request.UserAgent(),
 		RequestID:      c.GetHeader("X-Request-ID"),
 		RecordType:     "http", // 设置记录类型为HTTP

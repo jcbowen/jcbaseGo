@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 type Base struct {
@@ -79,43 +80,59 @@ func (b Base) SetRealIP(useCDN bool) gin.HandlerFunc {
 	}
 }
 
-// GetRealIP 如果开启了CDN之类的，获取真实IP需要从头部读取
+// GetRealIP 获取真实客户端IP地址
+// 当useCDN为true时，优先从代理头信息中获取IP；为false时，直接使用gin的ClientIP方法
+// 参数:
+//   - c: gin上下文
+//   - useCDN: 是否使用CDN或代理，true表示使用，false表示不使用
+//
+// 返回值:
+//   - realIP: 真实客户端IP地址
 func GetRealIP(c *gin.Context, useCDN bool) (realIP string) {
-	// 尝试从 X-Real-IP 中获取
-	xRealIP := c.GetHeader("X-Real-IP")
-	if xRealIP != "" {
-		realIP = strings.TrimSpace(xRealIP)
+	return GetRealIPWithFilter(c, useCDN, nil, nil)
+}
+
+// GetRealIPWithFilter 获取真实客户端IP地址（带过滤功能）
+// 参数:
+//   - c: gin上下文
+//   - useCDN: 是否使用CDN或代理，true表示使用，false表示不使用
+//   - whitelist: IP白名单列表，如果提供则只允许白名单内的IP
+//   - blacklist: IP黑名单列表，如果提供则拒绝黑名单内的IP
+//
+// 返回值:
+//   - realIP: 真实客户端IP地址
+func GetRealIPWithFilter(c *gin.Context, useCDN bool, whitelist, blacklist []string) (realIP string) {
+	// 如果没有使用CDN，直接返回gin的客户端IP
+	if !useCDN {
+		return c.ClientIP()
 	}
 
-	if realIP == "" {
-		// 尝试从 X-Forwarded-For 中获取
-		xForwardedFor := c.GetHeader("X-Forwarded-For")
-		if xForwardedFor != "" {
-			// X-Forwarded-For 可能包含多个IP地址，用逗号分隔
-			ips := splitIps(xForwardedFor)
-			if len(ips) > 0 {
-				realIP = ips[0] // 获取第一个IP
-			}
-		}
+	// 使用CDN时，优先从代理头信息中获取真实IP
+
+	// 构建HTTP头信息映射
+	headers := map[string]string{
+		"X-Real-IP":        c.GetHeader("X-Real-IP"),
+		"X-Forwarded-For":  c.GetHeader("X-Forwarded-For"),
+		"X-Forwarded-Host": c.GetHeader("X-Forwarded-Host"),
+		"X-Originating-IP": c.GetHeader("X-Originating-IP"),
+		"True-Client-IP":   c.GetHeader("True-Client-IP"),
 	}
 
-	// 用gin的ip获取托底
-	// 没有使用CDN或者穿透，以gin上下文获取的IP为准
-	if realIP == "" || realIP == "::1" || !useCDN {
-		// 从上下文中获取客户端IP
+	// 使用helper包中的函数获取真实IP
+	realIP = helper.GetRealIPFromHeaders(headers)
+
+	// 如果从头部获取的IP为空或无效，回退到gin的客户端IP
+	if realIP == "" || !helper.NewIP(realIP).IsValid() {
+		realIP = c.ClientIP()
+	}
+
+	// 应用IP过滤规则
+	if !helper.NewIP(realIP).IsAllowed(whitelist, blacklist) {
+		// 如果IP被过滤，回退到gin的客户端IP
 		realIP = c.ClientIP()
 	}
 
 	return
-}
-
-// splitIps 分割多个IP
-func splitIps(s string) []string {
-	var result []string
-	for _, item := range strings.Split(s, ",") {
-		result = append(result, strings.TrimSpace(item))
-	}
-	return result
 }
 
 // SetGPC 设置响应头
