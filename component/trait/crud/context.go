@@ -306,3 +306,78 @@ func (ctx *Context) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 
 	return
 }
+
+// GetSafeGPCValStr 安全获取GPC字符串值
+// 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取指定路径的字段值。
+// 它首先调用GetSafeMapGPC方法获取所有GPC数据，然后使用helper.NewMap方法将其转换为可操作的Map类型，
+// 最后使用ExtractString方法根据指定的字段路径提取对应的值。
+// 参数：
+//   - fieldPath string: 要获取的字段路径，支持嵌套路径（如"user.name"）。
+//
+// 返回值：
+//   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回空字符串。
+func (ctx *Context) GetSafeGPCValStr(fieldPath string) (value any) {
+	mapData := ctx.GetSafeMapGPC("all")
+
+	return helper.NewMap(mapData).ExtractString(fieldPath)
+}
+
+// GetSafeGPCValInt 安全获取GPC整数值
+// 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取指定路径的字段值。
+// 它首先调用GetSafeMapGPC方法获取所有GPC数据，然后使用helper.NewMap方法将其转换为可操作的Map类型，
+// 最后使用ExtractInt方法根据指定的字段路径提取对应的值。
+// 参数：
+//   - fieldPath string: 要获取的字段路径，支持嵌套路径（如"user.age"）。
+//
+// 返回值：
+//   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回0。
+func (ctx *Context) GetSafeGPCValInt(fieldPath string) (value any) {
+	mapData := ctx.GetSafeMapGPC("all")
+
+	return helper.NewMap(mapData).ExtractInt(fieldPath)
+}
+
+// GetSafeGPCValBool 安全获取GPC布尔值
+// 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取指定路径的字段值。
+// 它首先调用GetSafeMapGPC方法获取所有GPC数据，然后使用helper.NewMap方法将其转换为可操作的Map类型，
+// 最后使用ExtractBool方法根据指定的字段路径提取对应的值。
+// 参数：
+//   - fieldPath string: 要获取的字段路径，支持嵌套路径（如"user.isActive"）。
+//
+// 返回值：
+//   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回false。
+func (ctx *Context) GetSafeGPCValBool(fieldPath string) (value any) {
+	mapData := ctx.GetSafeMapGPC("all")
+
+	return helper.NewMap(mapData).ExtractBool(fieldPath)
+}
+
+// GetSafeGPCValTime 安全获取GPC时间值
+// 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取指定路径的字段值。
+// 它首先调用GetSafeMapGPC方法获取所有GPC数据，然后使用helper.NewMap方法将其转换为可操作的Map类型，
+// 最后使用ExtractTime方法根据指定的字段路径提取对应的值。
+// 参数：
+//   - fieldPath string: 要获取的字段路径，支持嵌套路径（如"user.birthday"）。
+//
+// 返回值：
+//   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回time.Time零值。
+func (ctx *Context) GetSafeGPCValTime(fieldPath string) (value any) {
+	mapData := ctx.GetSafeMapGPC("all")
+
+	return helper.NewMap(mapData).ExtractTime(fieldPath)
+}
+
+// GetSafeGPCVal 安全获取GPC值
+// 这个方法用于从Gin上下文的GPC（全局请求上下文）中安全获取指定路径的字段值。
+// 它首先调用GetSafeMapGPC方法获取所有GPC数据，然后使用helper.NewMap方法将其转换为可操作的Map类型，
+// 最后使用Extract方法根据指定的字段路径提取对应的值。
+// 参数：
+//   - fieldPath string: 要获取的字段路径，支持嵌套路径（如"user.name"）。
+//
+// 返回值：
+//   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回nil。
+func (ctx *Context) GetSafeGPCVal(fieldPath string) (value any) {
+	mapData := ctx.GetSafeMapGPC("all")
+
+	return helper.NewMap(mapData).Extract(fieldPath)
+}

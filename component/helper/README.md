@@ -649,6 +649,11 @@ func (c Convert) ToBool() bool
 func (c Convert) ToFileMode() os.FileMode
 func (c Convert) ToArrByte() []byte
 func (c Convert) ToNumber() (interface{}, bool)
+func (c Convert) ToTime() time.Time
+func (c Convert) ToMap() map[string]interface{}
+func (c Convert) ToSlice() []interface{}
+func (c Convert) ToDuration() time.Duration
+func (c Convert) ToInterface() interface{}
 ```
 
 ### Str 类型
