@@ -1180,7 +1180,7 @@ const detailTemplate = `<!DOCTYPE html>
                         <div class="log-fields">
                             {{range $key, $value := .Fields}}
                             {{/* 过滤掉在基本信息区域已经展示过的字段 */}}
-                            {{if and (ne $key "level") (ne $key "message") (ne $key "timestamp") (ne $key "request_id") (ne $key "method") (ne $key "url") (ne $key "client_ip")}}
+                            {{if and (ne $key "level") (ne $key "message") (ne $key "timestamp") (ne $key "request_id") (ne $key "method") (ne $key "url") (ne $key "client_ip") (ne $key "process_id") (ne $key "process_name") (ne $key "process_type")}}
                             <span class="log-field">{{$key}}: {{$value}}</span>
                             {{end}}
                             {{end}}
