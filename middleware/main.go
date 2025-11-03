@@ -124,7 +124,7 @@ func GetRealIPWithFilter(c *gin.Context, useCDN bool, whitelist, blacklist []str
 	realIP = helper.GetRealIPFromHeaders(headers)
 
 	// 如果从头部获取的IP为空或无效，回退到gin的客户端IP
-	if realIP == "" || !helper.NewIP(realIP).IsValid() {
+	if realIP == "" || helper.NewIP(realIP).IsLoopback() {
 		realIP = c.ClientIP()
 	}
 
