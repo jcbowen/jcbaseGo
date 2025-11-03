@@ -686,9 +686,12 @@ const detailTemplate = `<!DOCTYPE html>
         .info-value { 
             font-size: 14px; 
             color: #333; 
+            word-wrap: break-word; 
+            overflow-wrap: break-word; 
             word-break: break-word;
             line-height: 1.4;
             flex: 1;
+            max-width: 100%;
         }
         
         .headers-table, .params-table { width: 100%; border-collapse: collapse; }
@@ -699,6 +702,8 @@ const detailTemplate = `<!DOCTYPE html>
             max-width: 300px; 
             overflow: visible; 
             white-space: normal; 
+            word-wrap: break-word; 
+            overflow-wrap: break-word; 
             word-break: break-word;
             line-height: 1.4;
         }
@@ -723,8 +728,25 @@ const detailTemplate = `<!DOCTYPE html>
             margin: 0;
         }
         
-        .json-viewer { background: #f8f9fa; border: 1px solid #eee; border-radius: 4px; padding: 15px; max-height: 400px; overflow: auto; font-family: 'Courier New', monospace; font-size: 12px; }
-        .json-viewer pre { margin: 0; white-space: pre-wrap; }
+        .json-viewer { 
+            background: #f8f9fa; 
+            border: 1px solid #eee; 
+            border-radius: 4px; 
+            padding: 15px; 
+            max-height: 400px; 
+            overflow: auto; 
+            font-family: 'Courier New', monospace; 
+            font-size: 12px; 
+        }
+        .json-viewer pre { 
+            margin: 0; 
+            white-space: pre-wrap; 
+            word-wrap: break-word; 
+            overflow-wrap: break-word; 
+            word-break: break-word; 
+            max-width: 100%; 
+            line-height: 1.4;
+        }
         
         .tab-container { margin-top: 20px; }
         .tabs { display: flex; border-bottom: 1px solid #eee; margin-bottom: 15px; }
@@ -763,7 +785,16 @@ const detailTemplate = `<!DOCTYPE html>
         .level-info { background: #d4edda; color: #155724; }
         .level-warn { background: #fff3cd; color: #856404; }
         .level-error { background: #f8d7da; color: #721c24; }
-        .log-message { font-size: 14px; color: #333; margin-bottom: 8px; }
+        .log-message { 
+            font-size: 14px; 
+            color: #333; 
+            margin-bottom: 8px; 
+            word-wrap: break-word; 
+            overflow-wrap: break-word; 
+            word-break: break-word; 
+            max-width: 100%; 
+            line-height: 1.4;
+        }
         .log-fields { display: flex; flex-wrap: wrap; gap: 8px; }
         .log-field { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 11px; color: #495057; }
         
@@ -779,7 +810,14 @@ const detailTemplate = `<!DOCTYPE html>
             .basic-info { grid-template-columns: 1fr; gap: 12px; }
             .info-item { margin-bottom: 8px; }
             .info-label { font-size: 13px; font-weight: 600; }
-            .info-value { font-size: 14px; line-height: 1.4; }
+            .info-value { 
+                font-size: 14px; 
+                line-height: 1.4; 
+                word-wrap: break-word; 
+                overflow-wrap: break-word; 
+                word-break: break-word; 
+                max-width: 100%; 
+            }
             .headers-table, .params-table { font-size: 13px; }
             .headers-table th, .params-table th,
             .headers-table td, .params-table td { 
@@ -796,7 +834,14 @@ const detailTemplate = `<!DOCTYPE html>
             .json-viewer { padding: 10px; font-size: 12px; max-height: 300px; }
             .log-header { flex-direction: column; align-items: flex-start; gap: 6px; }
             .log-item { padding: 10px; margin-bottom: 8px; }
-            .log-message { font-size: 14px; line-height: 1.4; }
+            .log-message { 
+                font-size: 14px; 
+                line-height: 1.4; 
+                word-wrap: break-word; 
+                overflow-wrap: break-word; 
+                word-break: break-word; 
+                max-width: 100%; 
+            }
             .log-fields { gap: 4px; }
             .log-field { font-size: 11px; padding: 2px 6px; }
             
@@ -820,7 +865,14 @@ const detailTemplate = `<!DOCTYPE html>
             .basic-info { gap: 8px; }
             .info-item { margin-bottom: 6px; }
             .info-label { font-size: 12px; font-weight: 600; }
-            .info-value { font-size: 13px; line-height: 1.4; }
+            .info-value { 
+                font-size: 13px; 
+                line-height: 1.4; 
+                word-wrap: break-word; 
+                overflow-wrap: break-word; 
+                word-break: break-word; 
+                max-width: 100%; 
+            }
             .headers-table, .params-table { font-size: 12px; }
             .headers-table th, .params-table th,
             .headers-table td, .params-table td { 
@@ -836,7 +888,14 @@ const detailTemplate = `<!DOCTYPE html>
             }
             .json-viewer { padding: 8px; font-size: 11px; max-height: 250px; }
             .log-item { padding: 8px; margin-bottom: 8px; }
-            .log-message { font-size: 13px; line-height: 1.4; }
+            .log-message { 
+                font-size: 13px; 
+                line-height: 1.4; 
+                word-wrap: break-word; 
+                overflow-wrap: break-word; 
+                word-break: break-word; 
+                max-width: 100%; 
+            }
             .log-field { font-size: 10px; padding: 1px 4px; }
             
             /* 超小屏幕表格优化 */
@@ -1108,7 +1167,7 @@ const detailTemplate = `<!DOCTYPE html>
             <!-- Logger -->
             {{if .Entry.LoggerLogs}}
             <div class="section">
-                <h2>Logger</h2>
+                <h2>日志</h2>
                 <div class="logger-logs">
                     {{range .Entry.LoggerLogs}}
                     <div class="log-item">
