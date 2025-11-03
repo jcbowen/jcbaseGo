@@ -87,7 +87,7 @@ func main() {
 		processLogger.Warn("遇到警告信息", map[string]interface{}{"warning": "test_warning"})
 
 		// 结束进程记录
-		if err := debuggerInstance.EndProcess(processID, "completed"); err != nil {
+		if err := debuggerInstance.EndProcess(processID, debugger.ProcessStatusCompleted); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": fmt.Sprintf("结束进程记录失败: %v", err),
 			})
@@ -97,7 +97,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"message":    "进程记录已创建并完成",
 			"process_id": processID,
-			"status":     "completed",
+			"status":     debugger.ProcessStatusCompleted,
 		})
 	})
 

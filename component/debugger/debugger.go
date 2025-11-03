@@ -615,7 +615,7 @@ func (d *Debugger) GetProcessLogger(processID string) (ProcessLoggerInterface, e
 // 参数:
 //
 //	processID: 进程ID，由StartProcess方法返回
-//	status: 进程结束状态，如"completed"、"failed"、"cancelled"等
+//	status: 进程结束状态，使用预定义的常量：ProcessStatusCompleted、ProcessStatusFailed、ProcessStatusCancelled
 //
 // 返回值:
 //
@@ -623,7 +623,7 @@ func (d *Debugger) GetProcessLogger(processID string) (ProcessLoggerInterface, e
 //
 // 示例:
 //
-//	err := dbg.EndProcess("process-123456", "completed")
+//	err := dbg.EndProcess("process-123456", ProcessStatusCompleted)
 //	if err != nil {
 //	    // 处理错误
 //	}

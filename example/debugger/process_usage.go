@@ -60,7 +60,7 @@ func processWorker(debuggerInstance *debugger.Debugger, processName string) {
 	})
 
 	// 结束进程记录
-	err = debuggerInstance.EndProcess(logger.GetProcessID(), "completed")
+	err = debuggerInstance.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
 	if err != nil {
 		log.Printf("结束进程记录失败: %v", err)
 	}
@@ -114,7 +114,7 @@ func batchProcessor(debuggerInstance *debugger.Debugger) {
 		"total_duration":   time.Since(logger.GetStartTime()).String(),
 	})
 
-	debuggerInstance.EndProcess(logger.GetProcessID(), "completed")
+	debuggerInstance.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
 }
 
 // main 主函数，演示进程级debugger的使用
@@ -203,7 +203,7 @@ func main() {
 			})
 			time.Sleep(100 * time.Millisecond)
 			logger.Debug("后台任务完成")
-			debuggerInstance.EndProcess(logger.GetProcessID(), "completed")
+			debuggerInstance.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
 		}()
 
 		c.JSON(http.StatusOK, gin.H{

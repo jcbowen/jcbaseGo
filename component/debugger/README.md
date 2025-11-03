@@ -278,7 +278,7 @@ func main() {
 
 	// 启动一个进程记录
 	logger := dbg.StartProcess("数据同步任务", "batch")
-	defer logger.EndProcess("completed") // 确保进程结束时记录结束时间
+	defer logger.EndProcess(debugger.ProcessStatusCompleted) // 确保进程结束时记录结束时间
 
 	// 记录进程执行日志
 	logger.Info("开始执行数据同步任务", map[string]interface{}{
@@ -335,6 +335,29 @@ logger, err := dbg.GetProcessLogger(processID string)
 err := dbg.EndProcess(processID string, status string)
 ```
 
+**进程状态常量**
+
+为了更好的代码可维护性，建议使用预定义的进程状态常量：
+
+```go
+// 进程状态常量定义
+const (
+	ProcessStatusCompleted = "completed" // 进程正常完成
+	ProcessStatusFailed    = "failed"    // 进程执行失败
+	ProcessStatusCancelled = "cancelled" // 进程被取消
+)
+```
+
+**使用示例：**
+
+```go
+// 推荐使用常量
+logger.EndProcess(debugger.ProcessStatusCompleted)
+
+// 不推荐使用字符串字面量
+logger.EndProcess("completed")
+```
+
 #### 获取进程记录列表
 
 ```go
@@ -361,7 +384,7 @@ func processWorker(dbg *debugger.Debugger, wg *sync.WaitGroup, workerID int) {
 
 	// 为每个工作进程创建独立的记录
 	logger := dbg.StartProcess(fmt.Sprintf("工作进程-%d", workerID), "worker")
-	defer logger.EndProcess("completed")
+	defer logger.EndProcess(debugger.ProcessStatusCompleted)
 
 	logger.Info("工作进程启动", map[string]interface{}{
 		"worker_id": workerID,
@@ -421,7 +444,7 @@ import (
 func batchProcessor(dbg *debugger.Debugger) {
 	// 创建批处理任务记录
 	logger := dbg.StartProcess("夜间批处理任务", "batch")
-	defer logger.EndProcess("completed")
+	defer logger.EndProcess(debugger.ProcessStatusCompleted)
 
 	logger.Info("开始夜间批处理", map[string]interface{}{
 		"scheduled_time": "02:00",

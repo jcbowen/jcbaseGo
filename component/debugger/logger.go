@@ -551,13 +551,20 @@ func (p *ProcessLogger) SetProcessInfo(info map[string]interface{}) {
 	}
 }
 
+// 进程状态常量定义
+const (
+	ProcessStatusCompleted = "completed" // 进程正常完成
+	ProcessStatusFailed    = "failed"    // 进程执行失败
+	ProcessStatusCancelled = "cancelled" // 进程被取消
+)
+
 // EndProcess 结束进程记录
 // 结束当前进程记录，记录进程的结束时间、状态和所有收集的日志
 // 该方法应在进程执行完成时调用，以确保记录完整的执行时间线
 //
 // 参数:
 //
-//	status: 进程结束状态，如"completed"、"failed"、"cancelled"等
+//	status: 进程结束状态，使用预定义的常量：ProcessStatusCompleted、ProcessStatusFailed、ProcessStatusCancelled
 //
 // 返回值:
 //
@@ -565,7 +572,7 @@ func (p *ProcessLogger) SetProcessInfo(info map[string]interface{}) {
 //
 // 示例:
 //
-//	err := logger.EndProcess("completed")
+//	err := logger.EndProcess(ProcessStatusCompleted)
 //	if err != nil {
 //	    // 处理错误
 //	}
