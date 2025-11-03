@@ -129,7 +129,7 @@ func (c *Controller) ipAccessControlMiddleware(useCDN bool) gin.HandlerFunc {
 		}
 
 		// 获取客户端IP
-		clientIP := helper.GetRealIPFromHeaders(extractHeaders(ctx.Request.Header)) // 默认不使用CDN
+		clientIP := helper.GetRealIPFromHeaders(helper.ExtractHeaders(ctx.Request.Header)) // 默认不使用CDN
 
 		// 检查IP是否在白名单中
 		if c.isIPAllowed(clientIP, config.AllowedIPs) {

@@ -162,11 +162,11 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 		Timestamp:      startTime,
 		Method:         c.Request.Method,
 		URL:            c.Request.URL.String(),
-		ClientIP:       helper.GetRealIPFromHeaders(extractHeaders(c.Request.Header)),
+		ClientIP:       helper.GetRealIPFromHeaders(helper.ExtractHeaders(c.Request.Header)),
 		UserAgent:      c.Request.UserAgent(),
 		RequestID:      c.GetHeader("X-Request-ID"),
 		RecordType:     "http", // 设置记录类型为HTTP
-		RequestHeaders: extractHeaders(c.Request.Header),
+		RequestHeaders: helper.ExtractHeaders(c.Request.Header),
 		QueryParams:    extractQueryParams(c.Request.URL.Query()),
 	}
 
@@ -182,7 +182,7 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 func (d *Debugger) recordResponseInfo(entry *LogEntry, writer *responseWriter, startTime time.Time) {
 	entry.StatusCode = writer.Status()
 	entry.Duration = time.Since(startTime)
-	entry.ResponseHeaders = extractHeaders(writer.Header())
+	entry.ResponseHeaders = helper.ExtractHeaders(writer.Header())
 
 	// 记录响应体
 	if writer.body.Len() > 0 {
@@ -404,15 +404,6 @@ func DefaultConfig() *Config {
 	}
 
 	return config
-}
-
-// extractHeaders 提取HTTP头信息
-func extractHeaders(header http.Header) map[string]string {
-	result := make(map[string]string)
-	for key, values := range header {
-		result[key] = strings.Join(values, ", ")
-	}
-	return result
 }
 
 // extractQueryParams 提取查询参数
