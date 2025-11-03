@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"reflect"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
@@ -316,7 +317,7 @@ func (ctx *Context) GetSafeMapGPC(key ...string) (mapData map[string]any) {
 //
 // 返回值：
 //   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回空字符串。
-func (ctx *Context) GetSafeGPCValStr(fieldPath string) (value any) {
+func (ctx *Context) GetSafeGPCValStr(fieldPath string) (value string) {
 	mapData := ctx.GetSafeMapGPC("all")
 
 	return helper.NewMap(mapData).ExtractString(fieldPath)
@@ -331,7 +332,7 @@ func (ctx *Context) GetSafeGPCValStr(fieldPath string) (value any) {
 //
 // 返回值：
 //   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回0。
-func (ctx *Context) GetSafeGPCValInt(fieldPath string) (value any) {
+func (ctx *Context) GetSafeGPCValInt(fieldPath string) (value int) {
 	mapData := ctx.GetSafeMapGPC("all")
 
 	return helper.NewMap(mapData).ExtractInt(fieldPath)
@@ -346,7 +347,7 @@ func (ctx *Context) GetSafeGPCValInt(fieldPath string) (value any) {
 //
 // 返回值：
 //   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回false。
-func (ctx *Context) GetSafeGPCValBool(fieldPath string) (value any) {
+func (ctx *Context) GetSafeGPCValBool(fieldPath string) (value bool) {
 	mapData := ctx.GetSafeMapGPC("all")
 
 	return helper.NewMap(mapData).ExtractBool(fieldPath)
@@ -361,7 +362,7 @@ func (ctx *Context) GetSafeGPCValBool(fieldPath string) (value any) {
 //
 // 返回值：
 //   - value any: 安全获取到的字段值，如果路径不存在或类型断言失败，返回time.Time零值。
-func (ctx *Context) GetSafeGPCValTime(fieldPath string) (value any) {
+func (ctx *Context) GetSafeGPCValTime(fieldPath string) (value time.Time) {
 	mapData := ctx.GetSafeMapGPC("all")
 
 	return helper.NewMap(mapData).ExtractTime(fieldPath)
