@@ -160,8 +160,8 @@ const indexTemplate = `<!DOCTYPE html>
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .table-content { min-width: 800px; }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 70px 100px minmax(110px, 150px) 100px minmax(200px, 1fr); gap: 16px; font-weight: bold; font-size: 14px; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 70px 100px minmax(110px, 150px) 100px minmax(200px, 1fr); gap: 16px; align-items: center; font-size: 14px; }
+        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 70px 100px minmax(110px, 150px) minmax(200px, 1fr); gap: 16px; font-weight: bold; font-size: 14px; }
+        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 70px 100px minmax(110px, 150px) minmax(200px, 1fr); gap: 16px; align-items: center; font-size: 14px; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
         .no-data-row { 
@@ -460,7 +460,6 @@ const indexTemplate = `<!DOCTYPE html>
                         <div>存储大小</div>
                         <div>类型</div>
                         <div>状态</div>
-                        <div>流式请求</div>
                         <div>详细信息</div>
                         <div>URL/进程信息</div>
                     </div>
@@ -477,19 +476,13 @@ const indexTemplate = `<!DOCTYPE html>
                             {{else}}
                             <span class="http-badge" title="HTTP记录">HTTP</span>
                             {{end}}
+							<div class="method method-{{lower .Method}}">{{.Method}}</div>
                         </div>
                         <div class="status-info">
                             {{if eq .RecordType "process"}}
                             <span class="process-status process-status-{{lower .Status}}" title="进程状态: {{.Status}}">{{.Status}}</span>
                             {{else}}
                             <span class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.StatusCode}}</span>
-                            {{end}}
-                        </div>
-                        <div class="streaming-info">
-                            {{if .IsStreamingResponse}}
-                            <span class="streaming-badge streaming-active" title="流式请求: {{.StreamingChunks}}个分块，分块大小: {{.StreamingChunkSize}}字节">流式</span>
-                            {{else}}
-                            <span class="streaming-badge streaming-inactive" title="非流式请求">-</span>
                             {{end}}
                         </div>
                         <div class="details">
@@ -500,7 +493,11 @@ const indexTemplate = `<!DOCTYPE html>
                             </div>
                             {{else}}
                             <div class="http-details">
-                                <div class="method method-{{lower .Method}}">{{.Method}}</div>
+								{{if .IsStreamingResponse}}
+								<div class="streaming-badge streaming-active" title="流式请求: {{.StreamingChunks}}个分块，分块大小: {{.StreamingChunkSize}}字节">流式</div>
+								{{else}}
+								<div class="streaming-badge streaming-inactive" title="非流式请求">-</div>
+								{{end}}
                                 {{if .ClientIP}}<div class="client-ip">{{.ClientIP}}</div>{{end}}
                             </div>
                             {{end}}

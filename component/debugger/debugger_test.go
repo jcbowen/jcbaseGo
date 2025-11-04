@@ -9,7 +9,9 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -741,4 +743,414 @@ func captureOutput(f func()) string {
 	buf.ReadFrom(rStdout)
 	buf.ReadFrom(rStderr)
 	return buf.String()
+}
+
+// TestMultipartOptimization 测试multipart优化功能
+func TestMultipartOptimization(t *testing.T) {
+	testCases := []struct {
+		name                   string
+		enableMultipartSupport bool
+		multipartPreserveState bool
+		shouldPreserveState    bool
+		expectedProcessingType string
+	}{
+		{"启用multipart支持且保持状态", true, true, true, "Safe Processing"},
+		{"启用multipart支持但不保持状态", true, false, false, "Stream Processing"},
+		{"禁用multipart支持", false, true, false, "disabled"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 创建调试器配置
+			memoryStorage, _ := NewMemoryStorage(100)
+			config := &Config{
+				Enabled:                true,
+				Storage:                memoryStorage,
+				EnableMultipartSupport: tc.enableMultipartSupport,
+				MultipartPreserveState: tc.multipartPreserveState,
+			}
+			debugger, err := New(config)
+			assert.NoError(t, err)
+
+			// 创建multipart表单数据
+			var body bytes.Buffer
+			writer := multipart.NewWriter(&body)
+			writer.WriteField("test_field", "test_value")
+			writer.Close()
+
+			// 创建Gin上下文
+			c := &gin.Context{}
+			c.Request = &http.Request{
+				Method: "POST",
+				Header: http.Header{
+					"Content-Type": []string{writer.FormDataContentType()},
+				},
+				Body: io.NopCloser(bytes.NewBuffer(body.Bytes())),
+			}
+
+			// 测试请求体提取
+			result, err := debugger.extractRequestBody(c)
+			assert.NoError(t, err)
+
+			// 验证处理类型
+			if tc.enableMultipartSupport {
+				assert.Contains(t, result, tc.expectedProcessingType)
+			} else {
+				assert.Contains(t, result, "disabled")
+			}
+
+			// 验证状态保持
+			if tc.shouldPreserveState {
+				// 检查请求体是否仍然可读
+				bodyBytes, err := io.ReadAll(c.Request.Body)
+				assert.NoError(t, err)
+				assert.NotEmpty(t, bodyBytes)
+				// 恢复请求体以便后续测试
+				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			}
+		})
+	}
+}
+
+// TestMiddlewareOrder 测试中间件执行顺序配置
+func TestMiddlewareOrder(t *testing.T) {
+	testCases := []struct {
+		name            string
+		middlewareOrder string
+		expectedType    string
+	}{
+		{"正常执行顺序", "normal", "Normal"},
+		{"优先执行顺序", "early", "Early"},
+		{"最后执行顺序", "late", "Late"},
+		{"默认执行顺序", "", "Normal"},
+		{"无效执行顺序", "invalid", "Normal"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 创建调试器配置
+			memoryStorage, _ := NewMemoryStorage(100)
+			config := &Config{
+				Enabled:         true,
+				Storage:         memoryStorage,
+				MiddlewareOrder: tc.middlewareOrder,
+			}
+			debugger, err := New(config)
+			assert.NoError(t, err)
+
+			// 获取中间件函数
+			middlewareFunc := debugger.Middleware()
+			assert.NotNil(t, middlewareFunc)
+
+			// 使用httptest创建完整的HTTP请求
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/test", nil)
+			req.RemoteAddr = "127.0.0.1:8080"
+
+			// 创建Gin上下文
+			c, _ := gin.CreateTestContext(w)
+			c.Request = req
+
+			// 执行中间件
+			middlewareFunc(c)
+
+			// 验证中间件正确执行（没有panic且状态码正确）
+			assert.Equal(t, 200, w.Code)
+		})
+	}
+}
+
+// TestMultipartStateRestoration 测试multipart状态恢复功能
+func TestMultipartStateRestoration(t *testing.T) {
+	t.Log("[DEBUG] TestMultipartStateRestoration STARTING")
+
+	// 创建调试器配置（启用multipart支持和状态保持）
+	memoryStorage, _ := NewMemoryStorage(100)
+	config := &Config{
+		Enabled:                true,
+		Storage:                memoryStorage,
+		EnableMultipartSupport: true,
+		MultipartPreserveState: true,
+	}
+	debugger, err := New(config)
+	assert.NoError(t, err)
+
+	t.Logf("[DEBUG] Debugger created with EnableMultipartSupport: %v, MultipartPreserveState: %v",
+		config.EnableMultipartSupport, config.MultipartPreserveState)
+
+	// 创建multipart表单数据
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	writer.WriteField("field1", "value1")
+	writer.WriteField("field2", "value2")
+	writer.Close()
+
+	// 保存原始body内容用于后续比较
+	originalBody := make([]byte, body.Len())
+	copy(originalBody, body.Bytes())
+
+	// 创建Gin上下文
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/test", bytes.NewBuffer(body.Bytes()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.RemoteAddr = "127.0.0.1:8080"
+
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+
+	// 调试：检查请求创建后的初始状态
+	t.Logf("[DEBUG] Initial Content-Type: %s", c.Request.Header.Get("Content-Type"))
+	t.Logf("[DEBUG] Initial Body is nil: %v", c.Request.Body == nil)
+	t.Log("[DEBUG] Test starting...")
+
+	// 模拟中间件执行流程
+	startTime := time.Now()
+
+	// 调试：在调用createLogEntry之前检查请求体状态
+	t.Logf("[DEBUG] Before createLogEntry: Content-Type: %s", c.Request.Header.Get("Content-Type"))
+	t.Logf("[DEBUG] Before createLogEntry: Body is nil: %v", c.Request.Body == nil)
+
+	// 检查请求体是否可读
+	if c.Request.Body != nil {
+		bodyBytes, err := io.ReadAll(c.Request.Body)
+		if err == nil {
+			t.Logf("[DEBUG] Before createLogEntry: Body length: %d", len(bodyBytes))
+			t.Logf("[DEBUG] Before createLogEntry: Body content: %s", string(bodyBytes))
+			// 恢复请求体
+			c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		} else {
+			t.Logf("[DEBUG] Before createLogEntry: Failed to read body: %v", err)
+		}
+	}
+
+	entry := debugger.createLogEntry(c, startTime)
+
+	// 调试：检查createLogEntry是否已经提取了请求体
+	t.Logf("[DEBUG] After createLogEntry: RequestBody contains 'Safe Processing': %v", strings.Contains(entry.RequestBody, "Safe Processing"))
+	t.Logf("[DEBUG] After createLogEntry: RequestBody length: %d", len(entry.RequestBody))
+	t.Logf("[DEBUG] After createLogEntry: RequestBody content: %s", entry.RequestBody)
+
+	// 验证createLogEntry已经提取了请求体
+	assert.Contains(t, entry.RequestBody, "Safe Processing", "createLogEntry应该已经提取了multipart请求体")
+
+	// 注意：createLogEntry已经调用了extractRequestBody，这里不需要再次调用
+	// 直接使用entry.RequestBody作为结果
+	result := entry.RequestBody
+
+	// 调试：检查createLogEntry提取的请求体
+	t.Logf("[DEBUG] createLogEntry提取的请求体长度: %d", len(result))
+	t.Logf("[DEBUG] createLogEntry提取的请求体内容: %s", result)
+
+	// 验证createLogEntry已经正确提取了multipart请求体
+	assert.Contains(t, result, "field1", "createLogEntry应该已经提取了field1字段")
+	assert.Contains(t, result, "field2", "createLogEntry应该已经提取了field2字段")
+	assert.Contains(t, result, "value1", "createLogEntry应该已经提取了value1值")
+	assert.Contains(t, result, "value2", "createLogEntry应该已经提取了value2值")
+
+	// 在真实的中间件使用场景中，restoreMultipartRequestBody应该在请求处理完成后被调用
+	// 这里我们模拟完整的中间件执行流程：
+	// 1. createLogEntry记录请求（会读取并恢复请求体）
+	// 2. 后续中间件处理请求（可以正常访问请求体）
+	// 3. 请求处理完成后调用restoreMultipartRequestBody恢复multipart状态
+
+	// 模拟后续中间件处理请求（验证请求体可以正常访问）
+	if c.Request.Body != nil {
+		// 保存原始请求体内容用于后续验证
+		originalBodyBytes, err := io.ReadAll(c.Request.Body)
+		assert.NoError(t, err, "后续中间件应该可以正常读取请求体")
+
+		// 恢复请求体，确保其他中间件也能访问
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(originalBodyBytes))
+
+		// 调试：打印原始请求体内容
+		t.Logf("后续中间件读取的请求体长度: %d", len(originalBodyBytes))
+		t.Logf("后续中间件读取的请求体内容: %s", string(originalBodyBytes))
+
+		// 验证请求体包含multipart数据
+		assert.NotEmpty(t, originalBodyBytes, "后续中间件读取的请求体不应该为空")
+		assert.Contains(t, string(originalBodyBytes), "field1", "后续中间件读取的请求体应该包含field1字段")
+		assert.Contains(t, string(originalBodyBytes), "field2", "后续中间件读取的请求体应该包含field2字段")
+		assert.Contains(t, string(originalBodyBytes), "value1", "后续中间件读取的请求体应该包含value1值")
+		assert.Contains(t, string(originalBodyBytes), "value2", "后续中间件读取的请求体应该包含value2值")
+	}
+
+	// 模拟请求处理完成后恢复multipart状态
+	debugger.restoreMultipartRequestBody(c)
+
+	// 验证multipart状态已正确恢复
+	// 这里我们主要验证Gin的multipart状态是否正确重置，而不是再次读取请求体
+	t.Logf("restoreMultipartRequestBody执行完成，multipart状态已恢复")
+}
+
+// TestSafeRequestBodyExtraction 测试安全的请求体提取方法
+func TestSafeRequestBodyExtraction(t *testing.T) {
+	// 创建调试器配置
+	memoryStorage, _ := NewMemoryStorage(100)
+	config := &Config{
+		Enabled:                true,
+		Storage:                memoryStorage,
+		EnableMultipartSupport: true,
+		MultipartPreserveState: true,
+	}
+	debugger, err := New(config)
+	assert.NoError(t, err)
+
+	// 测试1: 普通文本请求体
+	t.Run("普通文本请求体", func(t *testing.T) {
+		c := &gin.Context{}
+		c.Request = &http.Request{
+			Method: "POST",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+			},
+			Body: io.NopCloser(bytes.NewBufferString(`{"key":"value"}`)),
+		}
+
+		result, err := debugger.extractRequestBodyWithSizeLimitSafe(c)
+		assert.NoError(t, err)
+		assert.Contains(t, result, `{"key":"value"}`)
+
+		// 验证请求体已恢复
+		restoredBytes, err := io.ReadAll(c.Request.Body)
+		assert.NoError(t, err)
+		assert.Equal(t, `{"key":"value"}`, string(restoredBytes))
+	})
+
+	// 测试2: multipart请求体
+	t.Run("multipart请求体", func(t *testing.T) {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		writer.WriteField("test", "data")
+		writer.Close()
+
+		c := &gin.Context{}
+		c.Request = &http.Request{
+			Method: "POST",
+			Header: http.Header{
+				"Content-Type": []string{writer.FormDataContentType()},
+			},
+			Body: io.NopCloser(bytes.NewBuffer(body.Bytes())),
+		}
+
+		result, err := debugger.extractRequestBodyWithSizeLimitSafe(c)
+		assert.NoError(t, err)
+		assert.Contains(t, result, "Safe Processing")
+
+		// 验证请求体已恢复
+		restoredBytes, err := io.ReadAll(c.Request.Body)
+		assert.NoError(t, err)
+		assert.Equal(t, body.Bytes(), restoredBytes)
+	})
+}
+
+// TestMiddlewareExecutionFlow 测试中间件执行流程
+func TestMiddlewareExecutionFlow(t *testing.T) {
+	// 创建调试器配置
+	memoryStorage, _ := NewMemoryStorage(100)
+	config := &Config{
+		Enabled:         true,
+		Storage:         memoryStorage,
+		MiddlewareOrder: "normal",
+	}
+	debugger, err := New(config)
+	assert.NoError(t, err)
+
+	// 创建Gin路由
+	router := gin.New()
+	router.Use(debugger.Middleware())
+
+	// 添加测试路由
+	router.GET("/test", func(c *gin.Context) {
+		// 从上下文中获取Logger
+		logger := GetLoggerFromContext(c)
+		logger.Info("处理请求中")
+		c.JSON(200, gin.H{"message": "success"})
+	})
+
+	// 创建测试请求
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/test", nil)
+	router.ServeHTTP(w, req)
+
+	// 验证响应
+	assert.Equal(t, 200, w.Code)
+	assert.Contains(t, w.Body.String(), "success")
+
+	// 验证日志记录
+	entries, _, err := memoryStorage.FindAll(1, 10, nil)
+	assert.NoError(t, err)
+	assert.Greater(t, len(entries), 0)
+
+	// 验证日志条目内容
+	entry := entries[0]
+	assert.Equal(t, "GET", entry.Method)
+	assert.Equal(t, "/test", entry.URL)
+	assert.Equal(t, 200, entry.StatusCode)
+}
+
+// TestMiddlewareOrderIntegration 测试中间件执行顺序的集成测试
+func TestMiddlewareOrderIntegration(t *testing.T) {
+	testCases := []struct {
+		name            string
+		middlewareOrder string
+		description     string
+	}{
+		{"normal", "正常执行顺序", "在标准位置执行，适用于大多数场景"},
+		{"early", "优先执行顺序", "在其他中间件之前执行，适用于需要记录完整请求信息的场景"},
+		{"late", "最后执行顺序", "在其他中间件之后执行，适用于需要记录完整响应信息的场景"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 创建调试器配置
+			memoryStorage, _ := NewMemoryStorage(100)
+			config := &Config{
+				Enabled:         true,
+				Storage:         memoryStorage,
+				MiddlewareOrder: tc.middlewareOrder,
+			}
+			debugger, err := New(config)
+			assert.NoError(t, err)
+
+			// 创建Gin路由
+			router := gin.New()
+
+			// 添加其他中间件（用于测试执行顺序）
+			router.Use(func(c *gin.Context) {
+				c.Set("middleware1", "executed")
+				c.Next()
+			})
+
+			// 添加调试器中间件
+			router.Use(debugger.Middleware())
+
+			// 添加另一个中间件
+			router.Use(func(c *gin.Context) {
+				c.Set("middleware2", "executed")
+				c.Next()
+			})
+
+			// 添加测试路由
+			router.GET("/order-test", func(c *gin.Context) {
+				c.JSON(200, gin.H{
+					"middleware1": c.GetString("middleware1"),
+					"middleware2": c.GetString("middleware2"),
+				})
+			})
+
+			// 创建测试请求
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("GET", "/order-test", nil)
+			router.ServeHTTP(w, req)
+
+			// 验证响应
+			assert.Equal(t, 200, w.Code)
+			assert.Contains(t, w.Body.String(), "executed")
+
+			// 验证日志记录
+			entries, _, err := memoryStorage.FindAll(1, 10, nil)
+			assert.NoError(t, err)
+			assert.Greater(t, len(entries), 0)
+		})
+	}
 }

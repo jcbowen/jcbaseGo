@@ -41,6 +41,15 @@ type Config struct {
 	StreamingChunkSize     int64 `json:"streaming_chunk_size" default:"1024"`      // 流式响应分块大小（KB），默认1MB
 	MaxStreamingChunks     int   `json:"max_streaming_chunks" default:"10"`        // 最大流式响应分块数量，默认10个
 
+	// Multipart请求配置
+	EnableMultipartSupport bool  `json:"enable_multipart_support" default:"true"` // 是否启用multipart请求支持
+	MultipartMaxPartSize   int64 `json:"multipart_max_part_size" default:"64"`    // multipart单个部分最大大小（KB），默认64KB
+	MultipartSkipFiles     bool  `json:"multipart_skip_files" default:"false"`    // 是否跳过文件内容记录，只记录元数据
+	MultipartPreserveState bool  `json:"multipart_preserve_state" default:"true"` // 是否保持Gin上下文状态，避免破坏后续中间件
+
+	// 中间件执行顺序配置
+	MiddlewareOrder string `json:"middleware_order" default:"normal"` // 中间件执行顺序：normal（正常）、early（优先）、late（最后）
+
 	// 核心组件配置 - 必须传入实例化的存储器
 	Storage Storage         `json:"-"` // 存储实现（必须传入实例化的存储器）
 	Logger  LoggerInterface `json:"-"` // 日志记录器（推荐直接传入实例化的日志记录器）
@@ -99,6 +108,25 @@ func New(config *Config) (*Debugger, error) {
 // Middleware 创建Gin中间件
 // 用于拦截HTTP请求并记录调试信息
 func (d *Debugger) Middleware() gin.HandlerFunc {
+	return d.createMiddlewareHandler()
+}
+
+// createMiddlewareHandler 创建中间件处理函数
+// 根据配置的执行顺序提供不同的处理逻辑
+func (d *Debugger) createMiddlewareHandler() gin.HandlerFunc {
+	switch d.config.MiddlewareOrder {
+	case "early":
+		return d.createEarlyMiddleware()
+	case "late":
+		return d.createLateMiddleware()
+	default:
+		return d.createNormalMiddleware()
+	}
+}
+
+// createNormalMiddleware 创建标准中间件处理函数
+// 在正常位置执行，适用于大多数场景
+func (d *Debugger) createNormalMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 检查是否启用调试器
 		if !d.config.Enabled {
@@ -153,6 +181,9 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 		// 记录响应信息
 		d.recordResponseInfo(entry, writer, startTime)
 
+		// 恢复multipart请求体状态（如果适用）
+		d.restoreMultipartRequestBody(c)
+
 		// 记录会话数据（如果存在）
 		d.recordSessionData(entry, c)
 
@@ -164,6 +195,178 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 
 		// 保存日志条目
 		d.saveLogEntry(entry)
+	}
+}
+
+// createEarlyMiddleware 创建优先执行的中间件处理函数
+// 在其他中间件之前执行，适用于需要记录完整请求信息的场景
+func (d *Debugger) createEarlyMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 检查是否启用调试器
+		if !d.config.Enabled {
+			c.Next()
+			return
+		}
+
+		// 检查是否跳过当前请求
+		if d.shouldSkip(c) {
+			c.Next()
+			return
+		}
+
+		// 检查采样率
+		if d.config.SampleRate < 1.0 && !d.shouldSample() {
+			c.Next()
+			return
+		}
+
+		// 记录请求开始时间
+		startTime := time.Now()
+
+		// 创建日志条目
+		entry := d.createLogEntry(c, startTime)
+
+		// 设置请求ID到上下文
+		c.Set("debugger_request_id", entry.ID)
+
+		// 设置Logger到上下文，供控制器使用
+		c.Set("debugger_logger", d.logger.WithFields(map[string]interface{}{
+			"request_id": entry.ID,
+			"method":     c.Request.Method,
+			"url":        c.Request.URL.String(),
+			"client_ip":  middleware.GetRealIP(c, d.config.UseCDN),
+		}))
+
+		// 创建自定义的ResponseWriter来捕获响应
+		writer := &responseWriter{
+			ResponseWriter:  c.Writer,
+			debugger:        d, // 保存Debugger实例引用
+			body:            &bytes.Buffer{},
+			isStreaming:     false, // 初始化为非流式响应
+			chunkSizeLimit:  d.config.StreamingChunkSize,
+			maxChunks:       d.config.MaxStreamingChunks,
+			streamingChunks: make([]StreamingChunk, 0),
+		}
+		c.Writer = writer
+
+		// 处理请求
+		c.Next()
+
+		// 记录响应信息
+		d.recordResponseInfo(entry, writer, startTime)
+
+		// 恢复multipart请求体状态（如果适用）
+		d.restoreMultipartRequestBody(c)
+
+		// 记录会话数据（如果存在）
+		d.recordSessionData(entry, c)
+
+		// 记录错误信息
+		d.recordErrorInfo(entry, c)
+
+		// 从上下文中获取logger并保存其收集的日志
+		d.recordLoggerLogs(entry, c)
+
+		// 保存日志条目
+		d.saveLogEntry(entry)
+	}
+}
+
+// createLateMiddleware 创建最后执行的中间件处理函数
+// 在其他中间件之后执行，适用于需要记录完整响应信息的场景
+func (d *Debugger) createLateMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 检查是否启用调试器
+		if !d.config.Enabled {
+			c.Next()
+			return
+		}
+
+		// 检查是否跳过当前请求
+		if d.shouldSkip(c) {
+			c.Next()
+			return
+		}
+
+		// 检查采样率
+		if d.config.SampleRate < 1.0 && !d.shouldSample() {
+			c.Next()
+			return
+		}
+
+		// 记录请求开始时间
+		startTime := time.Now()
+
+		// 创建日志条目
+		entry := d.createLogEntry(c, startTime)
+
+		// 设置请求ID到上下文
+		c.Set("debugger_request_id", entry.ID)
+
+		// 设置Logger到上下文，供控制器使用
+		c.Set("debugger_logger", d.logger.WithFields(map[string]interface{}{
+			"request_id": entry.ID,
+			"method":     c.Request.Method,
+			"url":        c.Request.URL.String(),
+			"client_ip":  middleware.GetRealIP(c, d.config.UseCDN),
+		}))
+
+		// 创建自定义的ResponseWriter来捕获响应
+		writer := &responseWriter{
+			ResponseWriter:  c.Writer,
+			debugger:        d, // 保存Debugger实例引用
+			body:            &bytes.Buffer{},
+			isStreaming:     false, // 初始化为非流式响应
+			chunkSizeLimit:  d.config.StreamingChunkSize,
+			maxChunks:       d.config.MaxStreamingChunks,
+			streamingChunks: make([]StreamingChunk, 0),
+		}
+		c.Writer = writer
+
+		// 处理请求
+		c.Next()
+
+		// 记录响应信息
+		d.recordResponseInfo(entry, writer, startTime)
+
+		// 恢复multipart请求体状态（如果适用）
+		d.restoreMultipartRequestBody(c)
+
+		// 记录会话数据（如果存在）
+		d.recordSessionData(entry, c)
+
+		// 记录错误信息
+		d.recordErrorInfo(entry, c)
+
+		// 从上下文中获取logger并保存其收集的日志
+		d.recordLoggerLogs(entry, c)
+
+		// 保存日志条目
+		d.saveLogEntry(entry)
+	}
+}
+
+// restoreMultipartRequestBody 恢复multipart请求体状态
+// 当debugger处理multipart请求后，确保后续中间件能正常访问请求体
+func (d *Debugger) restoreMultipartRequestBody(c *gin.Context) {
+	// 只有在启用multipart支持且需要保持状态时才进行恢复
+	if !d.config.EnableMultipartSupport || !d.config.MultipartPreserveState {
+		return
+	}
+
+	// 检查是否为multipart请求
+	if !isMultipartFormData(c) {
+		return
+	}
+
+	// 重新设置multipart reader，确保Gin能正确解析
+	contentType := c.Request.Header.Get("Content-Type")
+	boundary := extractBoundary(contentType)
+	if boundary != "" {
+		// 重置Gin的multipart状态
+		c.Request.MultipartForm = nil
+		// 强制Gin重新解析multipart表单
+		c.Request.ParseMultipartForm(32 << 20) // 32MB
 	}
 }
 
@@ -377,37 +580,55 @@ func (d *Debugger) shouldSample() bool {
 
 // extractRequestBody 提取请求体内容
 // 优化性能：实现流式处理，避免大文件上传时的内存压力
+// 改进：避免破坏Gin上下文状态，特别是multipart请求的处理
 func (d *Debugger) extractRequestBody(c *gin.Context) (string, error) {
 	if c.Request.Body == nil {
+		fmt.Printf("[DEBUG] extractRequestBody: Request body is nil\n")
 		return "", nil
 	}
 
 	// 检查是否为multipart/form-data文件上传
 	if isMultipartFormData(c) {
-		// 对于multipart/form-data，使用流式处理避免大文件内存占用
-		return d.extractMultipartRequestBody(c)
+		fmt.Printf("[DEBUG] extractRequestBody: Detected multipart request, EnableMultipartSupport: %v, MultipartPreserveState: %v\n",
+			d.config.EnableMultipartSupport, d.config.MultipartPreserveState)
+
+		// 检查是否启用multipart支持
+		if !d.config.EnableMultipartSupport {
+			fmt.Printf("[DEBUG] extractRequestBody: Multipart support is disabled\n")
+			return "[Multipart request - disabled]", nil
+		}
+
+		fmt.Printf("[DEBUG] extractRequestBody: Calling extractMultipartRequestBodySafe\n")
+		// 对于multipart/form-data，使用安全的流式处理
+		return d.extractMultipartRequestBodySafe(c)
 	}
 
+	fmt.Printf("[DEBUG] extractRequestBody: Not multipart request, using standard processing\n")
 	// 对于其他类型，使用原有逻辑但添加大小限制
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
+		fmt.Printf("[DEBUG] extractRequestBody: Error reading body: %v\n", err)
 		return "", err
 	}
 
+	fmt.Printf("[DEBUG] extractRequestBody: Read %d bytes, restoring body\n", len(bodyBytes))
 	// 恢复请求体，以便后续处理
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	// 限制体大小（MaxBodySize单位为KB，需要转换为字节）
 	if int64(len(bodyBytes)) > d.config.MaxBodySize*1024 {
+		fmt.Printf("[DEBUG] extractRequestBody: Body too large: %d bytes\n", len(bodyBytes))
 		return fmt.Sprintf("[Body too large: %d bytes]", len(bodyBytes)), nil
 	}
 
 	// 检查是否为二进制数据（文件上传等）
 	if isBinaryData(bodyBytes) {
+		fmt.Printf("[DEBUG] extractRequestBody: Body is binary data\n")
 		// 对于二进制数据，显示为十六进制格式或文件信息
 		return formatBinaryData(bodyBytes), nil
 	}
 
+	fmt.Printf("[DEBUG] extractRequestBody: Body is text data, length: %d\n", len(bodyBytes))
 	// 对于文本数据，直接转换为字符串
 	return string(bodyBytes), nil
 }
@@ -496,6 +717,128 @@ func (d *Debugger) extractMultipartRequestBody(c *gin.Context) (string, error) {
 	return result.String(), nil
 }
 
+// extractMultipartRequestBodySafe 安全的multipart请求体提取方法
+// 避免破坏Gin上下文状态，通过复制请求体进行处理
+func (d *Debugger) extractMultipartRequestBodySafe(c *gin.Context) (string, error) {
+	contentType := c.Request.Header.Get("Content-Type")
+
+	// 提取boundary参数
+	boundary := extractBoundary(contentType)
+	if boundary == "" {
+		// 如果没有boundary，回退到安全的二进制数据显示
+		return d.extractRequestBodyWithSizeLimitSafe(c)
+	}
+
+	// 检查是否保持Gin上下文状态
+	if d.config.MultipartPreserveState {
+		// 方法1：通过复制请求体进行处理，避免影响原始请求
+		return d.extractMultipartWithBodyCopy(c, boundary)
+	} else {
+		// 方法2：使用原始方法（不推荐，但保持向后兼容）
+		return d.extractMultipartRequestBody(c)
+	}
+}
+
+// extractMultipartWithBodyCopy 通过复制请求体进行multipart处理
+// 避免破坏Gin上下文状态
+func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string) (string, error) {
+	// 读取原始请求体
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// 调试：记录读取的请求体信息
+	if len(bodyBytes) > 0 {
+		// 只记录前100个字符避免日志过大
+		contentPreview := string(bodyBytes)
+		if len(contentPreview) > 100 {
+			contentPreview = contentPreview[:100] + "..."
+		}
+		fmt.Printf("[DEBUG] extractMultipartWithBodyCopy: Read %d bytes, content preview: %s\n", len(bodyBytes), contentPreview)
+	}
+
+	// 立即恢复请求体，确保后续中间件正常工作
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	// 使用复制的请求体进行multipart解析
+	reader := bytes.NewReader(bodyBytes)
+	mr := multipart.NewReader(reader, boundary)
+	if mr == nil {
+		return "[Multipart parse error]", nil
+	}
+
+	var result strings.Builder
+	result.WriteString("[Multipart Form Data - Safe Processing]\n")
+
+	partCount := 0
+	fileCount := 0
+	totalSize := 0
+	maxPartSize := int(d.config.MultipartMaxPartSize * 1024)
+
+	// 流式处理multipart的各个部分
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			result.WriteString(fmt.Sprintf("  Error reading part: %v\n", err))
+			continue
+		}
+
+		partCount++
+		partName := part.FormName()
+		fileName := part.FileName()
+
+		// 读取部分内容（限制大小，避免大文件内存占用）
+		partBytes := make([]byte, maxPartSize)
+		n, err := part.Read(partBytes)
+		if err != nil && err != io.EOF {
+			result.WriteString(fmt.Sprintf("  Error reading part content: %v\n", err))
+			continue
+		}
+
+		totalSize += n
+
+		if fileName != "" {
+			// 文件上传部分
+			fileCount++
+			if d.config.MultipartSkipFiles {
+				result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Size: %d bytes, Type: %s\n",
+					fileName, partName, n, detectFileType(partBytes[:n])))
+			} else {
+				// 如果跳过文件内容，只记录元数据
+				result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Size: %d bytes\n",
+					fileName, partName, n))
+			}
+		} else {
+			// 文本字段部分
+			if isBinaryData(partBytes[:n]) {
+				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Type: Binary\n",
+					partName, n))
+			} else {
+				// 限制文本长度，避免显示过长
+				textContent := string(partBytes[:n])
+				if len(textContent) > 100 {
+					textContent = textContent[:100] + "..."
+				}
+				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Content: %s\n",
+					partName, n, textContent))
+			}
+		}
+
+		// 检查总大小是否超过限制
+		if totalSize > int(d.config.MaxBodySize*1024) {
+			result.WriteString(fmt.Sprintf("  [Truncated] Total size exceeds limit: %d bytes\n", totalSize))
+			break
+		}
+	}
+
+	result.WriteString(fmt.Sprintf("Total Parts: %d, Files: %d, Total Size: %d bytes\n", partCount, fileCount, totalSize))
+	return result.String(), nil
+}
+
 // extractRequestBodyWithSizeLimit 带大小限制的请求体提取
 // 作为multipart处理失败时的降级方案
 func (d *Debugger) extractRequestBodyWithSizeLimit(c *gin.Context) (string, error) {
@@ -506,6 +849,31 @@ func (d *Debugger) extractRequestBodyWithSizeLimit(c *gin.Context) (string, erro
 	}
 
 	// 恢复请求体，以便后续处理
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	// 限制体大小（MaxBodySize单位为KB，需要转换为字节）
+	if int64(len(bodyBytes)) > d.config.MaxBodySize*1024 {
+		return fmt.Sprintf("[Body too large: %d bytes]", len(bodyBytes)), nil
+	}
+
+	// 检查是否为二进制数据
+	if isBinaryData(bodyBytes) {
+		return formatBinaryData(bodyBytes), nil
+	}
+
+	return string(bodyBytes), nil
+}
+
+// extractRequestBodyWithSizeLimitSafe 安全的带大小限制请求体提取
+// 避免破坏Gin上下文状态，通过复制请求体进行处理
+func (d *Debugger) extractRequestBodyWithSizeLimitSafe(c *gin.Context) (string, error) {
+	// 读取请求体
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// 立即恢复请求体，确保后续中间件正常工作
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	// 限制体大小（MaxBodySize单位为KB，需要转换为字节）
@@ -644,10 +1012,12 @@ func min(a, b int) int {
 }
 
 // isMultipartFormData 检查是否为multipart/form-data文件上传请求
-// 通过Content-Type头识别multipart/form-data类型
+// isMultipartFormData 检查请求是否为multipart/form-data类型
 func isMultipartFormData(c *gin.Context) bool {
 	contentType := c.Request.Header.Get("Content-Type")
-	return strings.Contains(contentType, "multipart/form-data")
+	isMultipart := strings.Contains(contentType, "multipart/form-data")
+	fmt.Printf("[DEBUG isMultipartFormData] Content-Type: %s, isMultipart: %v\n", contentType, isMultipart)
+	return isMultipart
 }
 
 // extractBoundary 从Content-Type头中提取boundary参数
