@@ -710,7 +710,7 @@ const detailTemplate = `<!DOCTYPE html>
         .headers-table td:first-child, .params-table td:first-child {
             font-weight: 600;
             background: #f8f9fa;
-            min-width: 120px;
+            width: 300px;
         }
         .headers-table tr:last-child td, .params-table tr:last-child td { border-bottom: none; }
         
@@ -843,7 +843,7 @@ const detailTemplate = `<!DOCTYPE html>
             .headers-table td:first-child, .params-table td:first-child {
                 font-weight: 600;
                 background: #f8f9fa;
-                min-width: 100px;
+                width: 150px;
             }
             .json-viewer { padding: 10px; font-size: 12px; max-height: 300px; }
             .log-header { flex-direction: column; align-items: flex-start; gap: 6px; }
@@ -898,7 +898,7 @@ const detailTemplate = `<!DOCTYPE html>
             .headers-table td:first-child, .params-table td:first-child {
                 font-weight: 600;
                 background: #f8f9fa;
-                min-width: 80px;
+                width: 150px;
             }
             .json-viewer { padding: 8px; font-size: 11px; max-height: 250px; }
             .log-item { padding: 8px; margin-bottom: 8px; }
