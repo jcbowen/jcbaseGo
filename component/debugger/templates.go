@@ -160,8 +160,8 @@ const indexTemplate = `<!DOCTYPE html>
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .table-content { min-width: 800px; }
-        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 70px 100px minmax(110px, 150px) minmax(200px, 1fr); gap: 16px; font-weight: bold; font-size: 14px; }
-        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 70px 100px minmax(110px, 150px) minmax(200px, 1fr); gap: 16px; align-items: center; font-size: 14px; }
+        .table-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 70px 100px minmax(110px, 150px) 100px minmax(200px, 1fr); gap: 16px; font-weight: bold; font-size: 14px; }
+        .log-row { padding: 15px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: minmax(140px, 220px) 160px 100px 120px 70px 100px minmax(110px, 150px) 100px minmax(200px, 1fr); gap: 16px; align-items: center; font-size: 14px; }
         .log-row:hover { background: #f8f9fa; }
         .log-row:last-child { border-bottom: none; }
         .no-data-row { 
@@ -196,6 +196,11 @@ const indexTemplate = `<!DOCTYPE html>
         .process-status-completed { background: #d4edda; color: #155724; }
         .process-status-failed { background: #f5c6cb; color: #721c24; }
         .process-status-cancelled { background: #f8d7da; color: #721c24; }
+        
+        /* 流式请求样式 */
+        .streaming-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; display: inline-block; width: fit-content; }
+        .streaming-active { background: #e8f4fd; color: #1976d2; }
+        .streaming-inactive { background: #f8f9fa; color: #666; }
         
         .process-details { display: flex; flex-direction: column; gap: 4px; }
         .process-name { font-weight: 600; color: #2c3e50; }
@@ -336,6 +341,20 @@ const indexTemplate = `<!DOCTYPE html>
                     <div class="label">存储大小</div>
                     <div class="value">{{.Stats.storage_size}}</div>
                 </div>
+                {{if .Stats.streaming_request_count}}
+                <div class="stat-item">
+                    <div class="label">流式请求数</div>
+                    <div class="value">{{.Stats.streaming_request_count}}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="label">平均分块数</div>
+                    <div class="value">{{.Stats.avg_streaming_chunks}}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="label">最大分块数</div>
+                    <div class="value">{{.Stats.max_streaming_chunks}}</div>
+                </div>
+                {{end}}
                 {{end}}
             </div>
         </div>
@@ -399,6 +418,18 @@ const indexTemplate = `<!DOCTYPE html>
                             <input type="text" name="client_ip" placeholder="客户端IP地址" value="{{.Filters.client_ip}}">
                             <input type="text" name="url" placeholder="URL路径包含" value="{{.Filters.url}}">
                         </div>
+                        <div class="filter-row">
+                            <select name="is_streaming" onchange="this.form.submit()">
+                                <option value="">所有流式状态</option>
+                                <option value="true" {{if eq .Filters.is_streaming "true"}}selected{{end}}>流式请求</option>
+                                <option value="false" {{if eq .Filters.is_streaming "false"}}selected{{end}}>非流式请求</option>
+                            </select>
+                            <select name="streaming_status" onchange="this.form.submit()">
+                                <option value="">流式请求状态</option>
+                                <option value="active" {{if eq .Filters.streaming_status "active"}}selected{{end}}>活跃流式请求</option>
+                                <option value="inactive" {{if eq .Filters.streaming_status "inactive"}}selected{{end}}>非流式请求</option>
+                            </select>
+                        </div>
                     </div>
                     
                     <!-- 进程记录筛选组 -->
@@ -429,6 +460,7 @@ const indexTemplate = `<!DOCTYPE html>
                         <div>存储大小</div>
                         <div>类型</div>
                         <div>状态</div>
+                        <div>流式请求</div>
                         <div>详细信息</div>
                         <div>URL/进程信息</div>
                     </div>
@@ -451,6 +483,13 @@ const indexTemplate = `<!DOCTYPE html>
                             <span class="process-status process-status-{{lower .Status}}" title="进程状态: {{.Status}}">{{.Status}}</span>
                             {{else}}
                             <span class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.StatusCode}}</span>
+                            {{end}}
+                        </div>
+                        <div class="streaming-info">
+                            {{if .IsStreamingResponse}}
+                            <span class="streaming-badge streaming-active" title="流式请求: {{.StreamingChunks}}个分块，分块大小: {{.StreamingChunkSize}}字节">流式</span>
+                            {{else}}
+                            <span class="streaming-badge streaming-inactive" title="非流式请求">-</span>
                             {{end}}
                         </div>
                         <div class="details">
@@ -486,7 +525,7 @@ const indexTemplate = `<!DOCTYPE html>
         {{if .Pagination}}
         <div class="pagination">
             {{if .Pagination.HasPrev}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">上一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}{{if .Filters.is_streaming}}&is_streaming={{.Filters.is_streaming}}{{end}}{{if .Filters.streaming_status}}&streaming_status={{.Filters.streaming_status}}{{end}}">上一页</a>
             {{else}}
             <span class="disabled">上一页</span>
             {{end}}
@@ -505,13 +544,13 @@ const indexTemplate = `<!DOCTYPE html>
                 {{if eq $i $page}}
                 <span class="current">{{$i}}</span>
                 {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}{{if $filters.is_streaming}}&is_streaming={{$filters.is_streaming}}{{end}}{{if $filters.streaming_status}}&streaming_status={{$filters.streaming_status}}{{end}}">{{$i}}</a>
                 {{end}}
                 {{end}}
             {{else}}
                 {{/* 总页数大于7时，使用智能分页 */}}
                 {{if gt $page 4}}
-                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">1</a>
+                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}{{if $filters.is_streaming}}&is_streaming={{$filters.is_streaming}}{{end}}{{if $filters.streaming_status}}&streaming_status={{$filters.streaming_status}}{{end}}">1</a>
                     {{if gt $page 5}}
                     <span class="ellipsis">...</span>
                     {{end}}
@@ -541,13 +580,13 @@ const indexTemplate = `<!DOCTYPE html>
                         {{if lt $page (sub $totalPages 4)}}
                         <span class="ellipsis">...</span>
                         {{end}}
-                        <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$totalPages}}</a>
+                        <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}{{if $filters.is_streaming}}&is_streaming={{$filters.is_streaming}}{{end}}{{if $filters.streaming_status}}&streaming_status={{$filters.streaming_status}}{{end}}">{{$totalPages}}</a>
                     {{end}}
                 {{end}}
             {{end}}
             
             {{if .Pagination.HasNext}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}">下一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}{{if .Filters.is_streaming}}&is_streaming={{.Filters.is_streaming}}{{end}}{{if .Filters.streaming_status}}&streaming_status={{.Filters.streaming_status}}{{end}}">下一页</a>
             {{else}}
             <span class="disabled">下一页</span>
             {{end}}
@@ -1046,6 +1085,29 @@ const detailTemplate = `<!DOCTYPE html>
                         <div class="info-value">{{.Entry.ClientIP}}</div>
                     </div>
                     {{end}}
+                    {{if ne .Entry.RecordType "process"}}
+                    <!-- 流式请求信息 -->
+                    <div class="info-item">
+                        <div class="info-label">流式请求</div>
+                        <div class="info-value">
+                            {{if .Entry.IsStreamingResponse}}
+                            <span class="streaming-badge streaming-active">是</span>
+                            {{else}}
+                            <span class="streaming-badge streaming-inactive">否</span>
+                            {{end}}
+                        </div>
+                    </div>
+                    {{if .Entry.IsStreamingResponse}}
+                    <div class="info-item">
+                        <div class="info-label">分块数量</div>
+                        <div class="info-value">{{.Entry.StreamingChunks}}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">分块大小</div>
+                        <div class="info-value">{{.Entry.StreamingChunkSize}} bytes</div>
+                    </div>
+                    {{end}}
+                    {{end}}
                 </div>
             </div>
             
@@ -1171,6 +1233,30 @@ const detailTemplate = `<!DOCTYPE html>
             {{if .Entry.ResponseBody}}
             <div class="section">
                 <h2>响应信息</h2>
+                {{if .Entry.IsStreamingResponse}}
+                <!-- 流式响应信息 -->
+                <div style="margin-bottom: 20px;">
+                    <h3>流式响应元数据</h3>
+                    <div class="basic-info">
+                        <div class="info-item">
+                            <div class="info-label">最大分块数</div>
+                            <div class="info-value">{{.Entry.MaxStreamingChunks}}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">流式数据大小</div>
+                            <div class="info-value">{{.Entry.StreamingData | len}} bytes</div>
+                        </div>
+                    </div>
+                </div>
+                {{if .Entry.StreamingData}}
+                <div style="margin-bottom: 20px;">
+                    <h3>流式响应数据</h3>
+                    <div class="json-viewer">
+                        <pre>{{.Entry.StreamingData | html}}</pre>
+                    </div>
+                </div>
+                {{end}}
+                {{end}}
                 <div class="json-viewer">
                     <pre>{{.Entry.ResponseBody | html}}</pre>
                 </div>

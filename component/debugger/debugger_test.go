@@ -589,7 +589,7 @@ func TestFileUploadBinaryDataHandling(t *testing.T) {
 
 		result, err := debugger.extractRequestBody(c)
 		assert.NoError(t, err)
-		assert.Contains(t, result, "[Multipart Form Data]")
+		assert.Contains(t, result, "[Multipart Form Data - Stream Processing]")
 		assert.Contains(t, result, "Total Size:")
 		assert.Contains(t, result, "Parts:")
 		assert.Contains(t, result, "[File] Name: avatar.jpg")

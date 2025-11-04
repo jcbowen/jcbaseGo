@@ -6,6 +6,8 @@
 
 ## 功能特性
 
+### 功能特性
+
 ### 核心功能
 - ✅ **请求拦截**: 自动拦截HTTP请求并记录完整的调试信息
 - ✅ **多存储支持**: 支持文件、内存、数据库三种存储方式
@@ -13,6 +15,7 @@
 - ✅ **全文搜索**: 支持关键词搜索请求头、响应头、请求体等内容
 - ✅ **详情查看**: 显示完整的请求和响应信息，支持HTML和JSON格式
 - ✅ **统计信息**: 提供请求统计、错误率、响应时间等分析数据
+- ✅ **流式请求支持**: 自动检测和记录流式响应（SSE、分块传输等），支持分块记录和元数据统计
 
 ### 记录内容
 - 请求方法、URL、查询参数
@@ -21,6 +24,7 @@
 - 会话数据和错误信息
 - 客户端IP、User Agent、请求ID
 - 请求处理时间和状态码
+- 流式响应元数据（分块数量、分块大小、流式状态等）
 
 ## 快速开始
 
@@ -241,6 +245,117 @@ config := &debugger.Config{
     "allowed_ips": ["192.168.1.100", "10.0.0.0/8"]
 }
 ```
+
+## 流式请求支持
+
+### 概述
+
+debugger组件现在支持流式请求的自动检测和记录功能，可以识别和记录Server-Sent Events (SSE)、分块传输编码等流式响应。流式请求支持允许您监控和分析实时数据流，同时保持对传统HTTP请求的完整兼容性。
+
+### 功能特性
+
+- ✅ **自动检测**: 自动识别流式响应类型（SSE、分块传输、二进制流等）
+- ✅ **分块记录**: 支持流式响应的分块记录和元数据统计
+- ✅ **配置控制**: 可配置分块大小限制和最大分块数量
+- ✅ **统计信息**: 提供流式请求数量、平均分块数、最大分块数等统计
+- ✅ **筛选查询**: 支持按流式请求状态和活跃状态进行筛选
+- ✅ **Web界面支持**: 在调试器Web界面中可查看流式请求详情
+
+### 配置说明
+
+流式请求支持需要显式启用，相关配置选项如下：
+
+```go
+config := &debugger.Config{
+    // ... 其他配置
+    
+    // 流式请求支持配置
+    EnableStreamingSupport: true,                    // 启用流式请求支持
+    StreamingChunkSize:     1024,                    // 流式响应分块大小（KB），默认1MB
+    MaxStreamingChunks:     10,                      // 最大流式响应分块数量，默认10个
+}
+```
+
+### 支持的流式响应类型
+
+- **Server-Sent Events (SSE)**: `Content-Type: text/event-stream`
+- **分块传输编码**: `Transfer-Encoding: chunked`
+- **流式JSON响应**: `Content-Type: application/x-ndjson` 或 `application/json-seq`
+- **二进制流**: `Content-Type: application/octet-stream`
+- **WebSocket升级响应**: `Upgrade: websocket`
+
+### 使用示例
+
+```go
+package main
+
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo/component/debugger"
+)
+
+func main() {
+	// 创建调试器配置，启用流式请求支持
+	memoryStorage, _ := debugger.NewMemoryStorage(100)
+	config := &debugger.Config{
+		Enabled:                true,
+		Storage:                memoryStorage,
+		EnableStreamingSupport: true,    // 启用流式请求支持
+		StreamingChunkSize:     512,      // 分块大小限制为512KB
+		MaxStreamingChunks:     5,        // 最多记录5个分块
+	}
+	
+	dbg, err := debugger.New(config)
+	if err != nil {
+		panic(err)
+	}
+
+	router := gin.New()
+	router.Use(dbg.Middleware())
+
+	// SSE流式响应示例
+	router.GET("/sse", func(c *gin.Context) {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+
+		for i := 1; i <= 3; i++ {
+			c.Writer.Write([]byte(fmt.Sprintf("data: 消息 %d\\n\\n", i)))
+			c.Writer.(http.Flusher).Flush()
+			time.Sleep(1 * time.Second)
+		}
+	})
+
+	// 分块传输编码示例
+	router.GET("/chunked", func(c *gin.Context) {
+		c.Header("Transfer-Encoding", "chunked")
+		
+		for i := 1; i <= 4; i++ {
+			chunk := fmt.Sprintf("分块 %d 内容\\n", i)
+			c.Writer.Write([]byte(chunk))
+			c.Writer.(http.Flusher).Flush()
+			time.Sleep(500 * time.Millisecond)
+		}
+	})
+
+	router.Run(":8080")
+}
+```
+
+### 流式请求记录内容
+
+流式请求记录包含以下额外信息：
+- **流式响应标记**: `IsStreamingResponse: true`
+- **分块数量**: `StreamingChunks: 3`
+- **分块大小限制**: `StreamingChunkSize: 512`
+- **最大分块数量**: `MaxStreamingChunks: 5`
+- **流式数据摘要**: `StreamingData: "Streaming Response: 3 chunks, total size: 1024 bytes"`
+
+### Web界面筛选
+
+在调试器Web界面中，您可以使用以下筛选选项：
+- **流式状态筛选**: 所有流式状态 / 流式请求 / 非流式请求
+- **流式活跃状态**: 活跃流式请求 / 非流式请求
 
 ## 进程级Debugger功能
 

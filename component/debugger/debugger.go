@@ -376,11 +376,129 @@ func (d *Debugger) shouldSample() bool {
 }
 
 // extractRequestBody 提取请求体内容
+// 优化性能：实现流式处理，避免大文件上传时的内存压力
 func (d *Debugger) extractRequestBody(c *gin.Context) (string, error) {
 	if c.Request.Body == nil {
 		return "", nil
 	}
 
+	// 检查是否为multipart/form-data文件上传
+	if isMultipartFormData(c) {
+		// 对于multipart/form-data，使用流式处理避免大文件内存占用
+		return d.extractMultipartRequestBody(c)
+	}
+
+	// 对于其他类型，使用原有逻辑但添加大小限制
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// 恢复请求体，以便后续处理
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	// 限制体大小（MaxBodySize单位为KB，需要转换为字节）
+	if int64(len(bodyBytes)) > d.config.MaxBodySize*1024 {
+		return fmt.Sprintf("[Body too large: %d bytes]", len(bodyBytes)), nil
+	}
+
+	// 检查是否为二进制数据（文件上传等）
+	if isBinaryData(bodyBytes) {
+		// 对于二进制数据，显示为十六进制格式或文件信息
+		return formatBinaryData(bodyBytes), nil
+	}
+
+	// 对于文本数据，直接转换为字符串
+	return string(bodyBytes), nil
+}
+
+// extractMultipartRequestBody 流式提取multipart/form-data请求体
+// 避免大文件上传时的内存压力，只读取元数据不读取文件内容
+func (d *Debugger) extractMultipartRequestBody(c *gin.Context) (string, error) {
+	contentType := c.Request.Header.Get("Content-Type")
+
+	// 提取boundary参数
+	boundary := extractBoundary(contentType)
+	if boundary == "" {
+		// 如果没有boundary，回退到二进制数据显示
+		return d.extractRequestBodyWithSizeLimit(c)
+	}
+
+	// 创建multipart reader进行流式处理
+	mr, err := c.Request.MultipartReader()
+	if err != nil {
+		// 如果创建失败，回退到普通处理
+		return d.extractRequestBodyWithSizeLimit(c)
+	}
+
+	var result strings.Builder
+	result.WriteString("[Multipart Form Data - Stream Processing]\n")
+
+	partCount := 0
+	fileCount := 0
+	totalSize := 0
+
+	// 流式处理multipart的各个部分
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			result.WriteString(fmt.Sprintf("  Error reading part: %v\n", err))
+			continue
+		}
+
+		partCount++
+		partName := part.FormName()
+		fileName := part.FileName()
+
+		// 读取部分内容（限制大小，避免大文件内存占用）
+		maxPartSize := 64 * 1024 // 限制每个部分最多读取64KB
+		partBytes := make([]byte, maxPartSize)
+		n, err := part.Read(partBytes)
+		if err != nil && err != io.EOF {
+			result.WriteString(fmt.Sprintf("  Error reading part content: %v\n", err))
+			continue
+		}
+
+		totalSize += n
+
+		if fileName != "" {
+			// 文件上传部分
+			fileCount++
+			result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Size: %d bytes, Type: %s\n",
+				fileName, partName, n, detectFileType(partBytes[:n])))
+		} else {
+			// 文本字段部分
+			if isBinaryData(partBytes[:n]) {
+				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Type: Binary\n",
+					partName, n))
+			} else {
+				// 限制文本长度，避免显示过长
+				textContent := string(partBytes[:n])
+				if len(textContent) > 100 {
+					textContent = textContent[:100] + "..."
+				}
+				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Content: %s\n",
+					partName, n, textContent))
+			}
+		}
+
+		// 检查总大小是否超过限制
+		if totalSize > int(d.config.MaxBodySize*1024) {
+			result.WriteString(fmt.Sprintf("  [Truncated] Total size exceeds limit: %d bytes\n", totalSize))
+			break
+		}
+	}
+
+	result.WriteString(fmt.Sprintf("Total Parts: %d, Files: %d, Total Size: %d bytes\n", partCount, fileCount, totalSize))
+	return result.String(), nil
+}
+
+// extractRequestBodyWithSizeLimit 带大小限制的请求体提取
+// 作为multipart处理失败时的降级方案
+func (d *Debugger) extractRequestBodyWithSizeLimit(c *gin.Context) (string, error) {
 	// 读取请求体
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -395,41 +513,66 @@ func (d *Debugger) extractRequestBody(c *gin.Context) (string, error) {
 		return fmt.Sprintf("[Body too large: %d bytes]", len(bodyBytes)), nil
 	}
 
-	// 检查是否为multipart/form-data文件上传
-	if isMultipartFormData(c) {
-		return formatMultipartFormData(c, bodyBytes), nil
-	}
-
-	// 检查是否为二进制数据（文件上传等）
+	// 检查是否为二进制数据
 	if isBinaryData(bodyBytes) {
-		// 对于二进制数据，显示为十六进制格式或文件信息
 		return formatBinaryData(bodyBytes), nil
 	}
 
-	// 对于文本数据，直接转换为字符串
 	return string(bodyBytes), nil
 }
 
 // isBinaryData 检查数据是否为二进制格式
+// 优化性能：使用更高效的二进制检测算法，减少内存访问和计算
 // 通过检测不可打印字符的比例来判断是否为二进制数据
 func isBinaryData(data []byte) bool {
 	if len(data) == 0 {
 		return false
 	}
 
-	// 统计不可打印字符的数量
+	// 优化：对于小数据直接检查，避免不必要的循环
+	if len(data) <= 256 {
+		return isBinaryDataQuick(data)
+	}
+
+	// 优化：采样检查，而不是检查整个1KB
+	sampleSize := min(len(data), 512)          // 减少采样大小
+	sampleStep := max(1, len(data)/sampleSize) // 采样步长
+
 	nonPrintableCount := 0
-	for i := 0; i < len(data) && i < 1024; i++ { // 只检查前1KB以提高性能
+	sampledCount := 0
+
+	// 采样检查，减少内存访问次数
+	for i := 0; i < len(data) && sampledCount < sampleSize; i += sampleStep {
 		b := data[i]
 		// 不可打印字符：ASCII码小于32且不是制表符、换行符、回车符
 		if b < 32 && b != '\t' && b != '\n' && b != '\r' {
 			nonPrintableCount++
 		}
+		sampledCount++
 	}
 
 	// 如果不可打印字符超过10%，则认为是二进制数据
-	totalChecked := min(len(data), 1024)
-	return float64(nonPrintableCount)/float64(totalChecked) > 0.1
+	return float64(nonPrintableCount)/float64(sampledCount) > 0.1
+}
+
+// isBinaryDataQuick 快速二进制检测（适用于小数据）
+func isBinaryDataQuick(data []byte) bool {
+	nonPrintableCount := 0
+	for i := 0; i < len(data); i++ {
+		b := data[i]
+		if b < 32 && b != '\t' && b != '\n' && b != '\r' {
+			nonPrintableCount++
+		}
+	}
+	return float64(nonPrintableCount)/float64(len(data)) > 0.1
+}
+
+// max 返回两个整数中的较大值
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // formatBinaryData 格式化二进制数据显示
@@ -691,10 +834,14 @@ func isStreamingResponseFromHeaders(headers http.Header) bool {
 
 // recordStreamingChunk 记录流式响应分块
 // 对每个分块进行大小限制和数量限制，避免内存溢出
+// 优化内存管理：限制总内存使用量，避免内存泄漏
 func (w *responseWriter) recordStreamingChunk(data []byte) {
 	// 检查是否超过最大分块数量
 	if len(w.streamingChunks) >= w.maxChunks {
-		return
+		// 超过最大分块数量时，移除最旧的分块（LRU策略）
+		if len(w.streamingChunks) > 0 {
+			w.streamingChunks = w.streamingChunks[1:]
+		}
 	}
 
 	chunk := StreamingChunk{
@@ -712,25 +859,37 @@ func (w *responseWriter) recordStreamingChunk(data []byte) {
 	}
 
 	w.streamingChunks = append(w.streamingChunks, chunk)
+
+	// 检查总内存使用量，如果超过限制则清理最旧的分块
+	w.cleanupExcessiveMemory()
+}
+
+// cleanupExcessiveMemory 清理过量的内存使用
+// 当流式分块总大小超过阈值时，自动清理最旧的分块
+func (w *responseWriter) cleanupExcessiveMemory() {
+	// 计算当前总内存使用量（使用原始字节大小，而不是截断后的字符串大小）
+	totalSize := 0
+	for _, chunk := range w.streamingChunks {
+		totalSize += chunk.Size
+	}
+
+	// 设置内存使用阈值（默认为10MB）
+	maxTotalSize := 10 * 1024 * 1024 // 10MB
+
+	// 如果超过阈值，清理最旧的分块直到满足限制
+	for totalSize > maxTotalSize && len(w.streamingChunks) > 0 {
+		// 移除最旧的分块
+		removedChunk := w.streamingChunks[0]
+		w.streamingChunks = w.streamingChunks[1:]
+		totalSize -= removedChunk.Size
+	}
 }
 
 // isBinaryData 检测数据是否为二进制数据
+// 优化：复用全局的isBinaryData函数，避免重复实现
 // 通过不可打印字符比例判断是否为二进制数据
 func (w *responseWriter) isBinaryData(data []byte) bool {
-	if len(data) == 0 {
-		return false
-	}
-
-	binaryCount := 0
-	for _, b := range data {
-		if b < 32 && b != 9 && b != 10 && b != 13 { // 排除制表符、换行符、回车符
-			binaryCount++
-		}
-	}
-
-	// 如果不可打印字符超过30%，认为是二进制数据
-	binaryRatio := float64(binaryCount) / float64(len(data))
-	return binaryRatio > 0.3
+	return isBinaryData(data)
 }
 
 // WriteHeader 重写WriteHeader方法以捕获状态码

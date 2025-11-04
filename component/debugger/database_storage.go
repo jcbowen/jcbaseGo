@@ -49,6 +49,13 @@ type LogEntryModel struct {
 
 	// 索引字段
 	URLHash string `gorm:"column:url_hash;type:VARCHAR(32);index" json:"url_hash"` // URL的MD5哈希，用于快速搜索
+
+	// 流式响应相关字段
+	IsStreamingResponse bool   `gorm:"column:is_streaming_response;type:BOOLEAN;index" json:"is_streaming_response"` // 是否为流式响应
+	StreamingChunks     int    `gorm:"column:streaming_chunks;type:INT" json:"streaming_chunks"`                     // 流式响应分块数量
+	StreamingChunkSize  int    `gorm:"column:streaming_chunk_size;type:INT" json:"streaming_chunk_size"`             // 流式响应分块大小限制（字节）
+	MaxStreamingChunks  int    `gorm:"column:max_streaming_chunks;type:INT" json:"max_streaming_chunks"`             // 流式响应最大分块数量限制
+	StreamingData       string `gorm:"column:streaming_data;type:TEXT" json:"streaming_data"`                        // 流式响应数据摘要（格式化显示）
 }
 
 // TableName 实现自定义表名
@@ -304,6 +311,18 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 			db = db.Where("duration >= ?", value.(time.Duration).Nanoseconds())
 		case "max_duration":
 			db = db.Where("duration <= ?", value.(time.Duration).Nanoseconds())
+		case "is_streaming":
+			// 流式请求过滤：true/false 字符串转换为布尔值
+			filterIsStreaming := strings.ToLower(value.(string)) == "true"
+			db = db.Where("is_streaming_response = ?", filterIsStreaming)
+		case "streaming_status":
+			// 流式状态过滤：active/inactive 字符串匹配
+			filterStatus := value.(string)
+			if filterStatus == "active" {
+				db = db.Where("is_streaming_response = ?", true)
+			} else if filterStatus == "inactive" {
+				db = db.Where("is_streaming_response = ?", false)
+			}
 		}
 	}
 
@@ -333,6 +352,13 @@ func (ds *DatabaseStorage) entryToModel(entry *LogEntry) (*LogEntryModel, error)
 		ProcessType: entry.ProcessType,
 		EndTime:     entry.EndTime,
 		Status:      entry.Status,
+
+		// 流式响应相关字段
+		IsStreamingResponse: entry.IsStreamingResponse,
+		StreamingChunks:     entry.StreamingChunks,
+		StreamingChunkSize:  entry.StreamingChunkSize,
+		MaxStreamingChunks:  entry.MaxStreamingChunks,
+		StreamingData:       entry.StreamingData,
 	}
 
 	// 转换JSON字段
@@ -381,6 +407,13 @@ func (ds *DatabaseStorage) modelToEntry(model *LogEntryModel) (*LogEntry, error)
 		ProcessType: model.ProcessType,
 		EndTime:     model.EndTime,
 		Status:      model.Status,
+
+		// 流式响应相关字段
+		IsStreamingResponse: model.IsStreamingResponse,
+		StreamingChunks:     model.StreamingChunks,
+		StreamingChunkSize:  model.StreamingChunkSize,
+		MaxStreamingChunks:  model.MaxStreamingChunks,
+		StreamingData:       model.StreamingData,
 	}
 
 	// 解析JSON字段
@@ -441,6 +474,24 @@ func (ds *DatabaseStorage) GetStats() (map[string]interface{}, error) {
 		avgDuration = 0
 	}
 
+	// 计算流式请求统计
+	var streamingRequestCount int64
+	if err := ds.db.Table(ds.tableName).Where("is_streaming_response = ?", true).Count(&streamingRequestCount).Error; err != nil {
+		return nil, fmt.Errorf("计算流式请求数失败: %v", err)
+	}
+
+	// 计算总流式分块数
+	var totalStreamingChunks int64
+	if err := ds.db.Table(ds.tableName).Select("SUM(streaming_chunks)").Where("is_streaming_response = ?", true).Row().Scan(&totalStreamingChunks); err != nil {
+		totalStreamingChunks = 0
+	}
+
+	// 计算最大流式分块数
+	var maxStreamingChunks int64
+	if err := ds.db.Table(ds.tableName).Select("MAX(streaming_chunks)").Where("is_streaming_response = ?", true).Row().Scan(&maxStreamingChunks); err != nil {
+		maxStreamingChunks = 0
+	}
+
 	// 估算存储大小（数据库存储难以精确计算，使用近似估算）
 	var estimatedSize int64
 	if total > 0 {
@@ -477,6 +528,20 @@ func (ds *DatabaseStorage) GetStats() (map[string]interface{}, error) {
 
 	// 添加平均响应时间
 	stats["avg_duration"] = time.Duration(avgDuration)
+
+	// 添加流式请求统计信息
+	stats["streaming_request_count"] = streamingRequestCount
+	if total > 0 {
+		stats["streaming_request_rate"] = float64(streamingRequestCount) / float64(total)
+	}
+	stats["total_streaming_chunks"] = totalStreamingChunks
+	if streamingRequestCount > 0 {
+		stats["avg_streaming_chunks"] = float64(totalStreamingChunks) / float64(streamingRequestCount)
+		stats["max_streaming_chunks"] = maxStreamingChunks
+	} else {
+		stats["avg_streaming_chunks"] = 0
+		stats["max_streaming_chunks"] = 0
+	}
 
 	return stats, nil
 }

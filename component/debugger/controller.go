@@ -522,6 +522,16 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 		filters["url"] = url
 	}
 
+	// 流式请求过滤
+	if isStreaming := ctx.Query("is_streaming"); isStreaming != "" {
+		filters["is_streaming"] = isStreaming
+	}
+
+	// 流式状态过滤
+	if streamingStatus := ctx.Query("streaming_status"); streamingStatus != "" {
+		filters["streaming_status"] = streamingStatus
+	}
+
 	return filters
 }
 

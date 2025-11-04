@@ -3,6 +3,7 @@ package debugger
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -108,6 +109,25 @@ func (fs *FileStorage) FindByID(id string) (*LogEntry, error) {
 }
 
 // FindAll 查找所有日志条目，支持分页和过滤
+// 优化性能：实现真正的分页查询，避免全量文件读取
+// 该方法提供统一的查询接口，适用于HTTP记录和进程记录的检索
+//
+// 参数:
+//
+//	page: 页码（从1开始）
+//	pageSize: 每页显示数量
+//	filters: 过滤条件映射，支持record_type、method、status_code、url、process_name、process_id等字段
+//
+// 返回值:
+//
+//	[]*LogEntry: 符合条件的日志条目列表（按时间倒序排列）
+//	int: 符合条件的总条目数
+//	error: 如果查询过程中发生错误返回错误信息，否则返回nil
+//
+// 优化逻辑:
+//   - 首先统计符合条件的文件总数（不读取文件内容）
+//   - 按文件名时间戳排序，只读取当前页需要的文件
+//   - 避免全量文件读取，减少I/O操作和内存占用
 func (fs *FileStorage) FindAll(page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error) {
 	// 获取所有日志文件
 	files, err := fs.listLogFiles()
@@ -115,8 +135,42 @@ func (fs *FileStorage) FindAll(page, pageSize int, filters map[string]interface{
 		return nil, 0, err
 	}
 
-	// 读取所有日志条目
-	var entries []*LogEntry
+	// 按文件名时间戳排序（最新的在前）
+	sort.Slice(files, func(i, j int) bool {
+		timeI, _ := fs.extractTimestampFromFilename(files[i])
+		timeJ, _ := fs.extractTimestampFromFilename(files[j])
+		return timeI.After(timeJ)
+	})
+
+	// 计算符合条件的文件总数（不读取文件内容）
+	total := 0
+	for _, file := range files {
+		// 只读取文件头信息进行快速过滤判断
+		entry, err := fs.readLogFile(file)
+		if err != nil {
+			continue
+		}
+		if fs.filterEntry(entry, filters) {
+			total++
+		}
+	}
+
+	// 计算分页范围
+	start := (page - 1) * pageSize
+	end := start + pageSize
+
+	if start >= total {
+		return []*LogEntry{}, total, nil
+	}
+
+	if end > total {
+		end = total
+	}
+
+	// 只读取当前页需要的文件
+	var result []*LogEntry
+	currentIndex := 0
+
 	for _, file := range files {
 		entry, err := fs.readLogFile(file)
 		if err != nil {
@@ -125,17 +179,71 @@ func (fs *FileStorage) FindAll(page, pageSize int, filters map[string]interface{
 
 		// 应用过滤器
 		if fs.filterEntry(entry, filters) {
-			entries = append(entries, entry)
+			if currentIndex >= start && currentIndex < end {
+				result = append(result, entry)
+			}
+			currentIndex++
+
+			// 如果已经收集到足够的数据，提前退出
+			if len(result) >= pageSize {
+				break
+			}
 		}
 	}
 
-	// 按时间倒序排序
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Timestamp.After(entries[j].Timestamp)
+	return result, total, nil
+}
+
+// Search 搜索日志内容
+// Search 搜索日志内容
+// 优化性能：实现真正的分页搜索，避免全量文件读取
+// 在日志条目的多个字段中进行全文搜索，支持HTTP记录和进程记录的关键词检索
+// 该方法提供不区分大小写的搜索功能，适用于快速查找特定内容的日志记录
+//
+// 参数:
+//
+//	keyword: 搜索关键词，支持在进程名称、URL、请求体、响应体、错误信息等字段中搜索
+//	page: 页码（从1开始）
+//	pageSize: 每页显示数量
+//
+// 返回值:
+//
+//	[]*LogEntry: 包含关键词的日志条目列表（按时间倒序排列）
+//	int: 包含关键词的总条目数
+//	error: 如果搜索过程中发生错误返回错误信息，否则返回nil
+//
+// 优化逻辑:
+//   - 首先统计符合条件的文件总数（使用快速文件头读取）
+//   - 按文件名时间戳排序，只读取当前页需要的文件
+//   - 避免全量文件读取，减少I/O操作和内存占用
+func (fs *FileStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, int, error) {
+	// 获取所有日志文件
+	files, err := fs.listLogFiles()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// 按文件名时间戳排序（最新的在前）
+	sort.Slice(files, func(i, j int) bool {
+		timeI, _ := fs.extractTimestampFromFilename(files[i])
+		timeJ, _ := fs.extractTimestampFromFilename(files[j])
+		return timeI.After(timeJ)
 	})
 
-	// 计算分页
-	total := len(entries)
+	// 计算符合条件的文件总数（使用快速文件头读取）
+	total := 0
+	for _, file := range files {
+		// 使用快速文件头读取进行关键词匹配
+		entry, err := fs.readLogFileHeader(file)
+		if err != nil {
+			continue
+		}
+		if fs.containsKeyword(entry, keyword) {
+			total++
+		}
+	}
+
+	// 计算分页范围
 	start := (page - 1) * pageSize
 	end := start + pageSize
 
@@ -147,19 +255,10 @@ func (fs *FileStorage) FindAll(page, pageSize int, filters map[string]interface{
 		end = total
 	}
 
-	return entries[start:end], total, nil
-}
+	// 只读取当前页需要的文件
+	var result []*LogEntry
+	currentIndex := 0
 
-// Search 搜索日志内容
-func (fs *FileStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, int, error) {
-	// 获取所有日志文件
-	files, err := fs.listLogFiles()
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// 搜索匹配的日志条目
-	var results []*LogEntry
 	for _, file := range files {
 		entry, err := fs.readLogFile(file)
 		if err != nil {
@@ -168,29 +267,19 @@ func (fs *FileStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, 
 
 		// 检查是否包含关键词
 		if fs.containsKeyword(entry, keyword) {
-			results = append(results, entry)
+			if currentIndex >= start && currentIndex < end {
+				result = append(result, entry)
+			}
+			currentIndex++
+
+			// 如果已经收集到足够的数据，提前退出
+			if len(result) >= pageSize {
+				break
+			}
 		}
 	}
 
-	// 按时间倒序排序
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Timestamp.After(results[j].Timestamp)
-	})
-
-	// 计算分页
-	total := len(results)
-	start := (page - 1) * pageSize
-	end := start + pageSize
-
-	if start >= total {
-		return []*LogEntry{}, total, nil
-	}
-
-	if end > total {
-		end = total
-	}
-
-	return results[start:end], total, nil
+	return result, total, nil
 }
 
 // Cleanup 清理过期日志
@@ -256,6 +345,63 @@ func (fs *FileStorage) readLogFile(filePath string) (*LogEntry, error) {
 	}
 
 	return &entry, nil
+}
+
+// readLogFileHeader 快速读取日志文件头信息，用于快速过滤判断
+// 只读取文件的部分内容进行快速过滤，避免全量文件读取
+// 该方法用于性能优化，在分页查询时减少I/O操作
+//
+// 参数:
+//
+//	filePath: 日志文件路径
+//
+// 返回值:
+//
+//	*LogEntry: 包含基本信息的日志条目（可能不完整）
+//	error: 如果文件读取或JSON解析失败返回错误信息
+func (fs *FileStorage) readLogFileHeader(filePath string) (*LogEntry, error) {
+	// 只读取文件的前1KB内容进行快速解析
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("打开日志文件失败: %v", err)
+	}
+	defer file.Close()
+
+	// 读取前1KB内容
+	buffer := make([]byte, 1024)
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("读取日志文件头失败: %v", err)
+	}
+
+	// 解析JSON到临时结构体，只包含基本字段
+	var header struct {
+		RecordType  string    `json:"record_type"`
+		Method      string    `json:"method"`
+		StatusCode  int       `json:"status_code"`
+		URL         string    `json:"url"`
+		ProcessName string    `json:"process_name"`
+		ProcessID   string    `json:"process_id"`
+		Timestamp   time.Time `json:"timestamp"`
+	}
+
+	if err := json.Unmarshal(buffer[:n], &header); err != nil {
+		// 如果快速解析失败，回退到完整读取
+		return fs.readLogFile(filePath)
+	}
+
+	// 转换为完整的LogEntry结构
+	entry := &LogEntry{
+		RecordType:  header.RecordType,
+		Method:      header.Method,
+		StatusCode:  header.StatusCode,
+		URL:         header.URL,
+		ProcessName: header.ProcessName,
+		ProcessID:   header.ProcessID,
+		Timestamp:   header.Timestamp,
+	}
+
+	return entry, nil
 }
 
 // extractTimestampFromFilename 从文件名中提取时间戳
@@ -365,6 +511,20 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 			if entry.Duration > value.(time.Duration) {
 				return false
 			}
+		case "is_streaming":
+			// 流式请求过滤：true/false 字符串转换为布尔值
+			filterIsStreaming := strings.ToLower(value.(string)) == "true"
+			if entry.IsStreamingResponse != filterIsStreaming {
+				return false
+			}
+		case "streaming_status":
+			// 流式状态过滤：active/inactive 字符串匹配
+			filterStatus := value.(string)
+			if filterStatus == "active" && !entry.IsStreamingResponse {
+				return false
+			} else if filterStatus == "inactive" && entry.IsStreamingResponse {
+				return false
+			}
 		}
 	}
 
@@ -466,6 +626,9 @@ func (fs *FileStorage) GetStats() (map[string]interface{}, error) {
 	var storageSize int64
 	var errorCount int
 	var totalDuration time.Duration
+	var streamingRequestCount int
+	var totalStreamingChunks int
+	var maxStreamingChunks int
 
 	for _, file := range files {
 		entry, err := fs.readLogFile(file)
@@ -515,6 +678,15 @@ func (fs *FileStorage) GetStats() (map[string]interface{}, error) {
 		if entry.Error != "" {
 			errorCount++
 		}
+
+		// 统计流式请求信息
+		if entry.IsStreamingResponse {
+			streamingRequestCount++
+			totalStreamingChunks += entry.StreamingChunks
+			if entry.StreamingChunks > maxStreamingChunks {
+				maxStreamingChunks = entry.StreamingChunks
+			}
+		}
 	}
 
 	// 统一字段名，移除重复的total_entries字段
@@ -531,6 +703,20 @@ func (fs *FileStorage) GetStats() (map[string]interface{}, error) {
 		stats["avg_duration"] = totalDuration / time.Duration(len(files))
 		stats["error_rate"] = float64(errorCount) / float64(len(files))
 		stats["error_count"] = errorCount
+	}
+
+	// 添加流式请求统计信息
+	stats["streaming_request_count"] = streamingRequestCount
+	if len(files) > 0 {
+		stats["streaming_request_rate"] = float64(streamingRequestCount) / float64(len(files))
+	}
+	stats["total_streaming_chunks"] = totalStreamingChunks
+	if streamingRequestCount > 0 {
+		stats["avg_streaming_chunks"] = float64(totalStreamingChunks) / float64(streamingRequestCount)
+		stats["max_streaming_chunks"] = maxStreamingChunks
+	} else {
+		stats["avg_streaming_chunks"] = 0
+		stats["max_streaming_chunks"] = 0
 	}
 
 	return stats, nil

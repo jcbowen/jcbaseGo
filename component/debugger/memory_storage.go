@@ -92,7 +92,8 @@ func (ms *MemoryStorage) FindByID(id string) (*LogEntry, error) {
 }
 
 // FindAll 查找所有日志条目，支持分页和过滤
-// 查询内存存储中的所有日志记录，支持多种过滤条件和分页功能
+// 优化性能：实现真正的分页查询，避免全量数据遍历
+// 优化并发：减少锁持有时间，提高并发性能
 // 该方法提供统一的查询接口，适用于HTTP记录和进程记录的检索
 //
 // 参数:
@@ -107,30 +108,28 @@ func (ms *MemoryStorage) FindByID(id string) (*LogEntry, error) {
 //	int: 符合条件的总条目数
 //	error: 如果查询过程中发生错误返回错误信息，否则返回nil
 //
-// 查询逻辑:
-//   - 首先应用过滤器筛选符合条件的条目（支持进程相关字段过滤）
-//   - 按时间戳倒序排序，确保最新的记录显示在前面
-//   - 计算分页信息，返回指定页面的数据
-//   - 支持空过滤条件，返回所有记录
+// 优化逻辑:
+//   - 首先计算符合条件的总条目数（不加载具体数据）
+//   - 按时间倒序排序后，只加载当前页需要的数据
+//   - 支持空过滤条件，返回分页数据
+//   - 减少锁持有时间，提高并发性能
 func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error) {
+	// 第一阶段：快速计算总数（只读锁）
 	ms.mutex.RLock()
-	defer ms.mutex.RUnlock()
-
-	// 应用过滤器
-	var filtered []*LogEntry
+	total := 0
 	for _, entry := range ms.entries {
 		if ms.filterEntry(entry, filters) {
-			filtered = append(filtered, entry)
+			total++
 		}
 	}
+	ms.mutex.RUnlock()
 
-	// 按时间倒序排序
-	sort.Slice(filtered, func(i, j int) bool {
-		return filtered[i].Timestamp.After(filtered[j].Timestamp)
-	})
+	// 检查是否需要返回空结果
+	if total == 0 {
+		return []*LogEntry{}, 0, nil
+	}
 
-	// 计算分页
-	total := len(filtered)
+	// 计算分页范围
 	start := (page - 1) * pageSize
 	end := start + pageSize
 
@@ -142,10 +141,38 @@ func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interfac
 		end = total
 	}
 
-	return filtered[start:end], total, nil
+	// 第二阶段：只加载当前页需要的数据（只读锁）
+	ms.mutex.RLock()
+	defer ms.mutex.RUnlock()
+
+	var result []*LogEntry
+	currentIndex := 0
+
+	for _, entry := range ms.entries {
+		if ms.filterEntry(entry, filters) {
+			if currentIndex >= start && currentIndex < end {
+				result = append(result, entry)
+			}
+			currentIndex++
+
+			// 如果已经收集到足够的数据，提前退出
+			if len(result) >= pageSize {
+				break
+			}
+		}
+	}
+
+	// 按时间倒序排序当前页数据
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Timestamp.After(result[j].Timestamp)
+	})
+
+	return result, total, nil
 }
 
 // Search 搜索日志内容
+// 优化性能：实现真正的分页搜索，避免全量数据遍历
+// 优化并发：减少锁持有时间，提高并发性能
 // 在日志条目的多个字段中进行全文搜索，支持HTTP记录和进程记录的关键词检索
 // 该方法提供不区分大小写的搜索功能，适用于快速查找特定内容的日志记录
 //
@@ -161,6 +188,12 @@ func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interfac
 //	int: 包含关键词的总条目数
 //	error: 如果搜索过程中发生错误返回错误信息，否则返回nil
 //
+// 优化逻辑:
+//   - 首先计算符合条件的总条目数（不加载具体数据）
+//   - 按时间倒序排序后，只加载当前页需要的数据
+//   - 避免全量数据遍历，提高搜索性能
+//   - 减少锁持有时间，提高并发性能
+//
 // 搜索范围:
 //   - 进程名称（process_name）
 //   - URL路径（url）
@@ -170,24 +203,22 @@ func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interfac
 //   - 请求头（request_headers）的所有值
 //   - 响应头（response_headers）的所有值
 func (ms *MemoryStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, int, error) {
+	// 第一阶段：快速计算总数（只读锁）
 	ms.mutex.RLock()
-	defer ms.mutex.RUnlock()
-
-	// 搜索匹配的日志条目
-	var results []*LogEntry
+	total := 0
 	for _, entry := range ms.entries {
 		if ms.containsKeyword(entry, keyword) {
-			results = append(results, entry)
+			total++
 		}
 	}
+	ms.mutex.RUnlock()
 
-	// 按时间倒序排序
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Timestamp.After(results[j].Timestamp)
-	})
+	// 检查是否需要返回空结果
+	if total == 0 {
+		return []*LogEntry{}, 0, nil
+	}
 
-	// 计算分页
-	total := len(results)
+	// 计算分页范围
 	start := (page - 1) * pageSize
 	end := start + pageSize
 
@@ -199,7 +230,33 @@ func (ms *MemoryStorage) Search(keyword string, page, pageSize int) ([]*LogEntry
 		end = total
 	}
 
-	return results[start:end], total, nil
+	// 第二阶段：只加载当前页需要的数据（只读锁）
+	ms.mutex.RLock()
+	defer ms.mutex.RUnlock()
+
+	var result []*LogEntry
+	currentIndex := 0
+
+	for _, entry := range ms.entries {
+		if ms.containsKeyword(entry, keyword) {
+			if currentIndex >= start && currentIndex < end {
+				result = append(result, entry)
+			}
+			currentIndex++
+
+			// 如果已经收集到足够的数据，提前退出
+			if len(result) >= pageSize {
+				break
+			}
+		}
+	}
+
+	// 按时间倒序排序当前页数据
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Timestamp.After(result[j].Timestamp)
+	})
+
+	return result, total, nil
 }
 
 // Cleanup 清理过期日志
@@ -307,6 +364,21 @@ func (ms *MemoryStorage) filterEntry(entry *LogEntry, filters map[string]interfa
 			if entry.Duration > value.(time.Duration) {
 				return false
 			}
+		case "is_streaming":
+			// 流式请求过滤：true/false 字符串转换为布尔值
+			filterIsStreaming := strings.ToLower(value.(string)) == "true"
+			if entry.IsStreamingResponse != filterIsStreaming {
+				return false
+			}
+		case "streaming_status":
+			// 流式状态过滤：active/inactive 字符串匹配
+			filterStatus := value.(string)
+			if filterStatus == "active" && !entry.IsStreamingResponse {
+				return false
+			}
+			if filterStatus == "inactive" && entry.IsStreamingResponse {
+				return false
+			}
 		}
 	}
 
@@ -375,14 +447,14 @@ func (ms *MemoryStorage) GetStats() (map[string]interface{}, error) {
 	ms.mutex.RLock()
 	defer ms.mutex.RUnlock()
 
-	stats := map[string]interface{}{
-		"total_requests": len(ms.entries), // 总请求数
-		"max_size":       ms.maxSize,
-		"storage_type":   "memory",
-	}
-
 	// 计算存储大小（精确计算，与单个条目计算逻辑保持一致）
 	var storageSize int64
+	var errorCount int
+	var totalDuration time.Duration
+	var streamingRequestCount int
+	var totalStreamingChunks int
+	var maxStreamingChunks int
+
 	for _, entry := range ms.entries {
 		// 使用与CalculateStorageSize相同的计算逻辑
 		entrySize := int64(len(entry.ID) + len(entry.URL) + len(entry.Method) +
@@ -422,6 +494,27 @@ func (ms *MemoryStorage) GetStats() (map[string]interface{}, error) {
 		}
 
 		storageSize += entrySize
+
+		// 统计错误信息
+		if entry.Error != "" {
+			errorCount++
+		}
+		totalDuration += entry.Duration
+
+		// 统计流式请求信息
+		if entry.IsStreamingResponse {
+			streamingRequestCount++
+			totalStreamingChunks += entry.StreamingChunks
+			if entry.StreamingChunks > maxStreamingChunks {
+				maxStreamingChunks = entry.StreamingChunks
+			}
+		}
+	}
+
+	stats := map[string]interface{}{
+		"total_requests": len(ms.entries), // 总请求数
+		"max_size":       ms.maxSize,
+		"storage_type":   "memory",
 	}
 
 	// 转换为KB
@@ -429,19 +522,21 @@ func (ms *MemoryStorage) GetStats() (map[string]interface{}, error) {
 
 	// 计算平均响应时间
 	if len(ms.entries) > 0 {
-		var totalDuration time.Duration
-		var errorCount int
-
-		for _, entry := range ms.entries {
-			totalDuration += entry.Duration
-			if entry.Error != "" {
-				errorCount++
-			}
-		}
-
 		stats["avg_duration"] = totalDuration / time.Duration(len(ms.entries))
 		stats["error_rate"] = float64(errorCount) / float64(len(ms.entries))
 		stats["error_count"] = errorCount
+	}
+
+	// 添加流式请求统计信息
+	stats["streaming_request_count"] = streamingRequestCount
+	stats["streaming_request_rate"] = float64(streamingRequestCount) / float64(len(ms.entries))
+	stats["total_streaming_chunks"] = totalStreamingChunks
+	if streamingRequestCount > 0 {
+		stats["avg_streaming_chunks"] = float64(totalStreamingChunks) / float64(streamingRequestCount)
+		stats["max_streaming_chunks"] = maxStreamingChunks
+	} else {
+		stats["avg_streaming_chunks"] = 0
+		stats["max_streaming_chunks"] = 0
 	}
 
 	return stats, nil

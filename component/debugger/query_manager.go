@@ -431,6 +431,62 @@ func (qm *QueryManager) Cleanup(before time.Time) error {
 	return qm.storage.Cleanup(before)
 }
 
+// GetByIsStreaming 根据流式请求状态查询日志
+// isStreaming: 是否为流式请求（true/false）
+func (qm *QueryManager) GetByIsStreaming(isStreaming bool, page, pageSize int) (*QueryResult, error) {
+	filters := map[string]interface{}{
+		"is_streaming": isStreaming,
+	}
+
+	options := QueryOptions{
+		Page:      page,
+		PageSize:  pageSize,
+		Filters:   filters,
+		SortBy:    "timestamp",
+		SortOrder: "desc",
+	}
+
+	return qm.Query(options)
+}
+
+// GetByStreamingStatus 根据流式请求活跃状态查询日志
+// streamingStatus: 流式请求状态（"active" - 活跃, "inactive" - 非活跃）
+func (qm *QueryManager) GetByStreamingStatus(streamingStatus string, page, pageSize int) (*QueryResult, error) {
+	filters := map[string]interface{}{
+		"streaming_status": streamingStatus,
+	}
+
+	options := QueryOptions{
+		Page:      page,
+		PageSize:  pageSize,
+		Filters:   filters,
+		SortBy:    "timestamp",
+		SortOrder: "desc",
+	}
+
+	return qm.Query(options)
+}
+
+// GetStreamingRequests 获取流式请求日志
+func (qm *QueryManager) GetStreamingRequests(page, pageSize int) (*QueryResult, error) {
+	return qm.GetByIsStreaming(true, page, pageSize)
+}
+
+// GetNonStreamingRequests 获取非流式请求日志
+func (qm *QueryManager) GetNonStreamingRequests(page, pageSize int) (*QueryResult, error) {
+	return qm.GetByIsStreaming(false, page, pageSize)
+}
+
+// GetActiveStreamingRequests 获取活跃的流式请求日志
+func (qm *QueryManager) GetActiveStreamingRequests(page, pageSize int) (*QueryResult, error) {
+	return qm.GetByStreamingStatus("active", page, pageSize)
+}
+
+// GetInactiveStreamingRequests 获取非活跃的流式请求日志
+func (qm *QueryManager) GetInactiveStreamingRequests(page, pageSize int) (*QueryResult, error) {
+	return qm.GetByStreamingStatus("inactive", page, pageSize)
+}
+
 // GetFilterOptions 获取可用的过滤选项
 func (qm *QueryManager) GetFilterOptions() map[string]interface{} {
 	return map[string]interface{}{
@@ -443,6 +499,10 @@ func (qm *QueryManager) GetFilterOptions() map[string]interface{} {
 			"last_week":  "上周",
 			"this_month": "本月",
 			"last_month": "上月",
+		},
+		"streaming_options": map[string]interface{}{
+			"is_streaming":     []string{"all", "streaming", "non-streaming"},
+			"streaming_status": []string{"all", "active", "inactive"},
 		},
 	}
 }
