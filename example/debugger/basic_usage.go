@@ -26,6 +26,9 @@ func main() {
 	// 添加调试器中间件
 	r.Use(debuggerInstance.Middleware())
 
+	// 注册调试器路由
+	debuggerInstance.RegisterRoutes(r)
+
 	// 添加测试路由
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
