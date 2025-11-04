@@ -748,6 +748,19 @@ const detailTemplate = `<!DOCTYPE html>
             line-height: 1.4;
         }
         
+        /* JSON语法高亮样式 */
+        .json-key { color: #881391; font-weight: bold; }
+        .json-string { color: #c41a16; }
+        .json-number { color: #1c00cf; }
+        .json-boolean { color: #0d22aa; font-weight: bold; }
+        .json-null { color: #808080; font-weight: bold; }
+        .json-punctuation { color: #000000; }
+        .json-collapse { cursor: pointer; color: #666; margin-right: 5px; }
+        .json-collapsed { color: #999; font-style: italic; }
+        .json-toggle { cursor: pointer; color: #666; margin-right: 5px; }
+        .json-line { display: block; }
+        .json-indent { margin-left: 20px; }
+        
         .tab-container { margin-top: 20px; }
         .tabs { display: flex; border-bottom: 1px solid #eee; margin-bottom: 15px; }
         .tab { padding: 10px 20px; cursor: pointer; border: 1px solid transparent; border-bottom: none; margin-bottom: -1px; }
@@ -1226,10 +1239,146 @@ const detailTemplate = `<!DOCTYPE html>
                     window.location.href = '{{.BasePath}}/list';
                 }
             });
+            
+            // 美化JSON内容
+            beautifyJSONContent();
         });
         
         function lower(str) {
             return str ? str.toLowerCase() : '';
+        }
+        
+        // JSON美化功能
+        function beautifyJSONContent() {
+            const jsonViewers = document.querySelectorAll('.json-viewer pre');
+            
+            jsonViewers.forEach(pre => {
+                try {
+                    const originalText = pre.textContent.trim();
+                    if (!originalText) return;
+                    
+                    // 检查内容是否看起来像JSON（以{或[开头）
+                    const trimmedText = originalText.trim();
+                    if (!trimmedText.startsWith('{') && !trimmedText.startsWith('[')) {
+                        // 不是JSON格式，保持原样显示
+                        return;
+                    }
+                    
+                    // 尝试解析JSON
+                    const jsonData = JSON.parse(originalText);
+                    
+                    // 格式化JSON
+                    const formattedJSON = JSON.stringify(jsonData, null, 2);
+                    
+                    // 创建语法高亮的HTML
+                    const highlightedHTML = syntaxHighlight(formattedJSON);
+                    
+                    // 替换原始内容
+                    pre.innerHTML = highlightedHTML;
+                    
+                    // 添加复制按钮
+                    addCopyButton(pre.parentElement, formattedJSON);
+                    
+                } catch (error) {
+                    // 如果不是有效的JSON，保持原样显示
+                    console.log('内容不是有效的JSON，保持原样显示:', error);
+                }
+            });
+        }
+        
+        // JSON语法高亮
+        function syntaxHighlight(json) {
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+        
+        // 添加复制按钮
+        function addCopyButton(container, jsonText) {
+            const copyButton = document.createElement('button');
+            copyButton.textContent = '复制JSON';
+            copyButton.style.cssText = 'position: absolute; top: 10px; right: 10px; background: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; z-index: 10;';
+            
+            copyButton.addEventListener('click', function() {
+                // 使用现代clipboard API，如果不可用则使用备用方法
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(jsonText).then(function() {
+                        showCopySuccess(copyButton);
+                    }).catch(function(err) {
+                        console.error('Clipboard API复制失败:', err);
+                        useFallbackCopyMethod(jsonText, copyButton);
+                    });
+                } else {
+                    // 使用备用复制方法
+                    useFallbackCopyMethod(jsonText, copyButton);
+                }
+            });
+            
+            container.style.position = 'relative';
+            container.appendChild(copyButton);
+        }
+        
+        // 备用复制方法
+        function useFallbackCopyMethod(text, button) {
+            // 创建临时textarea元素
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-9999px';
+            textArea.style.top = '0';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showCopySuccess(button);
+                } else {
+                    showCopyError(button);
+                }
+            } catch (err) {
+                console.error('备用复制方法失败:', err);
+                showCopyError(button);
+            }
+            
+            document.body.removeChild(textArea);
+        }
+        
+        // 显示复制成功状态
+        function showCopySuccess(button) {
+            const originalText = button.textContent;
+            button.textContent = '复制成功';
+            button.style.background = '#27ae60';
+            
+            setTimeout(function() {
+                button.textContent = originalText;
+                button.style.background = '#3498db';
+            }, 2000);
+        }
+        
+        // 显示复制失败状态
+        function showCopyError(button) {
+            button.textContent = '复制失败';
+            button.style.background = '#e74c3c';
+            
+            setTimeout(function() {
+                button.textContent = '复制JSON';
+                button.style.background = '#3498db';
+            }, 2000);
         }
     </script>
 </body>
