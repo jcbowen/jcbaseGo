@@ -737,6 +737,7 @@ const detailTemplate = `<!DOCTYPE html>
             overflow: auto; 
             font-family: 'Courier New', monospace; 
             font-size: 12px; 
+            position: relative;
         }
         .json-viewer pre { 
             margin: 0; 
@@ -1325,7 +1326,7 @@ const detailTemplate = `<!DOCTYPE html>
         function addCopyButton(container, jsonText) {
             const copyButton = document.createElement('button');
             copyButton.textContent = '复制JSON';
-            copyButton.style.cssText = 'position: absolute; top: 10px; right: 10px; background: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; z-index: 10;';
+            copyButton.style.cssText = 'position: sticky; top: 10px; right: 10px; background: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; z-index: 10; float: right; margin-bottom: 10px;';
             
             copyButton.addEventListener('click', function() {
                 // 使用现代clipboard API，如果不可用则使用备用方法
@@ -1342,8 +1343,13 @@ const detailTemplate = `<!DOCTYPE html>
                 }
             });
             
-            container.style.position = 'relative';
-            container.appendChild(copyButton);
+            // 在JSON内容之前插入复制按钮
+            const preElement = container.querySelector('pre');
+            if (preElement) {
+                container.insertBefore(copyButton, preElement);
+            } else {
+                container.appendChild(copyButton);
+            }
         }
         
         // 备用复制方法
