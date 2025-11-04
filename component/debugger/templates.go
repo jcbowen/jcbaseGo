@@ -961,7 +961,7 @@ const detailTemplate = `<!DOCTYPE html>
                 line-height: 1.5;
             }
             .method-badge, .status-badge { 
-                padding: 10px 12px; 
+                padding: 14px 14px; 
                 font-size: 16px; 
                 min-width: 60px;
             }
