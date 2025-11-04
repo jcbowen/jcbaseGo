@@ -36,6 +36,11 @@ type Config struct {
 	AllowedIPs []string `json:"allowed_ips" default:""`  // 允许访问的IP白名单，空数组表示不限制
 	UseCDN     bool     `json:"use_cdn" default:"false"` // 是否使用CDN，影响真实IP获取方式
 
+	// 流式请求配置
+	EnableStreamingSupport bool  `json:"enable_streaming_support" default:"false"` // 是否启用流式请求支持
+	StreamingChunkSize     int64 `json:"streaming_chunk_size" default:"1024"`      // 流式响应分块大小（KB），默认1MB
+	MaxStreamingChunks     int   `json:"max_streaming_chunks" default:"10"`        // 最大流式响应分块数量，默认10个
+
 	// 核心组件配置 - 必须传入实例化的存储器
 	Storage Storage         `json:"-"` // 存储实现（必须传入实例化的存储器）
 	Logger  LoggerInterface `json:"-"` // 日志记录器（推荐直接传入实例化的日志记录器）
@@ -132,8 +137,13 @@ func (d *Debugger) Middleware() gin.HandlerFunc {
 
 		// 创建自定义的ResponseWriter来捕获响应
 		writer := &responseWriter{
-			ResponseWriter: c.Writer,
-			body:           &bytes.Buffer{},
+			ResponseWriter:  c.Writer,
+			debugger:        d, // 保存Debugger实例引用
+			body:            &bytes.Buffer{},
+			isStreaming:     false, // 初始化为非流式响应
+			chunkSizeLimit:  d.config.StreamingChunkSize,
+			maxChunks:       d.config.MaxStreamingChunks,
+			streamingChunks: make([]StreamingChunk, 0),
 		}
 		c.Writer = writer
 
@@ -182,53 +192,112 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 
 // recordResponseInfo 记录响应信息
 // 自动识别二进制响应数据并适当处理，避免文件下载内容显示为乱码
+// 支持流式响应记录，对实时流式请求进行特殊处理
 func (d *Debugger) recordResponseInfo(entry *LogEntry, writer *responseWriter, startTime time.Time) {
 	entry.StatusCode = writer.Status()
 	entry.Duration = time.Since(startTime)
 	entry.ResponseHeaders = helper.ExtractHeaders(writer.Header())
 
-	// 记录响应体
-	if writer.body.Len() > 0 {
-		// 检查响应头是否包含gzip压缩
-		contentEncoding := writer.Header().Get("Content-Encoding")
+	// 检查是否为流式响应（只有在启用流式支持时才处理流式响应）
+	if d.config.EnableStreamingSupport && writer.isStreaming {
+		// 流式响应处理
+		entry.RecordType = "streaming" // 标记为流式请求
+		entry.ResponseBody = d.formatStreamingResponse(writer)
 
-		// 如果是gzip压缩的响应，尝试解压缩
-		if strings.Contains(contentEncoding, "gzip") {
-			// 解压缩gzip数据
-			reader, err := gzip.NewReader(bytes.NewReader(writer.body.Bytes()))
-			if err == nil {
-				defer func(reader *gzip.Reader) {
-					err = reader.Close()
-					if err != nil {
-						d.logger.Error("关闭gzip读取器失败" + err.Error())
-					}
-				}(reader)
-				decompressed, err := io.ReadAll(reader)
+		// 记录流式响应元数据
+		entry.IsStreamingResponse = true
+		entry.StreamingChunks = len(writer.streamingChunks)
+		entry.StreamingChunkSize = int(writer.chunkSizeLimit)
+		entry.MaxStreamingChunks = int(writer.maxChunks)
+		entry.StreamingData = fmt.Sprintf("Streaming Response: %d chunks, total size: %d bytes",
+			len(writer.streamingChunks), d.calculateTotalStreamingSize(writer))
+	} else {
+		// 非流式响应处理
+		entry.RecordType = "http" // 标记为普通HTTP请求
+
+		// 记录响应体
+		if writer.body.Len() > 0 {
+			// 检查响应头是否包含gzip压缩
+			contentEncoding := writer.Header().Get("Content-Encoding")
+
+			// 如果是gzip压缩的响应，尝试解压缩
+			if strings.Contains(contentEncoding, "gzip") {
+				// 解压缩gzip数据
+				reader, err := gzip.NewReader(bytes.NewReader(writer.body.Bytes()))
 				if err == nil {
-					// 检查解压后的数据是否为二进制
-					if isBinaryData(decompressed) {
-						entry.ResponseBody = formatBinaryData(decompressed)
+					defer func(reader *gzip.Reader) {
+						err = reader.Close()
+						if err != nil {
+							d.logger.Error("关闭gzip读取器失败" + err.Error())
+						}
+					}(reader)
+					decompressed, err := io.ReadAll(reader)
+					if err == nil {
+						// 检查解压后的数据是否为二进制
+						if isBinaryData(decompressed) {
+							entry.ResponseBody = formatBinaryData(decompressed)
+						} else {
+							entry.ResponseBody = string(decompressed)
+						}
 					} else {
-						entry.ResponseBody = string(decompressed)
+						// 解压缩失败，记录原始数据并添加错误标记
+						entry.ResponseBody = "[GZIP解压缩失败] " + formatBinaryData(writer.body.Bytes())
 					}
 				} else {
-					// 解压缩失败，记录原始数据并添加错误标记
-					entry.ResponseBody = "[GZIP解压缩失败] " + formatBinaryData(writer.body.Bytes())
+					// 创建gzip读取器失败，记录原始数据
+					entry.ResponseBody = "[GZIP格式错误] " + formatBinaryData(writer.body.Bytes())
 				}
 			} else {
-				// 创建gzip读取器失败，记录原始数据
-				entry.ResponseBody = "[GZIP格式错误] " + formatBinaryData(writer.body.Bytes())
-			}
-		} else {
-			// 非gzip压缩的响应，检查是否为二进制数据
-			responseBytes := writer.body.Bytes()
-			if isBinaryData(responseBytes) {
-				entry.ResponseBody = formatBinaryData(responseBytes)
-			} else {
-				entry.ResponseBody = string(responseBytes)
+				// 非gzip压缩的响应，检查是否为二进制数据
+				responseBytes := writer.body.Bytes()
+				if isBinaryData(responseBytes) {
+					entry.ResponseBody = formatBinaryData(responseBytes)
+				} else {
+					entry.ResponseBody = string(responseBytes)
+				}
 			}
 		}
 	}
+}
+
+// formatStreamingResponse 格式化流式响应数据
+// 对流式响应的分块数据进行格式化显示
+func (d *Debugger) formatStreamingResponse(writer *responseWriter) string {
+	if len(writer.streamingChunks) == 0 {
+		return "[Streaming Response: No chunks recorded]"
+	}
+
+	var result strings.Builder
+	result.WriteString(fmt.Sprintf("[Streaming Response: %d chunks, total size: %d bytes]\n",
+		len(writer.streamingChunks), d.calculateTotalStreamingSize(writer)))
+
+	for i, chunk := range writer.streamingChunks {
+		result.WriteString(fmt.Sprintf("Chunk %d (size: %d bytes, time: %s): ",
+			i+1, chunk.Size, chunk.Timestamp.Format("15:04:05.000")))
+
+		if chunk.IsBinary {
+			result.WriteString("[Binary Data] ")
+		}
+
+		// 限制显示的数据长度
+		if len(chunk.Data) > 200 {
+			result.WriteString(chunk.Data[:200] + "...")
+		} else {
+			result.WriteString(chunk.Data)
+		}
+		result.WriteString("\n")
+	}
+
+	return result.String()
+}
+
+// calculateTotalStreamingSize 计算流式响应的总大小
+func (d *Debugger) calculateTotalStreamingSize(writer *responseWriter) int {
+	total := 0
+	for _, chunk := range writer.streamingChunks {
+		total += chunk.Size
+	}
+	return total
 }
 
 // recordSessionData 记录会话数据
@@ -546,14 +615,122 @@ func formatMultipartFormData(c *gin.Context, bodyBytes []byte) string {
 // responseWriter 自定义ResponseWriter用于捕获响应
 type responseWriter struct {
 	gin.ResponseWriter
-	body   *bytes.Buffer
-	status int
+	debugger        *Debugger // 指向Debugger实例的引用
+	body            *bytes.Buffer
+	status          int
+	isStreaming     bool             // 是否为流式响应
+	streamingChunks []StreamingChunk // 流式响应分块记录
+	chunkSizeLimit  int64            // 单个分块大小限制
+	maxChunks       int              // 最大分块数量
+}
+
+// StreamingChunk 流式响应分块记录
+// 用于记录流式响应的分块数据，避免内存溢出
+type StreamingChunk struct {
+	Timestamp time.Time `json:"timestamp"` // 分块接收时间
+	Size      int       `json:"size"`      // 分块大小
+	Data      string    `json:"data"`      // 分块数据（截断后）
+	IsBinary  bool      `json:"is_binary"` // 是否为二进制数据
 }
 
 // Write 重写Write方法以捕获响应体
+// 支持流式响应处理，自动检测流式请求并分块记录
 func (w *responseWriter) Write(b []byte) (int, error) {
-	w.body.Write(b)
+	// 检查是否为流式响应（只有在启用流式支持时才处理流式响应）
+	if w.debugger.config.EnableStreamingSupport && w.isStreamingResponse() {
+		w.isStreaming = true
+		w.recordStreamingChunk(b)
+	} else {
+		// 非流式响应，使用原有逻辑
+		w.isStreaming = false // 确保禁用流式支持时标记为非流式响应
+		w.body.Write(b)
+	}
+
 	return w.ResponseWriter.Write(b)
+}
+
+// isStreamingResponse 检测是否为流式响应
+// 通过响应头信息判断是否为流式传输
+func (w *responseWriter) isStreamingResponse() bool {
+	return isStreamingResponseFromHeaders(w.Header())
+}
+
+// isStreamingResponseFromHeaders 根据响应头检测是否为流式响应
+// 独立的函数，便于测试使用
+func isStreamingResponseFromHeaders(headers http.Header) bool {
+	contentType := headers.Get("Content-Type")
+	transferEncoding := headers.Get("Transfer-Encoding")
+
+	// 检查是否为分块传输编码
+	if transferEncoding == "chunked" {
+		return true
+	}
+
+	// 检查是否为Server-Sent Events
+	if contentType == "text/event-stream" {
+		return true
+	}
+
+	// 检查是否为流式JSON响应
+	if contentType == "application/x-ndjson" || contentType == "application/json-seq" {
+		return true
+	}
+
+	// 检查是否为二进制流式响应
+	if contentType == "application/octet-stream" {
+		return true
+	}
+
+	// 检查是否为WebSocket升级响应
+	if headers.Get("Upgrade") == "websocket" {
+		return true
+	}
+
+	return false
+}
+
+// recordStreamingChunk 记录流式响应分块
+// 对每个分块进行大小限制和数量限制，避免内存溢出
+func (w *responseWriter) recordStreamingChunk(data []byte) {
+	// 检查是否超过最大分块数量
+	if len(w.streamingChunks) >= w.maxChunks {
+		return
+	}
+
+	chunk := StreamingChunk{
+		Timestamp: time.Now(),
+		Size:      len(data),
+		IsBinary:  w.isBinaryData(data),
+	}
+
+	// 限制单个分块的数据大小
+	maxChunkSize := w.chunkSizeLimit * 1024 // 转换为字节
+	if int64(len(data)) > maxChunkSize {
+		chunk.Data = string(data[:maxChunkSize]) + "... [truncated]"
+	} else {
+		chunk.Data = string(data)
+	}
+
+	w.streamingChunks = append(w.streamingChunks, chunk)
+}
+
+// isBinaryData 检测数据是否为二进制数据
+// 通过不可打印字符比例判断是否为二进制数据
+func (w *responseWriter) isBinaryData(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+
+	binaryCount := 0
+	for _, b := range data {
+		if b < 32 && b != 9 && b != 10 && b != 13 { // 排除制表符、换行符、回车符
+			binaryCount++
+		}
+	}
+
+	// 如果不可打印字符超过30%，认为是二进制数据
+	binaryRatio := float64(binaryCount) / float64(len(data))
+	return binaryRatio > 0.3
 }
 
 // WriteHeader 重写WriteHeader方法以捕获状态码

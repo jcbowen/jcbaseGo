@@ -249,6 +249,13 @@ type LogEntry struct {
 	// Logger日志信息（新增）
 	LoggerLogs []LoggerLog `json:"logger_logs,omitempty"` // 通过logger记录的日志
 
+	// 流式响应元数据（新增）
+	IsStreamingResponse bool   `json:"is_streaming_response,omitempty"` // 是否为流式响应
+	StreamingChunks     int    `json:"streaming_chunks,omitempty"`      // 流式响应分块数量
+	StreamingChunkSize  int    `json:"streaming_chunk_size,omitempty"`  // 流式响应分块大小限制（字节）
+	MaxStreamingChunks  int    `json:"max_streaming_chunks,omitempty"`  // 流式响应最大分块数量限制
+	StreamingData       string `json:"streaming_data,omitempty"`        // 流式响应数据摘要（格式化显示）
+
 	// 存储大小（计算字段，不持久化到存储）
 	StorageSize string `json:"storage_size,omitempty"` // 存储大小（格式化显示）
 }
@@ -312,6 +319,13 @@ func (e *LogEntry) CalculateStorageSize() string {
 				totalSize += len(fieldsData)
 			}
 		}
+	}
+
+	// 计算流式响应元数据大小（新增）
+	totalSize += len(e.StreamingData)
+	if e.IsStreamingResponse {
+		// 流式响应相关的布尔值和整数字段占用固定大小
+		totalSize += 32 // 布尔值和整数的大致存储大小
 	}
 
 	// 格式化显示
