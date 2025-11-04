@@ -1,9 +1,14 @@
 package debugger
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"log"
+	"mime/multipart"
+	"net"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -503,6 +508,209 @@ func TestMaxRecordsZeroUnlimited(t *testing.T) {
 		}
 		assert.True(t, found, "记录ID=test-%d应该存在", i)
 	}
+}
+
+// TestFileUploadBinaryDataHandling 测试文件上传二进制数据处理功能
+func TestFileUploadBinaryDataHandling(t *testing.T) {
+	// 创建调试器
+	memoryStorage, _ := NewMemoryStorage(100)
+	config := &Config{
+		Enabled:     true,
+		Storage:     memoryStorage,
+		Level:       LevelDebug,
+		MaxBodySize: 1024, // 1MB
+	}
+	debugger, err := New(config)
+	assert.NoError(t, err)
+
+	// 测试1: 普通文本数据
+	t.Run("普通文本数据", func(t *testing.T) {
+		c := &gin.Context{}
+		c.Request = &http.Request{
+			Method: "POST",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+			},
+			Body: io.NopCloser(bytes.NewBufferString(`{"name":"test","value":123}`)),
+		}
+
+		result, err := debugger.extractRequestBody(c)
+		assert.NoError(t, err)
+		assert.Equal(t, `{"name":"test","value":123}`, result)
+	})
+
+	// 测试2: 二进制数据（JPEG图片）
+	t.Run("二进制数据-JPEG", func(t *testing.T) {
+		c := &gin.Context{}
+		c.Request = &http.Request{
+			Method: "POST",
+			Header: http.Header{
+				"Content-Type": []string{"application/octet-stream"},
+			},
+			Body: io.NopCloser(bytes.NewBuffer([]byte{
+				0xFF, 0xD8, 0xFF, 0xE0, // JPEG文件头
+				0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+			})),
+		}
+
+		result, err := debugger.extractRequestBody(c)
+		assert.NoError(t, err)
+		assert.Contains(t, result, "[Binary Data:")
+		assert.Contains(t, result, "JPEG")
+	})
+
+	// 测试3: multipart/form-data文件上传
+	t.Run("multipart文件上传", func(t *testing.T) {
+		// 创建multipart表单数据
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+
+		// 添加文本字段
+		writer.WriteField("username", "testuser")
+		writer.WriteField("email", "test@example.com")
+
+		// 添加文件字段
+		fileWriter, _ := writer.CreateFormFile("avatar", "avatar.jpg")
+		fileWriter.Write([]byte{
+			0xFF, 0xD8, 0xFF, 0xE0, // JPEG文件头
+			0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+		})
+
+		writer.Close()
+
+		c := &gin.Context{}
+		c.Request = &http.Request{
+			Method: "POST",
+			Header: http.Header{
+				"Content-Type": []string{writer.FormDataContentType()},
+			},
+			Body: io.NopCloser(bytes.NewBuffer(body.Bytes())),
+		}
+
+		result, err := debugger.extractRequestBody(c)
+		assert.NoError(t, err)
+		assert.Contains(t, result, "[Multipart Form Data]")
+		assert.Contains(t, result, "Total Size:")
+		assert.Contains(t, result, "Parts:")
+		assert.Contains(t, result, "[File] Name: avatar.jpg")
+		assert.Contains(t, result, "[Field] Name: username")
+		assert.Contains(t, result, "testuser")
+	})
+
+	// 测试4: 大文件二进制数据
+	t.Run("大文件二进制数据", func(t *testing.T) {
+		// 创建大文件数据（超过512字节）
+		largeData := make([]byte, 1024)
+		for i := range largeData {
+			largeData[i] = byte(i % 256)
+		}
+
+		c := &gin.Context{}
+		c.Request = &http.Request{
+			Method: "POST",
+			Header: http.Header{
+				"Content-Type": []string{"application/octet-stream"},
+			},
+			Body: io.NopCloser(bytes.NewBuffer(largeData)),
+		}
+
+		result, err := debugger.extractRequestBody(c)
+		assert.NoError(t, err)
+		assert.Contains(t, result, "[Binary File:")
+		assert.Contains(t, result, "1024 bytes")
+	})
+
+	// 测试5: 响应体二进制数据处理
+	t.Run("响应体二进制数据", func(t *testing.T) {
+		// 创建调试器
+		debugger, err := New(config)
+		assert.NoError(t, err)
+
+		// 创建日志条目
+		entry := &LogEntry{
+			ID:        "test-response-binary",
+			Timestamp: time.Now(),
+			Method:    "GET",
+			URL:       "/download",
+		}
+
+		// 创建响应写入器
+		writer := &responseWriter{
+			ResponseWriter: &mockResponseWriter{},
+			body:           &bytes.Buffer{},
+		}
+
+		// 写入二进制数据
+		binaryData := []byte{
+			0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG文件头
+		}
+		writer.body.Write(binaryData)
+
+		// 记录响应信息
+		debugger.recordResponseInfo(entry, writer, time.Now())
+
+		// 验证响应体被正确格式化
+		assert.Contains(t, entry.ResponseBody, "[Binary Data:")
+		assert.Contains(t, entry.ResponseBody, "PNG")
+	})
+}
+
+// mockResponseWriter 模拟响应写入器
+type mockResponseWriter struct {
+	headers http.Header
+	status  int
+}
+
+func (m *mockResponseWriter) Header() http.Header {
+	if m.headers == nil {
+		m.headers = make(http.Header)
+	}
+	return m.headers
+}
+
+func (m *mockResponseWriter) Write(data []byte) (int, error) {
+	return len(data), nil
+}
+
+func (m *mockResponseWriter) WriteHeader(statusCode int) {
+	m.status = statusCode
+}
+
+func (m *mockResponseWriter) CloseNotify() <-chan bool {
+	ch := make(chan bool, 1)
+	return ch
+}
+
+func (m *mockResponseWriter) Flush() {
+	// 空实现
+}
+
+func (m *mockResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return nil, nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockResponseWriter) Pusher() http.Pusher {
+	return nil
+}
+
+func (m *mockResponseWriter) Size() int {
+	return 0
+}
+
+func (m *mockResponseWriter) Status() int {
+	return m.status
+}
+
+func (m *mockResponseWriter) WriteHeaderNow() {
+	// 空实现
+}
+
+func (m *mockResponseWriter) WriteString(s string) (int, error) {
+	return len(s), nil
+}
+
+func (m *mockResponseWriter) Written() bool {
+	return true
 }
 
 // captureOutput 捕获标准输出和标准错误

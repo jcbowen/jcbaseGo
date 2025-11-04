@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"strings"
@@ -180,6 +181,7 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 }
 
 // recordResponseInfo 记录响应信息
+// 自动识别二进制响应数据并适当处理，避免文件下载内容显示为乱码
 func (d *Debugger) recordResponseInfo(entry *LogEntry, writer *responseWriter, startTime time.Time) {
 	entry.StatusCode = writer.Status()
 	entry.Duration = time.Since(startTime)
@@ -203,18 +205,28 @@ func (d *Debugger) recordResponseInfo(entry *LogEntry, writer *responseWriter, s
 				}(reader)
 				decompressed, err := io.ReadAll(reader)
 				if err == nil {
-					entry.ResponseBody = string(decompressed)
+					// 检查解压后的数据是否为二进制
+					if isBinaryData(decompressed) {
+						entry.ResponseBody = formatBinaryData(decompressed)
+					} else {
+						entry.ResponseBody = string(decompressed)
+					}
 				} else {
 					// 解压缩失败，记录原始数据并添加错误标记
-					entry.ResponseBody = "[GZIP解压缩失败] " + string(writer.body.Bytes())
+					entry.ResponseBody = "[GZIP解压缩失败] " + formatBinaryData(writer.body.Bytes())
 				}
 			} else {
 				// 创建gzip读取器失败，记录原始数据
-				entry.ResponseBody = "[GZIP格式错误] " + string(writer.body.Bytes())
+				entry.ResponseBody = "[GZIP格式错误] " + formatBinaryData(writer.body.Bytes())
 			}
 		} else {
-			// 非gzip压缩的响应，直接使用原始数据
-			entry.ResponseBody = string(writer.body.Bytes())
+			// 非gzip压缩的响应，检查是否为二进制数据
+			responseBytes := writer.body.Bytes()
+			if isBinaryData(responseBytes) {
+				entry.ResponseBody = formatBinaryData(responseBytes)
+			} else {
+				entry.ResponseBody = string(responseBytes)
+			}
 		}
 	}
 }
@@ -314,7 +326,221 @@ func (d *Debugger) extractRequestBody(c *gin.Context) (string, error) {
 		return fmt.Sprintf("[Body too large: %d bytes]", len(bodyBytes)), nil
 	}
 
+	// 检查是否为multipart/form-data文件上传
+	if isMultipartFormData(c) {
+		return formatMultipartFormData(c, bodyBytes), nil
+	}
+
+	// 检查是否为二进制数据（文件上传等）
+	if isBinaryData(bodyBytes) {
+		// 对于二进制数据，显示为十六进制格式或文件信息
+		return formatBinaryData(bodyBytes), nil
+	}
+
+	// 对于文本数据，直接转换为字符串
 	return string(bodyBytes), nil
+}
+
+// isBinaryData 检查数据是否为二进制格式
+// 通过检测不可打印字符的比例来判断是否为二进制数据
+func isBinaryData(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+
+	// 统计不可打印字符的数量
+	nonPrintableCount := 0
+	for i := 0; i < len(data) && i < 1024; i++ { // 只检查前1KB以提高性能
+		b := data[i]
+		// 不可打印字符：ASCII码小于32且不是制表符、换行符、回车符
+		if b < 32 && b != '\t' && b != '\n' && b != '\r' {
+			nonPrintableCount++
+		}
+	}
+
+	// 如果不可打印字符超过10%，则认为是二进制数据
+	totalChecked := min(len(data), 1024)
+	return float64(nonPrintableCount)/float64(totalChecked) > 0.1
+}
+
+// formatBinaryData 格式化二进制数据显示
+// 对于小文件显示十六进制预览和文件类型，对于大文件显示文件信息
+func formatBinaryData(data []byte) string {
+	fileType := detectFileType(data)
+
+	if len(data) <= 512 {
+		// 小文件：显示十六进制预览和文件类型
+		hexPreview := fmt.Sprintf("%x", data)
+		if len(hexPreview) > 200 {
+			hexPreview = hexPreview[:200] + "..."
+		}
+		return fmt.Sprintf("[Binary Data: %d bytes, Type: %s, Hex: %s]", len(data), fileType, hexPreview)
+	}
+
+	// 大文件：显示文件信息
+	return fmt.Sprintf("[Binary File: %d bytes, Type: %s]", len(data), fileType)
+}
+
+// detectFileType 检测文件类型
+// 通过文件魔数识别常见文件类型
+func detectFileType(data []byte) string {
+	if len(data) < 8 {
+		return "Unknown"
+	}
+
+	// 常见文件类型的魔数检测
+	switch {
+	case bytes.HasPrefix(data, []byte{0xFF, 0xD8, 0xFF}):
+		return "JPEG"
+	case bytes.HasPrefix(data, []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}):
+		return "PNG"
+	case bytes.HasPrefix(data, []byte{0x47, 0x49, 0x46, 0x38}):
+		return "GIF"
+	case bytes.HasPrefix(data, []byte{0x25, 0x50, 0x44, 0x46}):
+		return "PDF"
+	case bytes.HasPrefix(data, []byte{0x50, 0x4B, 0x03, 0x04}):
+		return "ZIP/Office Document"
+	case bytes.HasPrefix(data, []byte{0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00}):
+		return "RAR"
+	case bytes.HasPrefix(data, []byte{0x49, 0x44, 0x33}):
+		return "MP3"
+	case bytes.HasPrefix(data, []byte{0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D}):
+		return "MP4"
+	default:
+		// 检查是否为文本文件（大部分字符可打印）
+		printableCount := 0
+		for i := 0; i < min(len(data), 100); i++ {
+			b := data[i]
+			if b >= 32 && b <= 126 {
+				printableCount++
+			}
+		}
+
+		if float64(printableCount)/float64(min(len(data), 100)) > 0.8 {
+			return "Text"
+		}
+		return "Binary"
+	}
+}
+
+// min 返回两个整数中的较小值
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// isMultipartFormData 检查是否为multipart/form-data文件上传请求
+// 通过Content-Type头识别multipart/form-data类型
+func isMultipartFormData(c *gin.Context) bool {
+	contentType := c.Request.Header.Get("Content-Type")
+	return strings.Contains(contentType, "multipart/form-data")
+}
+
+// extractBoundary 从Content-Type头中提取boundary参数
+// 用于multipart/form-data请求的解析
+func extractBoundary(contentType string) string {
+	if !strings.Contains(contentType, "multipart/form-data") {
+		return ""
+	}
+
+	// 查找boundary参数
+	boundaryPrefix := "boundary="
+	boundaryIndex := strings.Index(contentType, boundaryPrefix)
+	if boundaryIndex == -1 {
+		return ""
+	}
+
+	boundaryIndex += len(boundaryPrefix)
+	boundaryEnd := strings.Index(contentType[boundaryIndex:], ";")
+
+	if boundaryEnd == -1 {
+		// 如果没有分号，取到字符串末尾
+		return strings.Trim(contentType[boundaryIndex:], " \"")
+	}
+
+	return strings.Trim(contentType[boundaryIndex:boundaryIndex+boundaryEnd], " \"")
+}
+
+// formatMultipartFormData 格式化multipart/form-data请求体
+// 解析multipart数据并显示文件上传信息，避免显示二进制乱码
+func formatMultipartFormData(c *gin.Context, bodyBytes []byte) string {
+	contentType := c.Request.Header.Get("Content-Type")
+
+	// 提取boundary参数
+	boundary := extractBoundary(contentType)
+	if boundary == "" {
+		// 如果没有boundary，回退到二进制数据显示
+		return formatBinaryData(bodyBytes)
+	}
+
+	// 创建multipart reader
+	reader := bytes.NewReader(bodyBytes)
+	mr := multipart.NewReader(reader, boundary)
+	if mr == nil {
+		// 如果创建失败，回退到二进制数据显示
+		return formatBinaryData(bodyBytes)
+	}
+
+	var result strings.Builder
+	result.WriteString("[Multipart Form Data]\n")
+	result.WriteString(fmt.Sprintf("Total Size: %d bytes\n", len(bodyBytes)))
+	result.WriteString("Parts:\n")
+
+	// 解析multipart的各个部分
+	partCount := 0
+	fileCount := 0
+	textCount := 0
+
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			result.WriteString(fmt.Sprintf("  Error reading part: %v\n", err))
+			continue
+		}
+
+		partCount++
+		partName := part.FormName()
+		fileName := part.FileName()
+
+		// 读取部分内容
+		partBytes, err := io.ReadAll(part)
+		if err != nil {
+			result.WriteString(fmt.Sprintf("  Error reading part content: %v\n", err))
+			continue
+		}
+
+		if fileName != "" {
+			// 文件上传部分
+			fileCount++
+			result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Size: %d bytes, Type: %s\n",
+				fileName, partName, len(partBytes), detectFileType(partBytes)))
+		} else {
+			// 文本字段部分
+			textCount++
+			if isBinaryData(partBytes) {
+				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Type: Binary\n",
+					partName, len(partBytes)))
+			} else {
+				// 限制文本长度，避免显示过长
+				textContent := string(partBytes)
+				if len(textContent) > 100 {
+					textContent = textContent[:100] + "..."
+				}
+				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Value: %s\n",
+					partName, textContent))
+			}
+		}
+	}
+
+	result.WriteString(fmt.Sprintf("\nSummary: %d parts total (%d files, %d fields)",
+		partCount, fileCount, textCount))
+
+	return result.String()
 }
 
 // responseWriter 自定义ResponseWriter用于捕获响应
