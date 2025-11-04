@@ -1,6 +1,7 @@
 package debugger
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net"
@@ -583,6 +584,26 @@ func (c *Controller) renderTemplate(ctx *gin.Context, templateName string, data 
 		},
 		"add": func(a, b int) int {
 			return a + b
+		},
+		"isJSON": func(s string) bool {
+			// 检查字符串是否为空
+			if s == "" {
+				return false
+			}
+
+			// 去除首尾空白字符
+			trimmed := strings.TrimSpace(s)
+
+			// 检查是否以{或[开头，以}或]结尾
+			if (strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}")) ||
+				(strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]")) {
+
+				// 尝试解析JSON验证有效性
+				var js interface{}
+				return json.Unmarshal([]byte(trimmed), &js) == nil
+			}
+
+			return false
 		},
 	}
 

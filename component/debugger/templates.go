@@ -1188,7 +1188,15 @@ const detailTemplate = `<!DOCTYPE html>
                         <span class="log-level level-{{.Level}}">{{.Level}}</span>
                         <span class="log-timestamp">{{.Timestamp.Format "2006-01-02 15:04:05.000"}}</span>
                     </div>
-                        <div class="log-message">{{.Message}}</div>
+                        <div class="log-message">
+                            {{if isJSON .Message}}
+                            <div class="json-viewer">
+                                <pre>{{.Message}}</pre>
+                            </div>
+                            {{else}}
+                            {{.Message}}
+                            {{end}}
+                        </div>
                         {{if .Fields}}
                         <div class="log-fields">
                             {{range $key, $value := .Fields}}
@@ -1257,10 +1265,17 @@ const detailTemplate = `<!DOCTYPE html>
                     const originalText = pre.textContent.trim();
                     if (!originalText) return;
                     
-                    // 检查内容是否看起来像JSON（以{或[开头）
+                    // 检查内容是否看起来像JSON（以{或[开头，以}或]结尾）
                     const trimmedText = originalText.trim();
                     if (!trimmedText.startsWith('{') && !trimmedText.startsWith('[')) {
                         // 不是JSON格式，保持原样显示
+                        return;
+                    }
+                    
+                    // 进一步检查是否以对应的括号结尾
+                    if ((trimmedText.startsWith('{') && !trimmedText.endsWith('}')) ||
+                        (trimmedText.startsWith('[') && !trimmedText.endsWith(']'))) {
+                        // 括号不匹配，不是完整的JSON格式
                         return;
                     }
                     
