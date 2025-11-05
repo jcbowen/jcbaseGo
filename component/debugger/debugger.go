@@ -38,8 +38,9 @@ type Config struct {
 
 	// 流式请求配置
 	EnableStreamingSupport bool  `json:"enable_streaming_support" default:"false"` // 是否启用流式请求支持
-	StreamingChunkSize     int64 `json:"streaming_chunk_size" default:"1024"`      // 流式响应分块大小（KB），默认1MB
-	MaxStreamingChunks     int   `json:"max_streaming_chunks" default:"10"`        // 最大流式响应分块数量，默认10个
+	StreamingChunkSize     int64 `json:"streaming_chunk_size" default:"1024"`      // 流式响应分块大小（KB），默认1MB，0表示无限制
+	MaxStreamingChunks     int   `json:"max_streaming_chunks" default:"10"`        // 最大流式响应分块数量，默认10个，0表示无限制
+	MaxStreamingMemory     int64 `json:"max_streaming_memory" default:"10485760"`  // 流式响应最大内存使用量（字节），默认10MB，0表示无限制
 
 	// Multipart请求配置
 	EnableMultipartSupport bool  `json:"enable_multipart_support" default:"true"` // 是否启用multipart请求支持
@@ -1204,10 +1205,11 @@ func isStreamingResponseFromHeaders(headers http.Header) bool {
 
 // recordStreamingChunk 记录流式响应分块
 // 对每个分块进行大小限制和数量限制，避免内存溢出
+// 支持无限制配置：当MaxStreamingChunks为0时表示无分块数量限制
 // 优化内存管理：限制总内存使用量，避免内存泄漏
 func (w *responseWriter) recordStreamingChunk(data []byte) {
-	// 检查是否超过最大分块数量
-	if len(w.streamingChunks) >= w.maxChunks {
+	// 检查是否超过最大分块数量（仅当MaxStreamingChunks > 0时生效）
+	if w.maxChunks > 0 && len(w.streamingChunks) >= w.maxChunks {
 		// 超过最大分块数量时，移除最旧的分块（LRU策略）
 		if len(w.streamingChunks) > 0 {
 			w.streamingChunks = w.streamingChunks[1:]
@@ -1220,11 +1222,16 @@ func (w *responseWriter) recordStreamingChunk(data []byte) {
 		IsBinary:  w.isBinaryData(data),
 	}
 
-	// 限制单个分块的数据大小
-	maxChunkSize := w.chunkSizeLimit * 1024 // 转换为字节
-	if int64(len(data)) > maxChunkSize {
-		chunk.Data = string(data[:maxChunkSize]) + "... [truncated]"
+	// 限制单个分块的数据大小（仅当StreamingChunkSize > 0时生效）
+	if w.chunkSizeLimit > 0 {
+		maxChunkSize := w.chunkSizeLimit * 1024 // 转换为字节
+		if int64(len(data)) > maxChunkSize {
+			chunk.Data = string(data[:maxChunkSize]) + "... [truncated]"
+		} else {
+			chunk.Data = string(data)
+		}
 	} else {
+		// 无限制时记录完整数据
 		chunk.Data = string(data)
 	}
 
@@ -1236,18 +1243,24 @@ func (w *responseWriter) recordStreamingChunk(data []byte) {
 
 // cleanupExcessiveMemory 清理过量的内存使用
 // 当流式分块总大小超过阈值时，自动清理最旧的分块
+// 支持无限制配置：当MaxStreamingMemory为0时表示无内存限制
 func (w *responseWriter) cleanupExcessiveMemory() {
+	// 获取配置中的内存限制
+	maxMemory := w.debugger.config.MaxStreamingMemory
+
+	// 如果内存限制为0，表示无限制，直接返回
+	if maxMemory == 0 {
+		return
+	}
+
 	// 计算当前总内存使用量（使用原始字节大小，而不是截断后的字符串大小）
 	totalSize := 0
 	for _, chunk := range w.streamingChunks {
 		totalSize += chunk.Size
 	}
 
-	// 设置内存使用阈值（默认为10MB）
-	maxTotalSize := 10 * 1024 * 1024 // 10MB
-
 	// 如果超过阈值，清理最旧的分块直到满足限制
-	for totalSize > maxTotalSize && len(w.streamingChunks) > 0 {
+	for totalSize > int(maxMemory) && len(w.streamingChunks) > 0 {
 		// 移除最旧的分块
 		removedChunk := w.streamingChunks[0]
 		w.streamingChunks = w.streamingChunks[1:]

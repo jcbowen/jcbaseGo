@@ -274,8 +274,29 @@ config := &debugger.Config{
     
     // 流式请求支持配置
     EnableStreamingSupport: true,                    // 启用流式请求支持
-    StreamingChunkSize:     1024,                    // 流式响应分块大小（KB），默认1MB
-    MaxStreamingChunks:     10,                      // 最大流式响应分块数量，默认10个
+    StreamingChunkSize:     1024,                    // 流式响应分块大小（KB），默认1MB，0表示无限制
+    MaxStreamingChunks:     10,                      // 最大流式响应分块数量，默认10个，0表示无限制
+    MaxStreamingMemory:     10485760,                // 流式响应总内存限制（字节），默认10MB，0表示无限制
+}
+```
+
+#### 配置选项说明
+
+- **EnableStreamingSupport**: 是否启用流式请求支持，默认为false
+- **StreamingChunkSize**: 单个流式响应分块的大小限制（KB），默认1024KB（1MB），设置为0表示无限制
+- **MaxStreamingChunks**: 最大流式响应分块数量，默认10个，设置为0表示无限制
+- **MaxStreamingMemory**: 流式响应总内存使用限制（字节），默认10485760字节（10MB），设置为0表示无限制
+
+#### 无限制配置示例
+
+如果您希望完全禁用流式请求的限制，可以这样配置：
+
+```go
+config := &debugger.Config{
+    EnableStreamingSupport: true,
+    StreamingChunkSize:     0,      // 无分块大小限制
+    MaxStreamingChunks:     0,      // 无分块数量限制
+    MaxStreamingMemory:     0,      // 无内存限制
 }
 ```
 
@@ -352,7 +373,17 @@ func main() {
 - **分块数量**: `StreamingChunks: 3`
 - **分块大小限制**: `StreamingChunkSize: 512`
 - **最大分块数量**: `MaxStreamingChunks: 5`
+- **内存使用限制**: `MaxStreamingMemory: 10485760`
 - **流式数据摘要**: `StreamingData: "Streaming Response: 3 chunks, total size: 1024 bytes"`
+
+### 内存管理机制
+
+调试器组件实现了智能的内存管理机制，确保流式请求记录不会导致内存溢出：
+
+1. **分块数量限制**: 当分块数量超过`MaxStreamingChunks`限制时，采用LRU策略移除最旧的分块
+2. **分块大小限制**: 单个分块大小超过`StreamingChunkSize`限制时，数据会被截断并添加"[truncated]"标记
+3. **总内存限制**: 当所有分块的总内存使用量超过`MaxStreamingMemory`限制时，持续移除最旧的分块直到满足限制
+4. **无限制支持**: 所有限制都支持设置为0，表示无限制记录
 
 ### Web界面筛选
 
@@ -957,6 +988,79 @@ func (s *CustomStorage) FindByID(id string) (*LogEntry, error) {
 // 实现其他接口方法...
 ```
 
+### 进程级调试器支持
+
+调试器组件支持进程级日志记录，适用于后台任务、批处理作业、定时任务等非HTTP进程场景。
+
+#### 基本使用
+
+```go
+// 开始进程记录
+logger := dbg.StartProcess("数据同步任务", "batch")
+defer dbg.EndProcess(logger.GetProcessID(), "completed")
+
+// 记录进程日志
+logger.Info("开始处理数据同步")
+logger.Debug("获取数据源信息", map[string]interface{}{
+    "source": "MySQL",
+    "table": "users",
+})
+
+// 更新进度
+logger.UpdateProgress(25.0)
+
+// 记录警告和错误
+logger.Warn("发现重复数据", map[string]interface{}{
+    "duplicate_count": 5,
+})
+
+// 完成进程
+logger.Info("数据同步完成", map[string]interface{}{
+    "processed_count": 1000,
+    "success_count": 995,
+    "error_count": 5,
+})
+```
+
+#### 进程记录器接口
+
+```go
+type ProcessLoggerInterface interface {
+    Debug(msg any, fields ...map[string]interface{})
+    Info(msg any, fields ...map[string]interface{})
+    Warn(msg any, fields ...map[string]interface{})
+    Error(msg any, fields ...map[string]interface{})
+    GetProcessID() string
+    UpdateProgress(progress float64)
+    SetStatus(status string)
+    AddProcessData(key string, value interface{})
+}
+```
+
+### 流式请求支持
+
+调试器组件支持流式请求的完整记录，包括流式响应的元数据和状态跟踪。
+
+#### 启用流式支持
+
+```go
+config := &debugger.Config{
+    Enabled:               true,
+    EnableStreamingSupport: true,  // 启用流式请求支持
+    MaxRecords:            1000,
+}
+
+dbg, err := debugger.New(config)
+```
+
+#### 流式请求记录
+
+流式请求会自动记录以下信息：
+- 流式请求标识
+- 流式状态（started/processing/completed）
+- 响应块数量
+- 流式响应相关元数据
+
 ### 查询和搜索功能
 
 #### 基本查询
@@ -1445,22 +1549,40 @@ type LogEntry struct {
 
 	// 错误信息
 	Error string `json:"error,omitempty"` // 错误信息
+
+	// 进程记录字段（用于非HTTP进程场景）
+	RecordType      string            `json:"record_type,omitempty"`    // 记录类型："http" 或 "process"
+	ProcessID       string            `json:"process_id,omitempty"`     // 进程ID
+	ProcessName     string            `json:"process_name,omitempty"`   // 进程名称
+	ProcessType     string            `json:"process_type,omitempty"`   // 进程类型：background/worker/cron/batch等
+	Status          string            `json:"status,omitempty"`         // 进程状态：running/completed/failed
+	Progress        float64           `json:"progress,omitempty"`       // 进度百分比（0-100）
+	ProcessData     map[string]interface{} `json:"process_data,omitempty"` // 进程相关数据
+
+	// 流式响应元数据
+	IsStreaming     bool              `json:"is_streaming,omitempty"`    // 是否为流式请求
+	StreamingStatus string            `json:"streaming_status,omitempty"` // 流式状态：started/processing/completed
+	ChunkCount      int               `json:"chunk_count,omitempty"`     // 流式响应块数量
+	StreamingData   map[string]interface{} `json:"streaming_data,omitempty"` // 流式响应相关数据
 }
 ```
 
 #### Config
 ```go
 type Config struct {
-	Enabled         bool             // 是否启用调试器
-	Storage         Storage          // 存储器实例
-	MaxBodySize     int64            // 最大请求/响应体大小（KB）
-	RetentionPeriod time.Duration    // 日志保留期限
-	Level           LogLevel         // 日志级别
-	MaxRecords      int              // 最大记录数量
-	SkipPaths       []string         // 跳过的路径
-	SkipMethods     []string         // 跳过的HTTP方法
-	SampleRate      float64          // 采样率（0-1之间）
-	Logger          LoggerInterface  // 日志记录器实例
+	Enabled               bool             // 是否启用调试器
+	Storage               Storage          // 存储器实例
+	MaxBodySize           int64            // 最大请求/响应体大小（KB）
+	RetentionPeriod       time.Duration    // 日志保留期限
+	Level                 LogLevel         // 日志级别
+	MaxRecords            int              // 最大记录数量
+	SkipPaths             []string         // 跳过的路径
+	SkipMethods           []string         // 跳过的HTTP方法
+	SampleRate            float64          // 采样率（0-1之间）
+	Logger                LoggerInterface  // 日志记录器实例
+	AllowedIPs            []string         // 允许访问的IP白名单
+	UseCDN                bool             // 是否使用CDN获取真实IP
+	EnableStreamingSupport bool             // 启用流式请求支持
 }
 ```
 
@@ -1508,16 +1630,16 @@ type LoggerInterface interface {
 
 ```go
 // 便捷构造函数
-func NewSimpleDebugger() (*Debugger, error)
-func NewWithMemoryStorage(maxRecords int) (*Debugger, error)
-func NewWithFileStorage(path string, maxRecords int) (*Debugger, error)
-func NewWithCustomStorage(storage Storage) (*Debugger, error)
-func NewProductionDebugger(storagePath string) (*Debugger, error)
+func NewSimpleDebugger() (*Debugger, error)                    // 创建简单调试器，使用默认内存存储（150条记录）
+func NewWithMemoryStorage(maxRecords int) (*Debugger, error)   // 创建使用内存存储的调试器，指定最大记录数
+func NewWithFileStorage(path string, maxRecords int) (*Debugger, error) // 创建使用文件存储的调试器，指定存储路径和最大记录数
+func NewWithCustomStorage(customStorage Storage) (*Debugger, error)      // 创建使用自定义存储器的调试器
+func NewProductionDebugger(storagePath string) (*Debugger, error)        // 创建生产环境调试器，使用文件存储（1000条记录）
 
 // 存储器构造函数
-func NewMemoryStorage(maxRecords int) (Storage, error)
-func NewFileStorage(path string, maxRecords int) (Storage, error)
-func NewDatabaseStorage(db *gorm.DB, tableName string) (Storage, error)
+func NewMemoryStorage(maxRecords int) (Storage, error)                  // 创建内存存储器
+func NewFileStorage(path string, maxRecords int) (Storage, error)       // 创建文件存储器
+func NewDatabaseStorage(db *gorm.DB, tableName string) (Storage, error) // 创建数据库存储器
 ```
 
 ## 版本历史
