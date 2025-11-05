@@ -6,9 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/jcbowen/jcbaseGo"
-	"github.com/jcbowen/jcbaseGo/component/helper"
 	"image"
 	_ "image/gif"  // 导入 GIF 支持
 	_ "image/jpeg" // 导入 JPEG 支持
@@ -22,6 +19,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 // Attachment 附件结构体，包含文件头信息、扩展名、保存目录和错误列表
