@@ -358,6 +358,63 @@ func main() {
 }
 ```
 
+### HTTP处理功能
+
+提供HTTP请求和响应处理的实用功能：
+
+- **头信息提取**: 从HTTP请求中提取和解析头信息
+- **主机信息获取**: 获取请求的主机名、端口和协议信息
+- **URL编码**: 对URL参数进行编码和解码
+- **头信息格式化**: 将头信息格式化为标准格式
+
+#### 核心函数说明
+
+**ExtractHeaders(headers map[string][]string) map[string]string**
+- 从HTTP头信息中提取单个值，处理多值情况
+- 返回简化的键值对映射
+
+**GetHostInfo(host string) (string, string, string)**
+- 解析主机字符串，返回主机名、端口和协议
+- 支持带端口和协议的主机格式
+
+**FormatHeaders(headers map[string]string) string**
+- 将头信息格式化为标准HTTP头格式
+- 每个头信息单独一行，格式为"Key: Value"
+
+**URLEncodeParams(params map[string]string) string**
+- 对URL参数进行编码，生成查询字符串
+- 自动处理特殊字符编码
+
+**URLDecodeParams(query string) (map[string]string, error)**
+- 解码URL查询字符串，返回参数映射
+- 处理URL编码的特殊字符
+
+### IP地址处理功能
+
+提供IP地址验证和处理的实用功能：
+
+- **IP地址验证**: 验证IP地址格式的有效性
+- **地址类型判断**: 判断IP地址是否为回环地址、私有地址等
+- **CIDR范围检查**: 检查IP地址是否在指定CIDR范围内
+
+#### 核心函数说明
+
+**IsValid(ip string) bool**
+- 验证IP地址格式是否有效
+- 支持IPv4和IPv6地址格式
+
+**IsLoopback(ip string) bool**
+- 判断IP地址是否为回环地址
+- IPv4: 127.0.0.0/8, IPv6: ::1
+
+**IsPrivate(ip string) bool**
+- 判断IP地址是否为私有地址
+- 包括局域网、私有网络等地址范围
+
+**IsInCIDR(ip, cidr string) bool**
+- 检查IP地址是否在指定CIDR范围内
+- 支持IPv4和IPv6的CIDR表示法
+
 ### 工具函数示例
 
 ```go
@@ -421,6 +478,65 @@ func main() {
 - **格式转换**: ToUpper(), ToLower(), ConvertCamelToSnake()
 - **安全处理**: EscapeHTML(), TrimSpace()
 
+#### 核心函数说明
+
+**NewStr(s string) *Str**
+- 创建新的字符串对象
+- 初始化字符串内容和状态
+
+**ByteLength() int**
+- 获取字符串的字节长度
+- 与字符长度不同，考虑多字节字符
+
+**ByteSubstr(start, length int) string**
+- 按字节位置截取子字符串
+- 支持负数的起始位置和长度
+
+**Truncate(maxLength int, suffix string) string**
+- 截断字符串到指定长度
+- 可选添加后缀表示截断
+
+**TruncateWords(maxWords int, suffix string) string**
+- 按单词数量截断字符串
+- 保留完整的单词边界
+
+**StartsWith(prefix string, caseSensitive bool) bool**
+- 检查字符串是否以指定前缀开头
+- `caseSensitive`: 是否区分大小写
+
+**EndsWith(suffix string, caseSensitive bool) bool**
+- 检查字符串是否以指定后缀结尾
+- `caseSensitive`: 是否区分大小写
+
+**Explode(delimiter string, trimSpace, removeEmpty bool) []string**
+- 按分隔符分割字符串
+- `trimSpace`: 是否去除空白字符
+- `removeEmpty`: 是否移除空元素
+
+**CountWords() int**
+- 统计字符串中的单词数量
+- 基于空白字符分割单词
+
+**Base64UrlEncode() string**
+- 对字符串进行Base64 URL安全编码
+- 替换特殊字符，适合URL传输
+
+**Base64UrlDecode() (string, error)**
+- 对Base64 URL编码的字符串进行解码
+- 处理URL安全的Base64编码
+
+**EscapeHTML() string**
+- 对HTML特殊字符进行转义
+- 防止XSS攻击
+
+**TrimSpace() string**
+- 去除字符串两端的空白字符
+- 包括空格、制表符、换行符等
+
+**ConvertCamelToSnake() string**
+- 将驼峰命名转换为下划线命名
+- 处理大小写转换和分隔符添加
+
 ### JsonHelper JSON处理模块
 
 强大的 JSON 序列化和反序列化功能：
@@ -430,6 +546,32 @@ func main() {
 - **文件操作**: 支持 JSON 文件的读取和生成
 - **错误处理**: 完善的错误处理机制
 
+#### 核心函数说明
+
+**Json(data interface{}) *JsonHelper**
+- 创建JSON处理对象，支持多种数据源
+- `data`: 可以是字符串、结构体、Map等
+
+**JsonFile(filename string) *JsonHelper**
+- 从JSON文件创建处理对象
+- 自动读取文件内容并解析
+
+**ToStruct(target interface{}) error**
+- 将JSON数据解析到目标结构体
+- 支持结构体标签映射
+
+**ToString(target *string) error**
+- 将JSON数据转换为字符串
+- 支持格式化输出
+
+**MakeFile(filename string) *JsonHelper**
+- 设置输出文件名，用于生成JSON文件
+- 配合ToString方法使用
+
+**GetError() error**
+- 获取处理过程中的错误信息
+- 返回最后一次操作的错误
+
 ### File 文件操作模块
 
 文件路径和状态操作：
@@ -438,6 +580,56 @@ func main() {
 - **权限检查**: IsReadable(), IsWritable(), IsExecutable()
 - **路径操作**: GetAbsPath(), Basename(), DirName()
 - **目录管理**: DirExists()
+
+#### 核心函数说明
+
+**NewFile(file *File) *File**
+- 创建新的文件对象实例
+- 初始化文件路径和状态信息
+
+**Exists() bool**
+- 检查文件或目录是否存在
+- 返回布尔值表示存在状态
+
+**IsDir() bool**
+- 判断路径是否为目录
+- 如果路径不存在或不是目录返回false
+
+**IsFile() bool**
+- 判断路径是否为普通文件
+- 排除目录、符号链接等特殊文件类型
+
+**IsEmpty() bool**
+- 检查文件是否为空
+- 对于目录，检查是否包含文件或子目录
+
+**IsReadable() bool**
+- 检查文件是否可读
+- 验证当前用户对文件的读取权限
+
+**IsWritable() bool**
+- 检查文件是否可写
+- 验证当前用户对文件的写入权限
+
+**IsExecutable() bool**
+- 检查文件是否可执行
+- 验证当前用户对文件的执行权限
+
+**GetAbsPath() (string, error)**
+- 获取文件的绝对路径
+- 解析相对路径和符号链接
+
+**Basename(suffix string) string**
+- 获取文件的基本名称
+- 可选去除指定后缀
+
+**DirName() string**
+- 获取文件所在目录的路径
+- 返回父目录的路径字符串
+
+**DirExists(createIfNotExist bool) (bool, error)**
+- 检查目录是否存在，可选自动创建
+- `createIfNotExist`: 如果目录不存在是否自动创建
 
 ### MoneyHelper 货币计算模块
 
@@ -472,6 +664,42 @@ SSH 密钥的生成和获取：
 - **ExtractString()**: 从多级map中提取字符串字段值
 - **Extract()**: 从多级map中提取任意类型的字段值
 - **ExtractWithDefault()**: 从多级map中提取字段值，支持默认值
+
+#### 核心函数说明
+
+**NewMap(data map[string]interface{}) *MapHelper**
+- 创建MapHelper对象
+- 初始化Map数据
+
+**DoSort() *MapHelper**
+- 对Map数据进行排序
+- 返回排序后的MapHelper对象
+
+**GetData() map[string]interface{}**
+- 获取原始的Map数据
+- 返回当前存储的数据
+
+**ArrayKeys() []string**
+- 获取Map的所有键
+- 返回键的字符串切片
+
+**ArrayValues() []interface{}**
+- 获取Map的所有值
+- 返回值的接口切片
+
+**ExtractString(path string) string**
+- 从多级Map中提取字符串值
+- 支持点号分隔的路径访问
+- 如果路径不存在返回空字符串
+
+**Extract(path string) interface{}**
+- 从多级Map中提取任意类型的值
+- 支持点号分隔的路径访问
+- 返回原始值或nil
+
+**ExtractWithDefault(path string, defaultValue interface{}) interface{}**
+- 从多级Map中提取值，支持默认值
+- 如果路径不存在返回指定的默认值
 
 #### 使用示例
 
@@ -534,6 +762,225 @@ func main() {
 - **类型安全**: 自动处理类型转换和边界情况
 - **默认值**: 支持自定义默认值处理
 - **链式调用**: 与现有 MapHelper 方法兼容
+
+### 单位转换功能
+
+提供强大的单位转换功能，支持存储单位、时间单位和数据单位之间的转换：
+
+- **存储单位转换**: 字节(Byte)、千字节(KB)、兆字节(MB)、吉字节(GB)、太字节(TB)、拍字节(PB)
+- **时间单位转换**: 纳秒(ns)、微秒(μs)、毫秒(ms)、秒(s)、分钟(min)、小时(h)、天(d)
+- **数据单位转换**: 比特(b)、字节(byte)、千比特(Kb)、千字节(Kbyte)、兆比特(Mb)、兆字节(Mbyte)、吉比特(Gb)、吉字节(Gbyte)
+- **智能解析**: 支持多种单位符号格式，自动识别单位类型
+- **精确计算**: 基于单位换算因子进行精确转换
+
+#### 核心函数说明
+
+**ParseUnitString(value string, unitType int) (float64, Unit, error)**
+- 解析包含数值和单位的字符串，返回数值和单位信息
+- `unitType`: 指定解析的单位类型（UnitTypeStorage/UnitTypeTime/UnitTypeData）
+
+**ConvertUnit(value float64, fromUnit, toUnit string, unitType int) (float64, error)**
+- 在不同单位之间进行数值转换
+- 支持存储、时间、数据三种单位类型的转换
+
+**FormatUnit(value interface{}, unitType UnitType, precision int, toUnit ...string) (string, error)**
+- 将数值格式化为人类可读的单位字符串
+- `value`: 支持数值或带单位的字符串
+- `unitType`: 指定单位类型（UnitTypeStorage/UnitTypeTime/UnitTypeData）
+- `precision`: 指定小数位数精度
+- `toUnit`: 输出格式（"auto"自动选择单位或具体单位符号）
+
+
+
+**GetAvailableUnits(unitType int) []string**
+- 获取指定单位类型下所有可用的单位符号列表
+
+**IsValidUnit(unit string, unitType int) bool**
+- 检查指定单位符号在给定单位类型下是否有效
+
+#### 使用示例
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func main() {
+	// 存储单位转换示例
+	fmt.Println("=== 存储单位转换 ===")
+	result, err := helper.ConvertUnit(1024, "B", "KB", helper.UnitTypeStorage)
+	if err != nil {
+		fmt.Printf("转换错误: %v\n", err)
+	} else {
+		fmt.Printf("1024 B = %.2f KB\n", result) // 输出: 1024 B = 1.00 KB
+	}
+
+	// 时间单位转换示例
+	fmt.Println("\n=== 时间单位转换 ===")
+	result, err = helper.ConvertUnit(3600, "s", "h", helper.UnitTypeTime)
+	if err != nil {
+		fmt.Printf("转换错误: %v\n", err)
+	} else {
+		fmt.Printf("3600 s = %.2f h\n", result) // 输出: 3600 s = 1.00 h
+	}
+
+	// 数据单位转换示例
+	fmt.Println("\n=== 数据单位转换 ===")
+	result, err = helper.ConvertUnit(8, "b", "byte", helper.UnitTypeData)
+	if err != nil {
+		fmt.Printf("转换错误: %v\n", err)
+	} else {
+		fmt.Printf("8 b = %.2f byte\n", result) // 输出: 8 b = 1.00 byte
+	}
+
+	// 单位字符串解析示例
+	fmt.Println("\n=== 单位字符串解析 ===")
+	value, unit, err := helper.ParseUnitString("1MB", helper.UnitTypeStorage)
+	if err != nil {
+		fmt.Printf("解析错误: %v\n", err)
+	} else {
+		fmt.Printf("解析结果: 值=%.0f, 单位=%s (类型: %d)\n", value, unit.Name, unit.Type)
+	}
+
+	// 格式化单位值示例
+	fmt.Println("\n=== 格式化单位值 ===")
+	formatted := helper.FormatUnit(1500000, helper.UnitTypeStorage, 2)
+	fmt.Printf("格式化结果: %s\n", formatted) // 输出: 1.43 MB
+
+	// 获取可用单位列表
+	fmt.Println("\n=== 可用单位列表 ===")
+	storageUnits := helper.GetAvailableUnits(helper.UnitTypeStorage)
+	timeUnits := helper.GetAvailableUnits(helper.UnitTypeTime)
+	dataUnits := helper.GetAvailableUnits(helper.UnitTypeData)
+	
+	fmt.Printf("存储单位: %v\n", storageUnits)
+	fmt.Printf("时间单位: %v\n", timeUnits)
+	fmt.Printf("数据单位: %v\n", dataUnits)
+
+	// 人类可读格式示例
+	fmt.Println("\n=== 人类可读格式 ===")
+	
+	
+
+}
+```
+
+#### 功能特点
+
+- **多类型支持**: 支持存储、时间、数据三种单位类型
+- **符号兼容**: 支持多种单位符号格式（如B、byte、bytes等）
+- **精确转换**: 基于精确的换算因子进行计算
+- **错误处理**: 完善的错误处理机制
+- **格式化输出**: 支持自定义精度和格式化
+- **智能解析**: 自动识别和解析单位字符串
+- **单位类型参数**: 支持指定解析的单位类型，解决符号冲突问题
+
+#### 单位类型参数使用示例
+
+当单位符号存在冲突时（如"byte"同时存在于存储单位和数据单位），可以使用单位类型参数明确指定解析类型：
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func main() {
+	// 默认情况下，"byte"被解析为存储单位
+	fmt.Println("=== 默认解析 ===")
+	_, unitInfo, err := helper.ParseUnitString("8byte", helper.UnitTypeStorage)
+	if err != nil {
+		fmt.Printf("解析错误: %v\n", err)
+	} else {
+		fmt.Printf("默认解析: 8byte -> 类型: %v\n", unitInfo.UnitType)
+	}
+
+	// 使用单位类型参数指定解析为数据单位
+	fmt.Println("\n=== 指定单位类型 ===")
+	_, unitInfo, err = helper.ParseUnitString("8byte", helper.UnitTypeData)
+	if err != nil {
+		fmt.Printf("解析错误: %v\n", err)
+	} else {
+		fmt.Printf("指定类型解析: 8byte -> 类型: %v\n", unitInfo.UnitType)
+	}
+
+	// 单位转换时使用单位类型参数
+	fmt.Println("\n=== 单位转换类型参数 ===")
+	
+	// 默认情况下，b和byte类型不同，转换会失败
+	result, err := helper.ConvertUnit(8, "b", "byte", helper.UnitTypeStorage)
+	if err != nil {
+		fmt.Printf("默认转换失败: %v\n", err)
+	} else {
+		fmt.Printf("默认转换成功: 8b = %.2f byte\n", result)
+	}
+
+	// 指定单位类型为数据单位，转换成功
+	result, err = helper.ConvertUnit(8, "b", "byte", helper.UnitTypeData)
+	if err != nil {
+		fmt.Printf("指定类型转换失败: %v\n", err)
+	} else {
+		fmt.Printf("指定类型转换成功: 8b = %.2f byte\n", result)
+	}
+
+	// 其他函数也支持单位类型参数
+	fmt.Println("\n=== 其他函数类型参数 ===")
+	
+	// 单位有效性检查
+	isValid := helper.IsValidUnit("byte", helper.UnitTypeData)
+	fmt.Printf("byte作为数据单位是否有效: %t\n", isValid)
+
+	// 获取单位类型
+	unitType, err := helper.GetUnitType("byte", helper.UnitTypeData)
+	if err != nil {
+		fmt.Printf("获取类型错误: %v\n", err)
+	} else {
+		fmt.Printf("byte作为数据单位的类型: %v\n", unitType)
+	}
+}
+```
+
+#### 单位类型参数说明
+
+- **UnitTypeStorage**: 存储单位类型（默认）
+- **UnitTypeTime**: 时间单位类型  
+- **UnitTypeData**: 数据单位类型
+
+当单位符号存在歧义时，系统会匹配指定类型的单位。如果没有指定单位类型，则按照存储单位→时间单位→数据单位的顺序进行匹配。
+
+#### 支持的单位符号
+
+**存储单位**:
+- Byte: `B`, `bytes`
+- Kilobyte: `KB`, `K`, `kilobyte`, `kilobytes`
+- Megabyte: `MB`, `M`, `megabyte`, `megabytes`
+- Gigabyte: `GB`, `G`, `gigabyte`, `gigabytes`
+- Terabyte: `TB`, `T`, `terabyte`, `terabytes`
+- Petabyte: `PB`, `P`, `petabyte`, `petabytes`
+
+**时间单位**:
+- Nanosecond: `ns`, `nanosecond`, `nanoseconds`
+- Microsecond: `μs`, `us`, `microsecond`, `microseconds`
+- Millisecond: `ms`, `millisecond`, `milliseconds`
+- Second: `s`, `sec`, `second`, `seconds`
+- Minute: `m`, `min`, `minute`, `minutes`
+- Hour: `h`, `hr`, `hour`, `hours`
+- Day: `d`, `day`, `days`
+
+**数据单位**:
+- Bit: `b`, `bit`, `bits`
+- Byte: `byte`, `bytes`
+- Kilobit: `Kb`, `Kbit`, `kilobit`, `kilobits`
+- Kilobyte: `Kbyte`, `kilobyte`, `kilobytes`
+- Megabit: `Mb`, `Mbit`, `megabit`, `megabits`
+- Megabyte: `Mbyte`, `megabyte`, `megabytes`
+- Gigabit: `Gb`, `Gbit`, `gigabit`, `gigabits`
+- Gigabyte: `Gbyte`, `gigabyte`, `gigabytes`
 
 ## 高级用法
 
@@ -743,6 +1190,38 @@ func (m *MapHelper) GetData() map[string]interface{}
 func (m *MapHelper) ExtractString(path string) string
 func (m *MapHelper) Extract(path string) interface{}
 func (m *MapHelper) ExtractWithDefault(path string, defaultValue interface{}) interface{}
+### 单位转换函数
+
+```go
+// 单位类型定义
+type UnitType int
+const (
+    UnitTypeStorage UnitType = iota
+    UnitTypeTime
+    UnitTypeData
+)
+
+// 单位结构
+type Unit struct {
+    Name     string
+    Symbols  []string
+    Factor   float64
+    UnitType UnitType
+}
+
+// 单位转换函数
+func ParseUnitString(str string, unitType UnitType) (float64, *Unit, error)
+func FormatUnit(value float64, unitType UnitType, precision int) string
+func ConvertUnit(value float64, fromUnit, toUnit string, unitType UnitType) (float64, error)
+func IsValidUnit(unitStr string, unitType UnitType) bool
+func GetUnitType(unitStr string, unitType UnitType) (UnitType, error)
+func GetAvailableUnits(unitType UnitType) []string
+
+func RoundUnitValue(value float64, unit string, precision int, unitType UnitType) (float64, error)
+
+// Str类型的单位相关方法
+func (s *Str) ParseUnit(unitType UnitType) (float64, *Unit, error)
+func (s *Str) ToUnitValue(unitType UnitType) (float64, error)
 ```
 
 ### 工具函数
@@ -754,6 +1233,7 @@ func SetArrStr(str []string) *ArrStr
 func NewMap(mapData map[string]interface{}) *MapHelper
 func StrReplace(search interface{}, replace interface{}, subject interface{}, count int) (interface{}, error)
 func StringStartWith(str, prefix string) bool
+```
 func StringEndWith(str, suffix string) bool
 func InArray(needle interface{}, haystack []string) bool
 func MatchWildcard(pattern, s string, caseSensitive bool) bool
@@ -763,6 +1243,647 @@ func MatchWildcard(pattern, s string, caseSensitive bool) bool
 
 - v1.0.0：初始版本，包含完整的工具函数集合
 - 支持数据类型转换、字符串处理、JSON处理、文件操作、货币计算等功能
+
+## 性能优化建议
+
+### 字符串处理优化
+
+1. **避免不必要的字符串转换**
+   ```go
+   // 不推荐：频繁创建字符串对象
+   for i := 0; i < 1000; i++ {
+       str := helper.NewStr("test" + strconv.Itoa(i))
+       // 处理字符串
+   }
+   
+   // 推荐：复用字符串对象
+   str := helper.NewStr("")
+   for i := 0; i < 1000; i++ {
+       str.String = "test" + strconv.Itoa(i)
+       // 处理字符串
+   }
+   ```
+
+2. **使用字节操作替代字符串操作**
+   ```go
+   // 对于大量数据处理，优先使用字节操作
+   str := helper.NewStr(largeText)
+   byteLen := str.ByteLength()  // 比 len(str.String) 更高效
+   ```
+
+### JSON处理优化
+
+1. **批量处理JSON数据**
+   ```go
+   // 不推荐：逐个处理JSON对象
+   for _, item := range items {
+       jsonHelper := helper.Json(item)
+       // 处理单个JSON
+   }
+   
+   // 推荐：批量处理JSON数组
+   jsonHelper := helper.Json(items)
+   // 批量处理所有JSON对象
+   ```
+
+2. **使用结构体标签优化序列化**
+   ```go
+   type User struct {
+       Name string `json:"name,omitempty"`  // 空值不序列化
+       Age  int    `json:"age"`
+   }
+   ```
+
+### 文件操作优化
+
+1. **减少文件系统调用**
+   ```go
+   // 不推荐：多次检查文件状态
+   if file.Exists() {
+       if file.IsReadable() {
+           // 读取文件
+       }
+   }
+   
+   // 推荐：缓存文件状态信息
+   file := helper.NewFile(&helper.File{Path: "test.txt"})
+   if exists := file.Exists(); exists {
+       // 一次性获取所有状态信息
+       isReadable := file.IsReadable()
+       isWritable := file.IsWritable()
+   }
+   ```
+
+2. **使用绝对路径避免路径解析开销**
+   ```go
+   // 推荐：使用绝对路径
+   absPath, _ := filepath.Abs("relative/path.txt")
+   file := helper.NewFile(&helper.File{Path: absPath})
+   ```
+
+### 内存使用优化
+
+1. **及时释放大对象**
+   ```go
+   // 处理大文件后及时释放
+   func processLargeFile() {
+       file := helper.NewFile(&helper.File{Path: "large.txt"})
+       // 处理文件
+       // 处理完成后，让GC回收内存
+       file = nil
+   }
+   ```
+
+2. **避免内存泄漏**
+   ```go
+   // 在循环中避免创建不必要的对象引用
+   var results []string
+   for i := 0; i < 10000; i++ {
+       str := helper.NewStr(fmt.Sprintf("item%d", i))
+       // 只保留需要的数据，而不是整个对象
+       results = append(results, str.String)
+   }
+   ```
+
+## 使用最佳实践
+
+### 错误处理最佳实践
+
+1. **始终检查错误返回值**
+   ```go
+   // 不推荐：忽略错误
+   jsonHelper.ToStruct(&data)
+   
+   // 推荐：正确处理错误
+   if err := jsonHelper.ToStruct(&data); err != nil {
+       log.Printf("JSON解析失败: %v", err)
+       return
+   }
+   ```
+
+2. **使用错误包装提供上下文信息**
+   ```go
+   func processUserData(jsonStr string) error {
+       jsonHelper := helper.Json(jsonStr)
+       var user User
+       if err := jsonHelper.ToStruct(&user); err != nil {
+           return fmt.Errorf("处理用户数据失败: %w", err)
+       }
+       return nil
+   }
+   ```
+
+### 并发安全最佳实践
+
+1. **避免共享可变状态**
+   ```go
+   // 不推荐：在goroutine中共享可变对象
+   var sharedStr = helper.NewStr("shared")
+   
+   go func() {
+       sharedStr.String = "modified"  // 竞态条件
+   }()
+   
+   // 推荐：每个goroutine使用独立对象
+   go func(str *helper.Str) {
+       str.String = "modified"  // 安全
+   }(helper.NewStr("local"))
+   ```
+
+2. **使用同步机制保护共享资源**
+   ```go
+   type SafeStringProcessor struct {
+       mu sync.RWMutex
+       str *helper.Str
+   }
+   
+   func (s *SafeStringProcessor) Process() {
+       s.mu.Lock()
+       defer s.mu.Unlock()
+       // 安全地处理字符串
+   }
+   ```
+
+### 代码组织最佳实践
+
+1. **模块化使用helper组件**
+   ```go
+   // 推荐：按功能模块组织代码
+   type UserService struct {
+       jsonHelper *helper.JsonHelper
+       strHelper  *helper.Str
+   }
+   
+   func (s *UserService) ProcessUser(jsonStr string) error {
+       // 使用helper组件处理业务逻辑
+       return nil
+   }
+   ```
+
+2. **合理使用接口抽象**
+   ```go
+   // 定义接口，便于测试和替换
+   type StringProcessor interface {
+       Process(input string) string
+   }
+   
+   type HelperStringProcessor struct {
+       str *helper.Str
+   }
+   
+   func (p *HelperStringProcessor) Process(input string) string {
+       p.str.String = input
+       return p.str.ToUpper()
+   }
+   ```
+
+### 测试最佳实践
+
+1. **编写单元测试覆盖helper功能**
+   ```go
+   func TestStr_ToUpper(t *testing.T) {
+       str := helper.NewStr("hello")
+       result := str.ToUpper()
+       if result != "HELLO" {
+           t.Errorf("期望 HELLO, 得到 %s", result)
+       }
+   }
+   ```
+
+2. **使用表格驱动测试**
+   ```go
+   func TestConvert_ToInt(t *testing.T) {
+       tests := []struct {
+           name     string
+           input    interface{}
+           expected int
+       }{
+           {"整数", 123, 123},
+           {"字符串", "456", 456},
+           {"浮点数", 78.9, 78},
+       }
+       
+       for _, tt := range tests {
+           t.Run(tt.name, func(t *testing.T) {
+               convert := helper.Convert{Value: tt.input}
+               result := convert.ToInt()
+               if result != tt.expected {
+                   t.Errorf("期望 %d, 得到 %d", tt.expected, result)
+               }
+           })
+       }
+   }
+   ```
+
+通过遵循这些性能优化建议和使用最佳实践，您可以确保helper组件在各种场景下都能提供最佳的性能和可靠性。
+
+## 错误处理和异常情况说明
+
+Helper 组件提供了完善的错误处理机制，帮助开发者优雅地处理各种异常情况。
+
+### 错误处理原则
+
+1. **显式错误返回**: 所有可能失败的操作都返回错误信息
+2. **错误信息清晰**: 错误信息包含足够的上下文信息
+3. **错误类型区分**: 区分不同类型的错误以便针对性处理
+4. **错误传播**: 支持错误链式传播，便于调试
+
+### 常见错误类型
+
+#### 1. 输入验证错误
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func main() {
+    // 无效的JSON字符串
+    jsonStr := `{"name": "张三", "age": "invalid"}`
+    jsonHelper := helper.Json(jsonStr)
+    var data map[string]interface{}
+    
+    if err := jsonHelper.ToStruct(&data); err != nil {
+        fmt.Printf("JSON解析错误: %v\n", err)
+        // 输出: JSON解析错误: json: cannot unmarshal string into Go struct field .age of type int
+    }
+    
+    // 无效的货币格式
+    money := helper.Money("invalid")
+    if err := money.GetError(); err != nil {
+        fmt.Printf("货币格式错误: %v\n", err)
+        // 输出: 货币格式错误: strconv.ParseFloat: parsing "invalid": invalid syntax
+    }
+}
+```
+
+#### 2. 文件操作错误
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func main() {
+    // 文件不存在
+    file := helper.NewFile("/path/to/nonexistent/file.txt")
+    if !file.Exists() {
+        fmt.Println("文件不存在")
+    }
+    
+    // 权限不足
+    file = helper.NewFile("/root/protected/file.txt")
+    if !file.IsReadable() {
+        fmt.Println("文件不可读，权限不足")
+    }
+    
+    // 获取绝对路径错误
+    absPath, err := file.GetAbsPath()
+    if err != nil {
+        fmt.Printf("获取绝对路径失败: %v\n", err)
+    }
+}
+```
+
+#### 3. 单位转换错误
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func main() {
+    // 无效的单位符号
+    result, err := helper.ConvertUnit(100, "invalid", "KB", helper.UnitTypeStorage)
+    if err != nil {
+        fmt.Printf("单位转换错误: %v\n", err)
+        // 输出: 单位转换错误: 无效的单位符号: invalid
+    }
+    
+    // 不兼容的单位类型
+    result, err = helper.ConvertUnit(100, "B", "s", helper.UnitTypeStorage)
+    if err != nil {
+        fmt.Printf("单位类型不兼容: %v\n", err)
+        // 输出: 单位类型不兼容: 单位类型不匹配
+    }
+    
+    // 单位字符串解析错误
+    _, _, err = helper.ParseUnitString("invalid", helper.UnitTypeStorage)
+    if err != nil {
+        fmt.Printf("单位字符串解析错误: %v\n", err)
+        // 输出: 单位字符串解析错误: 无法解析单位字符串
+    }
+}
+```
+
+#### 4. 字符串处理错误
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func main() {
+    // Base64解码错误
+    str := helper.NewStr("invalid base64")
+    decoded, err := str.Base64UrlDecode()
+    if err != nil {
+        fmt.Printf("Base64解码错误: %v\n", err)
+        // 输出: Base64解码错误: illegal base64 data at input byte 7
+    }
+    
+    // 字符串截取越界
+    str = helper.NewStr("hello")
+    substr := str.ByteSubstr(0, 10) // 越界访问
+    fmt.Printf("截取结果: %s\n", substr) // 输出: hello (自动处理越界)
+}
+```
+
+### 错误处理最佳实践
+
+#### 1. 防御性编程
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func SafeProcessData(input string) error {
+    // 输入验证
+    if input == "" {
+        return fmt.Errorf("输入不能为空")
+    }
+    
+    // 使用helper组件处理
+    str := helper.NewStr(input)
+    if str.ByteLength() > 1000 {
+        return fmt.Errorf("输入长度超过限制")
+    }
+    
+    // 处理逻辑
+    processed := str.ToUpper()
+    fmt.Printf("处理结果: %s\n", processed)
+    
+    return nil
+}
+
+func main() {
+    inputs := []string{"", "hello", "very long string..."}
+    
+    for _, input := range inputs {
+        if err := SafeProcessData(input); err != nil {
+            fmt.Printf("处理失败: %v\n", err)
+        } else {
+            fmt.Println("处理成功")
+        }
+    }
+}
+```
+
+#### 2. 错误链式传播
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func ProcessUserData(jsonStr string) error {
+    // 解析JSON
+    jsonHelper := helper.Json(jsonStr)
+    var userData map[string]interface{}
+    if err := jsonHelper.ToStruct(&userData); err != nil {
+        return fmt.Errorf("解析用户数据失败: %w", err)
+    }
+    
+    // 提取用户名
+    mapHelper := helper.NewMap(userData)
+    name := mapHelper.ExtractString("name")
+    if name == "" {
+        return fmt.Errorf("用户名不能为空")
+    }
+    
+    // 处理用户名
+    str := helper.NewStr(name)
+    if str.ByteLength() < 2 {
+        return fmt.Errorf("用户名长度太短")
+    }
+    
+    fmt.Printf("处理用户: %s\n", str.ToUpper())
+    return nil
+}
+
+func main() {
+    jsonStr := `{"name": "张"}` // 用户名太短
+    
+    if err := ProcessUserData(jsonStr); err != nil {
+        fmt.Printf("用户数据处理失败: %v\n", err)
+        // 输出: 用户数据处理失败: 用户名长度太短
+    }
+}
+```
+
+#### 3. 错误恢复机制
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func SafeUnitConversion(value float64, fromUnit, toUnit string) (result float64, err error) {
+    defer func() {
+        if r := recover(); r != nil {
+            err = fmt.Errorf("单位转换发生panic: %v", r)
+        }
+    }()
+    
+    // 尝试单位转换
+    result, err = helper.ConvertUnit(value, fromUnit, toUnit, helper.UnitTypeStorage)
+    if err != nil {
+        return 0, fmt.Errorf("单位转换失败: %w", err)
+    }
+    
+    return result, nil
+}
+
+func main() {
+    // 正常情况
+    result, err := SafeUnitConversion(1024, "B", "KB")
+    if err != nil {
+        fmt.Printf("转换失败: %v\n", err)
+    } else {
+        fmt.Printf("转换结果: %.2f KB\n", result)
+    }
+    
+    // 异常情况
+    result, err = SafeUnitConversion(1024, "invalid", "KB")
+    if err != nil {
+        fmt.Printf("转换失败: %v\n", err)
+        // 输出: 转换失败: 单位转换失败: 无效的单位符号: invalid
+    }
+}
+```
+
+### 异常情况处理
+
+#### 1. 边界条件处理
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+func HandleEdgeCases() {
+    // 空字符串处理
+    emptyStr := helper.NewStr("")
+    fmt.Printf("空字符串长度: %d\n", emptyStr.ByteLength()) // 输出: 0
+    
+    // 超大数字处理
+    bigMoney := helper.Money("999999999999999.99")
+    if err := bigMoney.GetError(); err != nil {
+        fmt.Printf("超大金额错误: %v\n", err)
+    }
+    
+    // 特殊字符处理
+    specialStr := helper.NewStr("hello\x00world") // 包含空字符
+    fmt.Printf("特殊字符处理: %s\n", specialStr.String)
+}
+
+func main() {
+    HandleEdgeCases()
+}
+```
+
+#### 2. 并发安全处理
+
+```go
+package main
+
+import (
+    "fmt"
+    "sync"
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+type SafeProcessor struct {
+    mu sync.RWMutex
+    data map[string]interface{}
+}
+
+func (p *SafeProcessor) SafeExtract(path string) (interface{}, error) {
+    p.mu.RLock()
+    defer p.mu.RUnlock()
+    
+    if p.data == nil {
+        return nil, fmt.Errorf("数据为空")
+    }
+    
+    mapHelper := helper.NewMap(p.data)
+    result := mapHelper.Extract(path)
+    if result == nil {
+        return nil, fmt.Errorf("路径不存在: %s", path)
+    }
+    
+    return result, nil
+}
+
+func main() {
+    processor := &SafeProcessor{
+        data: map[string]interface{}{
+            "user": map[string]interface{}{
+                "name": "张三",
+                "age": 25,
+            },
+        },
+    }
+    
+    // 并发安全访问
+    var wg sync.WaitGroup
+    for i := 0; i < 5; i++ {
+        wg.Add(1)
+        go func(id int) {
+            defer wg.Done()
+            
+            result, err := processor.SafeExtract("user.name")
+            if err != nil {
+                fmt.Printf("协程%d错误: %v\n", id, err)
+            } else {
+                fmt.Printf("协程%d结果: %v\n", id, result)
+            }
+        }(i)
+    }
+    wg.Wait()
+}
+```
+
+### 错误信息国际化
+
+Helper 组件支持错误信息的国际化处理：
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo/component/helper"
+)
+
+// 错误信息映射表
+var errorMessages = map[string]map[string]string{
+    "en": {
+        "invalid_json": "Invalid JSON format",
+        "file_not_found": "File not found",
+        "unit_conversion_error": "Unit conversion error",
+    },
+    "zh": {
+        "invalid_json": "JSON格式无效",
+        "file_not_found": "文件不存在",
+        "unit_conversion_error": "单位转换错误",
+    },
+}
+
+func GetErrorMessage(key, lang string) string {
+    if messages, ok := errorMessages[lang]; ok {
+        if msg, ok := messages[key]; ok {
+            return msg
+        }
+    }
+    return key // 默认返回key
+}
+
+func main() {
+    // 中文错误信息
+    fmt.Printf("中文错误: %s\n", GetErrorMessage("file_not_found", "zh"))
+    
+    // 英文错误信息
+    fmt.Printf("英文错误: %s\n", GetErrorMessage("unit_conversion_error", "en"))
+}
+```
+
+通过遵循这些错误处理和异常情况说明，您可以确保在使用 Helper 组件时能够优雅地处理各种异常情况，提高代码的健壮性和可靠性。
 
 ## 贡献指南
 

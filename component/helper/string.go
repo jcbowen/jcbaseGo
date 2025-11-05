@@ -216,3 +216,115 @@ func (s *Str) FloatToString() *Str {
 	s.String = strconv.FormatFloat(s.Float64, 'f', -1, 64)
 	return s
 }
+
+// ParseUnit 解析字符串中的单位信息
+// ParseUnit parses unit information from string
+//
+// 参数:
+//   - unitType: 单位类型
+//
+// 返回值:
+//   - float64: 解析出的数值（以基础单位表示）
+//   - *Unit: 单位信息
+//   - error: 解析过程中的错误
+//
+// 示例:
+//   - s := NewStr("10MB"); s.ParseUnit(UnitTypeStorage) -> 10485760, &Unit{...}, nil
+//   - s := NewStr("1h"); s.ParseUnit(UnitTypeTime) -> 3600000000000, &Unit{...}, nil
+//   - s := NewStr("8b"); s.ParseUnit(UnitTypeData) -> 1, &Unit{...}, nil
+func (s *Str) ParseUnit(unitType UnitType) (float64, *Unit, error) {
+	value, unitInfo, err := ParseUnitString(s.String, unitType)
+	return value, unitInfo, err
+}
+
+// ToUnitValue 将字符串转换为基础单位的数值
+//
+// 参数:
+//   - unitType: 单位类型
+//
+// 返回值:
+//   - float64: 转换后的数值（以基础单位表示）
+//   - error: 转换过程中的错误
+//
+// 示例:
+//   - s := NewStr("10MB"); s.ToUnitValue(UnitTypeStorage) -> 10485760, nil
+func (s *Str) ToUnitValue(unitType UnitType) (float64, error) {
+	value, _, err := ParseUnitString(s.String, unitType)
+	return value, err
+}
+
+// IsUnitString 检查字符串是否为有效的单位字符串
+//
+// 参数:
+//   - unitType: 单位类型
+//
+// 返回值:
+//   - bool: 是否为有效的单位字符串
+//
+// 示例:
+//   - s := NewStr("MB"); s.IsUnitString(UnitTypeStorage) -> true
+//   - s := NewStr("invalid"); s.IsUnitString(UnitTypeStorage) -> false
+func (s *Str) IsUnitString(unitType UnitType) bool {
+	return IsValidUnit(s.String, unitType)
+}
+
+// GetUnitTypeFromString 获取字符串中单位的类型
+//
+// 参数:
+//   - unitType: 单位类型
+//
+// 返回值:
+//   - UnitType: 单位类型
+//   - error: 解析错误
+//
+// 示例:
+//   - s := NewStr("10MB"); s.GetUnitTypeFromString(UnitTypeStorage) -> UnitTypeStorage, nil
+func (s *Str) GetUnitTypeFromString(unitType UnitType) (UnitType, error) {
+	return GetUnitType(s.String, unitType)
+}
+
+// FormatAsUnit 将数值格式化为带单位的字符串
+//
+// 参数:
+//   - value: 数值（以基础单位表示）
+//   - unitType: 单位类型
+//   - precision: 小数位数精度
+//   - toUnit: 输出格式（"auto"自动选择单位或具体单位符号）
+//
+// 返回值:
+//   - *Str: 新的Str实例，包含格式化后的字符串
+//
+// 示例:
+//   - s := NewStr(""); s.FormatAsUnit(10485760, UnitTypeStorage, 2, "auto") -> "10.00MB"
+//   - s := NewStr(""); s.FormatAsUnit(10485760, UnitTypeStorage, 0, "KB") -> "10240KB"
+func (s *Str) FormatAsUnit(value float64, unitType UnitType, precision int, toUnit ...string) *Str {
+	result, err := FormatUnit(value, unitType, precision, toUnit...)
+	if err != nil {
+		s.String = ""
+	} else {
+		s.String = result
+	}
+	return s
+}
+
+// ConvertBetweenUnits 在不同单位之间转换数值并返回新的Str对象
+//
+// 参数:
+//   - value: 原始数值
+//   - fromUnit: 原始单位符号
+//   - toUnit: 目标单位符号
+//   - unitType: 单位类型
+//
+// 返回值:
+//   - *Str: 包含转换后数值的Str对象
+//   - error: 转换过程中的错误
+//
+// 示例:
+//   - s := NewStr(""); s.ConvertBetweenUnits(10, "MB", "KB", UnitTypeStorage) -> NewStr("10240"), nil
+func (s *Str) ConvertBetweenUnits(value float64, fromUnit, toUnit string, unitType UnitType) (*Str, error) {
+	result, err := ConvertUnit(value, fromUnit, toUnit, unitType)
+	if err != nil {
+		return nil, err
+	}
+	return NewStr(strconv.FormatFloat(result, 'f', -1, 64)), nil
+}
