@@ -19,7 +19,7 @@ import (
 
 // Config 调试器配置结构
 type Config struct {
-	Enabled         bool          `json:"enabled" default:"false"`         // 是否启用调试器
+	Enabled         bool          `json:"enabled" default:"true"`          // 是否启用调试器
 	MaxBodySize     int64         `json:"max_body_size" default:"1024"`    // 最大请求/响应体大小（KB），默认1MB
 	RetentionPeriod time.Duration `json:"retention_period" default:"168h"` // 日志保留期限，默认7天
 	Level           string        `json:"level" default:"debug"`           // 日志级别：debug/info
