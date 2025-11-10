@@ -114,22 +114,10 @@ func GetFullURL(req *http.Request) string {
 		return ""
 	}
 
-	// 获取协议
-	scheme := "http"
-	if req.TLS != nil {
-		scheme = "https"
-	} else if req.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-
-	// 获取主机
-	host := req.Host
-	if host == "" {
-		host = req.URL.Host
-	}
+	host := GetHostInfo(req)
 
 	// 构建完整URL
-	return fmt.Sprintf("%s://%s%s", scheme, host, req.URL.RequestURI())
+	return fmt.Sprintf("%s%s", host, req.URL.RequestURI())
 }
 
 // URLEncode 对字符串进行URL编码
