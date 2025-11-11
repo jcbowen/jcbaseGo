@@ -26,7 +26,7 @@
 - 请求处理时间和状态码
 - 流式响应元数据（分块数量、分块大小、流式状态、最大分块限制等）
 - 进程记录信息（进程ID、进程名称、进程类型、开始时间、结束时间、状态）
-- Logger日志信息（时间戳、级别、消息、附加字段）
+- Logger日志信息（时间戳、级别、消息、附加字段、位置信息）
 - 存储大小信息（自动计算和格式化显示）
 
 ## 快速开始
@@ -477,6 +477,80 @@ type LoggerInterface interface {
 
 	// GetLevel 获取当前日志记录器的日志级别
 	GetLevel() string
+}
+```
+
+### 位置信息记录功能
+
+调试器组件现在支持自动记录日志打印的位置信息，包括文件名、行号和函数名。这个功能可以帮助开发者快速定位日志输出的具体位置，提高调试效率。
+
+#### 功能特性
+
+- ✅ **自动位置记录**: 每次日志调用自动记录调用位置
+- ✅ **完整位置信息**: 包含文件名、行号、函数名
+- ✅ **结构化存储**: 位置信息存储在LoggerLog结构体中
+- ✅ **格式化输出**: 日志输出包含位置信息格式
+
+#### 位置信息字段
+
+```go
+type LoggerLog struct {
+	Timestamp time.Time              `json:"timestamp"` // 时间戳
+	Level     string                 `json:"level"`     // 日志级别
+	Message   string                 `json:"message"`   // 日志消息
+	Fields    map[string]interface{} `json:"fields"`    // 附加字段
+	FileName  string                 `json:"fileName"`  // 文件名（新增）
+	Line      int                    `json:"line"`      // 行号（新增）
+	Function  string                 `json:"function"`  // 函数名（新增）
+}
+```
+
+#### 日志输出格式
+
+日志输出现在包含位置信息，格式为：
+```
+[级别] 文件名:行号 函数名: 消息内容
+```
+
+**示例输出：**
+```
+[INFO] debugger_test.go:209 TestLoggerLocationInfo.func1: 测试位置信息记录
+```
+
+#### 使用示例
+
+位置信息记录功能是自动启用的，无需额外配置。所有通过Logger接口记录的日志都会自动包含位置信息。
+
+```go
+// 获取调试器的Logger实例
+logger := dbg.GetLogger()
+
+// 记录日志（自动包含位置信息）
+logger.Info("用户登录成功", map[string]interface{}{
+	"user_id": 123,
+	"username": "张三",
+})
+
+// 输出示例：
+// [INFO] user_controller.go:45 handleUserLogin: 用户登录成功
+```
+
+#### 测试验证
+
+可以通过测试用例验证位置信息记录功能：
+
+```go
+func TestLoggerLocationInfo(t *testing.T) {
+	dbg, _ := debugger.NewSimpleDebugger()
+	logger := dbg.GetLogger()
+	
+	// 记录测试日志
+	logger.Info("测试位置信息记录")
+	
+	// 验证位置信息字段
+	// FileName: 包含当前测试文件名
+	// Line: 包含调用日志的行号
+	// Function: 包含调用日志的函数名
 }
 ```
 

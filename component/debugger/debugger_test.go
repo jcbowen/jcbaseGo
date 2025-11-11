@@ -188,6 +188,58 @@ func TestLoggerWithFields(t *testing.T) {
 	assert.Contains(t, output, "合并字段后的日志")
 }
 
+// TestLoggerLocationInfo 测试日志位置信息记录功能
+func TestLoggerLocationInfo(t *testing.T) {
+	// 创建调试器
+	memoryStorage, _ := NewMemoryStorage(100)
+	config := &Config{
+		Enabled: true,
+		Storage: memoryStorage,
+		Level:   LevelDebug,
+	}
+	debugger, err := New(config)
+	assert.NoError(t, err)
+
+	// 获取Logger实例
+	logger := debugger.GetLogger()
+
+	// 测试位置信息记录
+	t.Run("位置信息记录", func(t *testing.T) {
+		// 记录一条日志
+		logger.Info("测试位置信息记录")
+
+		// 获取DefaultLogger实例来访问内部logs字段
+		if defaultLogger, ok := logger.(*DefaultLogger); ok {
+			logs := defaultLogger.GetLogs()
+			assert.Greater(t, len(logs), 0, "应该至少有一条日志记录")
+
+			// 检查最后一条日志的位置信息
+			lastLog := logs[len(logs)-1]
+
+			// 验证位置信息字段存在
+			assert.NotEmpty(t, lastLog.FileName, "文件名不应该为空")
+			assert.Greater(t, lastLog.Line, 0, "行号应该大于0")
+			assert.NotEmpty(t, lastLog.Function, "函数名不应该为空")
+
+			// 验证位置信息包含预期内容
+			assert.Contains(t, lastLog.FileName, ".go", "文件名应该包含.go后缀")
+			assert.Contains(t, lastLog.Function, "TestLoggerLocationInfo", "函数名应该包含测试函数名")
+		}
+	})
+
+	// 测试位置信息在日志输出中的显示
+	t.Run("位置信息输出格式", func(t *testing.T) {
+		output := captureOutput(func() {
+			logger.Debug("测试位置信息输出")
+		})
+
+		// 检查输出是否包含位置信息格式
+		assert.Contains(t, output, "[debug]", "输出应该包含日志级别")
+		assert.Contains(t, output, ":", "输出应该包含位置分隔符")
+		assert.Contains(t, output, "测试位置信息输出", "输出应该包含日志消息")
+	})
+}
+
 // TestLoggerInContext 测试在Gin上下文中使用Logger
 func TestLoggerInContext(t *testing.T) {
 	memoryStorage, _ := NewMemoryStorage(100)

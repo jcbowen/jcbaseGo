@@ -3,7 +3,8 @@ package debugger
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -146,16 +147,25 @@ func (l *DefaultLogger) log(level string, msg any, fields ...map[string]interfac
 		}
 	}
 
+	// 获取调用位置信息
+	fileName, line, function := getCallerInfo()
+
 	// 收集日志信息到logs字段
 	loggerLog := LoggerLog{
 		Timestamp: time.Now(),
 		Level:     level,
 		Message:   message,
 		Fields:    allFields,
+		FileName:  fileName,
+		Line:      line,
+		Function:  function,
 	}
 	l.logs = append(l.logs, loggerLog)
 
-	log.Println(msg)
+	// 输出包含位置信息的日志（支持IDE可点击链接）
+	// 格式：[级别] 文件名:行号 - 函数名: 消息内容
+	// 注意：文件名:行号 格式是IDEA控制台可点击链接的标准格式
+	fmt.Printf("[%s] %s:%d - %s\n", level, fileName, line, message)
 
 	// // 格式化日志输出
 	// logEntry := map[string]interface{}{
@@ -177,6 +187,29 @@ func (l *DefaultLogger) log(level string, msg any, fields ...map[string]interfac
 	// }
 
 	// log.Println(string(jsonData))
+}
+
+// getCallerInfo 获取调用位置信息
+// 返回文件名、行号和函数名
+func getCallerInfo() (fileName string, line int, function string) {
+	// 跳过当前函数和log方法，获取调用者的信息
+	pc, file, lineNo, ok := runtime.Caller(3)
+	if !ok {
+		return "unknown", 0, "unknown"
+	}
+
+	// 获取函数名
+	funcName := runtime.FuncForPC(pc).Name()
+
+	// 简化文件名，只保留最后一部分
+	parts := strings.Split(file, "/")
+	if len(parts) > 0 {
+		fileName = parts[len(parts)-1]
+	} else {
+		fileName = file
+	}
+
+	return fileName, lineNo, funcName
 }
 
 // shouldLog 检查是否应该记录指定级别的日志
@@ -217,6 +250,11 @@ type LoggerLog struct {
 	Level     string                 `json:"level"`     // 日志级别：debug/info/warn/error
 	Message   string                 `json:"message"`   // 日志消息
 	Fields    map[string]interface{} `json:"fields"`    // 日志附加字段
+
+	// 位置信息字段（新增）
+	FileName string `json:"file_name,omitempty"` // 文件名
+	Line     int    `json:"line,omitempty"`      // 行号
+	Function string `json:"function,omitempty"`  // 函数名
 }
 
 // LogEntry 调试日志条目结构
