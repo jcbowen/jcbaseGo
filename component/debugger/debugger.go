@@ -97,10 +97,7 @@ func New(config *Config) (*Debugger, error) {
 		d.logger = d.config.Logger
 	} else {
 		// 创建默认日志记录器
-		d.logger = &DefaultLogger{
-			debugger: d,
-			fields:   make(map[string]interface{}),
-		}
+		d.logger = NewDefaultLogger(d)
 	}
 
 	return d, nil
@@ -1525,20 +1522,19 @@ func (d *Debugger) GetProcessLogger(processID string) (ProcessLoggerInterface, e
 	}
 
 	// 创建进程记录器实例
+	defaultLogger := NewDefaultLogger(d).WithFields(map[string]interface{}{
+		"process_id":   entry.ProcessID,
+		"process_name": entry.ProcessName,
+		"process_type": entry.ProcessType,
+	})
+
 	logger := &ProcessLogger{
 		debugger:    d,
 		processID:   entry.ProcessID,
 		processName: entry.ProcessName,
 		processType: entry.ProcessType,
 		startTime:   entry.Timestamp,
-		logger: &DefaultLogger{
-			debugger: d,
-			fields: map[string]interface{}{
-				"process_id":   entry.ProcessID,
-				"process_name": entry.ProcessName,
-				"process_type": entry.ProcessType,
-			},
-		},
+		logger:      defaultLogger.(*DefaultLogger),
 	}
 
 	return logger, nil

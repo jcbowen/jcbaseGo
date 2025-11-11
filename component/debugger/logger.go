@@ -43,11 +43,22 @@ type LoggerInterface interface {
 // ----- DefaultLogger 方法实现
 
 // DefaultLogger 调试器内置的日志记录器实现（默认实现）
+// 不能直接创建DefaultLogger实例，只能通过NewDefaultLogger创建
 type DefaultLogger struct {
 	debugger *Debugger
 	level    string // 当前日志记录器的日志级别
 	fields   map[string]interface{}
 	logs     []LoggerLog // 存储收集的日志
+}
+
+// NewDefaultLogger 创建默认日志记录器实例
+func NewDefaultLogger(debugger *Debugger) LoggerInterface {
+	return &DefaultLogger{
+		debugger: debugger,
+		level:    debugger.config.Level,
+		fields:   map[string]interface{}{},
+		logs:     []LoggerLog{},
+	}
 }
 
 // Debug 记录调试级别日志
@@ -391,20 +402,20 @@ type ProcessLoggerInterface interface {
 func NewProcessLogger(debugger *Debugger, processName, processType string) *ProcessLogger {
 	processID := GenerateID()
 
+	// 创建默认日志记录器并进行类型断言
+	defaultLogger := NewDefaultLogger(debugger).WithFields(map[string]interface{}{
+		"process_id":   processID,
+		"process_name": processName,
+		"process_type": processType,
+	})
+
 	logger := &ProcessLogger{
 		debugger:    debugger,
 		processID:   processID,
 		processName: processName,
 		processType: processType,
 		startTime:   time.Now(),
-		logger: &DefaultLogger{
-			debugger: debugger,
-			fields: map[string]interface{}{
-				"process_id":   processID,
-				"process_name": processName,
-				"process_type": processType,
-			},
-		},
+		logger:      defaultLogger.(*DefaultLogger),
 	}
 
 	// 创建进程记录条目
