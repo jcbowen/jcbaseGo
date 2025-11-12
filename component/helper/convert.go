@@ -537,6 +537,70 @@ func (c Convert) ToMap() map[string]interface{} {
 	}
 }
 
+// ToMapString 将变量转为map[string]string类型
+// 支持从JSON字符串、结构体、map等类型转换，所有值都会被转换为字符串
+func (c Convert) ToMapString() map[string]string {
+	if c.Value == nil {
+		return nil
+	}
+
+	switch v := c.Value.(type) {
+	case map[string]string:
+		return v
+	case map[string]interface{}:
+		result := make(map[string]string)
+		for key, value := range v {
+			result[key] = Convert{Value: value}.ToString()
+		}
+		return result
+	case string:
+		// 尝试解析JSON字符串
+		var temp map[string]interface{}
+		if err := json.Unmarshal([]byte(v), &temp); err == nil {
+			result := make(map[string]string)
+			for key, value := range temp {
+				result[key] = Convert{Value: value}.ToString()
+			}
+			return result
+		}
+		// 如果不是有效的JSON，返回空map
+		return make(map[string]string)
+	default:
+		// 尝试通过反射将结构体转换为map[string]string
+		val := reflect.ValueOf(c.Value)
+		if val.Kind() == reflect.Ptr {
+			val = val.Elem()
+		}
+
+		if val.Kind() == reflect.Struct {
+			result := make(map[string]string)
+			valType := val.Type()
+
+			for i := 0; i < valType.NumField(); i++ {
+				field := valType.Field(i)
+				fieldValue := val.Field(i)
+
+				// 跳过不可导出的字段
+				if !fieldValue.CanInterface() {
+					continue
+				}
+
+				// 使用JSON标签作为key，如果没有则使用字段名
+				fieldName := field.Name
+				if jsonTag := field.Tag.Get("json"); jsonTag != "" {
+					fieldName = jsonTag
+				}
+
+				result[fieldName] = Convert{Value: fieldValue.Interface()}.ToString()
+			}
+			return result
+		}
+
+		// 其他类型无法转换为map，返回空map
+		return make(map[string]string)
+	}
+}
+
 // ToSlice 将变量转为[]interface{}类型
 // 支持从数组、切片、JSON字符串等类型转换
 func (c Convert) ToSlice() []interface{} {
