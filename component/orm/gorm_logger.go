@@ -95,9 +95,8 @@ func (l *GormDebuggerLogger) Trace(ctx context.Context, begin time.Time, fc func
 		return
 	}
 
-	// 记录调试级别日志 - 根据GORM日志级别和debugger日志级别共同决定是否记录
-	// 只有当GORM日志级别为Info及以上，并且debugger日志级别也为Info及以上时才记录正常SQL
-	if l.logLevel >= logger.Info && l.debuggerLogger.GetLevel() >= debugger.LevelInfo {
+	// 记录调试级别日志
+	if l.debuggerLogger.GetLevel() >= debugger.LevelInfo {
 		l.debuggerLogger.Info(fmt.Sprintf("SQL执行成功:\n %s", sql), fields)
 	}
 }
