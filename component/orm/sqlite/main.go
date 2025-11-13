@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/jcbowen/jcbaseGo"
+	"github.com/jcbowen/jcbaseGo/component/debugger"
 	"github.com/jcbowen/jcbaseGo/component/helper"
+	"github.com/jcbowen/jcbaseGo/component/orm"
 	"github.com/jcbowen/jcbaseGo/component/orm/base"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -20,10 +22,11 @@ import (
 
 // Instance 表示 SQLite 连接实例，封装数据库配置、连接句柄、调试状态与错误收集。
 type Instance struct {
-	Conf   jcbaseGo.SqlLiteStruct
-	Db     *gorm.DB
-	debug  bool // 是否开启调试模式
-	Errors []error
+	Conf           jcbaseGo.SqlLiteStruct
+	Db             *gorm.DB
+	debug          bool                     // 是否开启调试模式
+	debuggerLogger debugger.LoggerInterface // debugger日志记录器
+	Errors         []error
 }
 
 // New 创建一个 SQLite 实例并建立数据库连接；
@@ -85,7 +88,23 @@ func New(Conf jcbaseGo.SqlLiteStruct, opts ...string) (i *Instance) {
 	err = os.Setenv("jc_sql_lite_"+alias, envStr)
 	jcbaseGo.PanicIfError(err)
 
-	return
+	return i
+}
+
+// NewWithDebugger 创建SQLite实例并集成debugger日志记录
+// 参数：
+//   - conf: 数据库配置
+//   - debuggerLogger: debugger日志记录器
+//   - opts: 可选参数，第一个参数为配置别名
+//
+// 返回：
+//   - *Instance: SQLite实例
+func NewWithDebugger(conf jcbaseGo.SqlLiteStruct, debuggerLogger debugger.LoggerInterface, opts ...string) *Instance {
+	instance := New(conf, opts...)
+	if instance.Db != nil && debuggerLogger != nil {
+		instance.SetDebuggerLogger(debuggerLogger)
+	}
+	return instance
 }
 
 // Debug 开启调试模式，后续通过 `GetDb()` 获取的 *gorm.DB 将启用 Debug。
@@ -105,6 +124,38 @@ func (c *Instance) GetDb() *gorm.DB {
 		db = db.Debug()
 	}
 	return db
+}
+
+// SetDebuggerLogger 设置debugger日志记录器
+// 参数：
+//   - debuggerLogger: debugger日志记录器实例
+func (i *Instance) SetDebuggerLogger(debuggerLogger debugger.LoggerInterface) {
+	i.debuggerLogger = debuggerLogger
+	if i.Db != nil && debuggerLogger != nil {
+		// 启用SQL日志记录
+		i.Db = orm.EnableSQLLogging(i.Db, debuggerLogger)
+	}
+}
+
+// GetDebuggerLogger 获取debugger日志记录器
+func (c *Instance) GetDebuggerLogger() debugger.LoggerInterface {
+	return c.debuggerLogger
+}
+
+// EnableSQLLogging 为当前数据库实例启用SQL日志记录
+// 参数：
+//   - debuggerLogger: debugger日志记录器
+//   - logLevel: GORM日志级别（可选，默认logger.Info）
+//   - slowThreshold: 慢查询阈值（可选，默认200ms）
+//
+// 返回：
+//   - *Instance: 支持SQL日志记录的数据库实例
+func (c *Instance) EnableSQLLogging(debuggerLogger debugger.LoggerInterface, opts ...interface{}) *Instance {
+	if c.Db != nil && debuggerLogger != nil {
+		c.debuggerLogger = debuggerLogger
+		c.Db = orm.EnableSQLLogging(c.Db, debuggerLogger, opts...)
+	}
+	return c
 }
 
 // GetConf 返回当前实例的原始配置结构。
