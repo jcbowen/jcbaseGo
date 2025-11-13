@@ -59,14 +59,15 @@ func main() {
 	}
 
 	// 方式1：使用NewWithDebugger创建数据库实例（推荐方式）
+	// 这种方式会自动配置SQL日志记录，使用debugger的日志级别
 	db := mysql.NewWithDebugger(dbConfig, debug.GetLogger())
 	if db.Error() != nil {
 		panic(fmt.Sprintf("数据库连接失败: %v", db.Error()))
 	}
 
-	// 方式2：先创建实例，后启用SQL日志记录
+	// 方式2：先创建实例，后启用SQL日志记录（如果需要更精细的控制）
 	// db := mysql.New(dbConfig)
-	// db.EnableSQLLogging(debug.GetLogger(), logger.Info, 200*time.Millisecond)
+	// db.EnableSQLLogging(debug.GetLogger(), debugger.LevelInfo, 200*time.Millisecond)
 
 	// 自动迁移表结构
 	if err := db.GetDb().AutoMigrate(&User{}); err != nil {

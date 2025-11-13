@@ -4,12 +4,23 @@ import (
 	"fmt"
 
 	"github.com/jcbowen/jcbaseGo"
-	"github.com/jcbowen/jcbaseGo/component/orm/mysql"
+	"github.com/jcbowen/jcbaseGo/component/orm/sqlite"
 	"gorm.io/gorm"
 )
 
 // User 用户模型
 // 定义用户表结构，包含基本用户信息和时间戳字段
+// 注意：SQLite使用字符串类型的时间戳，而非time.Time类型
+// 这是因为SQLite的日期时间处理方式与MySQL不同
+// 使用字符串类型可以避免时区转换问题
+// 参数：
+//   - ID: 用户ID，主键
+//   - Name: 用户名，最大长度100，非空
+//   - Email: 邮箱，唯一索引
+//   - Age: 年龄
+//   - Status: 状态，默认值1
+//   - CreateAt: 创建时间，自动生成
+//   - UpdateAt: 更新时间，自动更新
 type User struct {
 	ID       int    `json:"id" gorm:"primaryKey"`              // 用户ID，主键
 	Name     string `json:"name" gorm:"size:100;not null"`     // 用户名，最大长度100，非空
@@ -28,15 +39,20 @@ func (User) TableName() string {
 }
 
 // main 主函数
-// 演示MySQL ORM的基本使用方法，包括连接、迁移、CRUD、查询和事务操作
+// 演示SQLite ORM的基本使用方法，包括连接、迁移、CRUD、查询和事务操作
+// SQLite与MySQL的主要区别：
+// 1. 连接配置使用文件路径而非网络地址
+// 2. 日期时间使用字符串类型而非time.Time
+// 3. 连接池配置更简单（通常只需要1个连接）
+// 4. 无需网络连接，适合本地开发和测试
 func main() {
-	fmt.Println("=== MySQL ORM 使用示例 ===\n")
+	fmt.Println("=== SQLite ORM 使用示例 ===\n")
 
 	// 1. 连接数据库
-	fmt.Println("1. 连接数据库:")
+	fmt.Println("1. 连接SQLite数据库:")
 	db, err := connectDatabase()
 	if err != nil {
-		fmt.Printf("连接数据库失败: %v\n", err)
+		fmt.Printf("连接SQLite数据库失败: %v\n", err)
 		return
 	}
 
@@ -71,48 +87,45 @@ func main() {
 	fmt.Println("\n=== 所有操作执行完成 ===")
 }
 
-// connectDatabase 连接数据库
-// 创建MySQL数据库连接并返回实例
+// connectDatabase 连接SQLite数据库
+// 创建SQLite数据库连接并返回实例
+// SQLite使用文件路径连接，无需网络配置
 // 返回：
-//   - *mysql.Instance: MySQL数据库实例
+//   - *sqlite.Instance: SQLite数据库实例
 //   - error: 连接失败时的错误信息
-func connectDatabase() (*mysql.Instance, error) {
-	// 创建 MySQL 连接配置
-	config := jcbaseGo.DbStruct{
-		Host:        "localhost",
-		Port:        "3306",
-		Username:    "root",
-		Password:    "password",
-		Dbname:      "jcbase_test",
-		Charset:     "utf8mb4",
-		Protocol:    "tcp",
-		ParseTime:   "True",
-		TablePrefix: "",
+func connectDatabase() (*sqlite.Instance, error) {
+	// 创建 SQLite 连接配置
+	// SQLite使用文件路径而非网络地址
+	config := jcbaseGo.SqlLiteStruct{
+		DbFile:        "./test_sqlite.db", // SQLite数据库文件路径
+		TablePrefix:   "",                 // 表名前缀
+		SingularTable: false,              // 是否使用单数表名
 	}
 
 	// 连接数据库
-	db := mysql.New(config)
+	db := sqlite.New(config)
 
 	// 检查是否有错误
 	if len(db.Error()) > 0 {
-		return nil, fmt.Errorf("连接数据库失败: %v", db.Error())
+		return nil, fmt.Errorf("连接SQLite数据库失败: %v", db.Error())
 	}
 
-	fmt.Println("数据库连接成功")
+	fmt.Println("SQLite数据库连接成功")
 	return db, nil
 }
 
 // migrateTable 自动迁移表结构
 // 根据User模型自动创建或更新数据库表结构
+// SQLite的迁移与MySQL类似，但数据类型支持略有不同
 // 参数：
-//   - db: MySQL数据库实例
+//   - db: SQLite数据库实例
 //
 // 返回：
 //   - error: 迁移失败时的错误信息
-func migrateTable(db *mysql.Instance) error {
+func migrateTable(db *sqlite.Instance) error {
 	gormDB := db.GetDb()
 	if gormDB == nil {
-		return fmt.Errorf("数据库连接为空")
+		return fmt.Errorf("SQLite数据库连接为空")
 	}
 
 	// 自动迁移 User 表
@@ -121,21 +134,22 @@ func migrateTable(db *mysql.Instance) error {
 		return fmt.Errorf("自动迁移失败: %v", err)
 	}
 
-	fmt.Println("表结构迁移成功")
+	fmt.Println("SQLite表结构迁移成功")
 	return nil
 }
 
 // basicCRUD 基本 CRUD 操作
 // 演示创建、查询、更新、删除操作
+// SQLite的CRUD操作与MySQL完全兼容
 // 参数：
-//   - db: MySQL数据库实例
+//   - db: SQLite数据库实例
 //
 // 返回：
 //   - error: 操作失败时的错误信息
-func basicCRUD(db *mysql.Instance) error {
+func basicCRUD(db *sqlite.Instance) error {
 	gormDB := db.GetDb()
 	if gormDB == nil {
-		return fmt.Errorf("数据库连接为空")
+		return fmt.Errorf("SQLite数据库连接为空")
 	}
 
 	// 创建用户
@@ -183,15 +197,16 @@ func basicCRUD(db *mysql.Instance) error {
 
 // queryOperations 查询操作
 // 演示批量创建、条件查询、排序、分页、统计等查询操作
+// SQLite支持大部分标准SQL查询语法
 // 参数：
-//   - db: MySQL数据库实例
+//   - db: SQLite数据库实例
 //
 // 返回：
 //   - error: 操作失败时的错误信息
-func queryOperations(db *mysql.Instance) error {
+func queryOperations(db *sqlite.Instance) error {
 	gormDB := db.GetDb()
 	if gormDB == nil {
-		return fmt.Errorf("数据库连接为空")
+		return fmt.Errorf("SQLite数据库连接为空")
 	}
 
 	// 批量创建用户
@@ -253,15 +268,16 @@ func queryOperations(db *mysql.Instance) error {
 
 // transactionOperations 事务操作
 // 演示数据库事务操作，确保数据一致性
+// SQLite支持完整的事务操作，与MySQL兼容
 // 参数：
-//   - db: MySQL数据库实例
+//   - db: SQLite数据库实例
 //
 // 返回：
 //   - error: 事务操作失败时的错误信息
-func transactionOperations(db *mysql.Instance) error {
+func transactionOperations(db *sqlite.Instance) error {
 	gormDB := db.GetDb()
 	if gormDB == nil {
-		return fmt.Errorf("数据库连接为空")
+		return fmt.Errorf("SQLite数据库连接为空")
 	}
 
 	// 事务操作
@@ -292,3 +308,10 @@ func transactionOperations(db *mysql.Instance) error {
 	fmt.Println("事务操作成功")
 	return nil
 }
+
+// SQLite使用注意事项：
+// 1. 文件路径：SQLite数据库文件路径可以是相对路径或绝对路径
+// 2. 并发访问：SQLite支持并发读取，但写入时需要锁定
+// 3. 数据类型：SQLite使用动态类型系统，但GORM会进行类型映射
+// 4. 性能优化：对于大量数据操作，建议使用事务批量处理
+// 5. 迁移兼容：SQLite的迁移语法与MySQL略有不同，但GORM会自动处理
