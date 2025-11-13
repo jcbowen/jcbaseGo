@@ -121,20 +121,24 @@ func (c *Instance) Debug() *Instance {
 }
 
 // GetDb 返回当前数据库连接；若已开启调试模式返回 Debug 包装的连接。
+// 调试模式优先级：debuggerLogger > debug标志
 func (c *Instance) GetDb() *gorm.DB {
 	if c.Db == nil {
 		log.Println("Database connection is nil")
 		return nil
 	}
 	db := c.Db
-	if c.debug {
-		if c.debuggerLogger != nil {
-			c.Db = orm.EnableSQLLogging(c.Db, c.debuggerLogger, debugger.LevelInfo)
-			db = c.Db
-		} else {
-			db = db.Debug()
-		}
+
+	if c.debug && c.debuggerLogger == nil {
+		// 开启gorm debug模式
+		db = db.Debug()
 	}
+
+	if c.debuggerLogger != nil && c.debuggerLogger.GetLevel() >= debugger.LevelError {
+		c.Db = orm.EnableSQLLogging(c.Db, c.debuggerLogger, debugger.LevelInfo)
+		db = c.Db
+	}
+
 	return db
 }
 
