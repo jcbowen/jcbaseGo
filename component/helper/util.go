@@ -897,7 +897,13 @@ func CheckAndSetDefault(i interface{}) error {
 		case reflect.Ptr:
 			elem := f.Type().Elem()
 			if elem.Kind() == reflect.Struct {
+				// 仅当字段存在 default 标签时才初始化 nil 的结构体指针，避免递归自引用导致的无限展开
+				tag := sf.Tag.Get("default")
 				if f.IsNil() {
+					if tag == "" {
+						// 无默认标签，不初始化，避免潜在的无限递归
+						continue
+					}
 					f.Set(reflect.New(elem))
 				}
 				if err := CheckAndSetDefault(f.Interface()); err != nil {
