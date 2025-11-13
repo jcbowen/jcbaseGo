@@ -673,3 +673,60 @@ func (c Convert) ToDuration() time.Duration {
 func (c Convert) ToInterface() interface{} {
 	return c.Value
 }
+
+// ToReflectValue 将任意值按目标反射类型转换为可赋值的 reflect.Value
+// 函数名：ToReflectValue
+// 参数：
+// - t reflect.Type — 目标类型（切片元素类型、映射值类型等）
+// - 使用接收者 c.Value 作为原始输入值，可能是字符串、数字、布尔或时间
+// 返回值：
+// - reflect.Value — 转换后可赋值的值（与 t 匹配）
+// - bool — 当发生类型不支持或位宽溢出时返回 false
+// 异常：不触发panic
+// 说明：
+// - 支持 string/bool/int*/uint*/float*/time.Duration/time.Time 的转换
+// - 对整型/无符号/浮点类型做溢出检查，保证赋值安全
+func (c Convert) ToReflectValue(t reflect.Type) (reflect.Value, bool) {
+	k := t.Kind()
+	switch k {
+	case reflect.String:
+		return reflect.ValueOf(Convert{Value: c.Value}.ToString()), true
+	case reflect.Bool:
+		return reflect.ValueOf(Convert{Value: c.Value}.ToBool()), true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if t == reflect.TypeOf(time.Duration(0)) {
+			return reflect.ValueOf(Convert{Value: c.Value}.ToDuration()), true
+		}
+		x := Convert{Value: c.Value}.ToInt64()
+		rv := reflect.New(t).Elem()
+		if rv.OverflowInt(x) {
+			return reflect.Value{}, false
+		}
+		rv.SetInt(x)
+		return rv, true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		x := Convert{Value: c.Value}.ToUint64()
+		rv := reflect.New(t).Elem()
+		if rv.OverflowUint(x) {
+			return reflect.Value{}, false
+		}
+		rv.SetUint(x)
+		return rv, true
+	case reflect.Float32, reflect.Float64:
+		x := Convert{Value: c.Value}.ToFloat64()
+		rv := reflect.New(t).Elem()
+		if rv.OverflowFloat(x) {
+			return reflect.Value{}, false
+		}
+		rv.SetFloat(x)
+		return rv, true
+	case reflect.Struct:
+		if t == reflect.TypeOf(time.Time{}) {
+			tt := Convert{Value: c.Value}.ToTime()
+			return reflect.ValueOf(tt), true
+		}
+		return reflect.Value{}, false
+	default:
+		return reflect.Value{}, false
+	}
+}

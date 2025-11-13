@@ -820,80 +820,271 @@ func IsEmptyValue(val interface{}) bool {
 	}
 }
 
-// CheckAndSetDefault 检查结构体中的字段是否为空，如果为空则设置为默认值
+// CheckAndSetDefault 检查结构体中的字段是否为空，并按 `default` 标签设置默认值
+// 函数名：CheckAndSetDefault
+// 参数：i interface{} — 结构体或其指针，支持多层指针；顶层为nil指针时直接返回
+// 返回值：error — 当默认值解析失败、类型溢出或不支持的类型时返回错误
+// 异常：不触发panic，本函数所有失败均以error返回
+// 说明：
+// - 仅当字段为零值且存在 `default` 标签时赋默认值
+// - 支持基本类型、指针、结构体递归；time.Time 字段支持字符串默认解析
+// - 支持切片默认值（JSON数组或逗号分隔字符串）和 map[string]V 默认值（JSON对象）
 // 常见问题：如果发现默认值赋值失败，但是又没有出现报错，可以看看是不是传递的指针的指针
 func CheckAndSetDefault(i interface{}) error {
-	// 获取结构体反射值
-	val := reflect.ValueOf(i)
-
-	// 如果传入的是指针类型，获取指向的结构体
-	if val.Kind() == reflect.Ptr {
-		val = val.Elem()
-	}
-
-	// 不是结构体的时候直接跳过处理
-	if val.Kind() != reflect.Struct {
-		// log.Printf("%s 不是结构体，直接跳过处理", val.String())
+	v := reflect.ValueOf(i)
+	if !v.IsValid() {
 		return nil
 	}
 
-	// 遍历结构体字段
-	for i := 0; i < val.NumField(); i++ {
-		field := val.Field(i)
-		fieldType := val.Type().Field(i)
+	for v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
 
-		// 忽略非导出字段
-		if !field.CanSet() {
+	if v.Kind() != reflect.Struct {
+		return nil
+	}
+
+	t := v.Type()
+	for idx := 0; idx < v.NumField(); idx++ {
+		f := v.Field(idx)
+		sf := t.Field(idx)
+
+		if !f.CanSet() {
 			continue
 		}
 
-		// 如果字段是struct或interface，则递归检查
-		if field.Kind() == reflect.Struct || field.Kind() == reflect.Interface {
-			if err := CheckAndSetDefault(field.Addr().Interface()); err != nil {
+		switch f.Kind() {
+		case reflect.Struct:
+			if f.Type() == reflect.TypeOf(time.Time{}) {
+				tag := sf.Tag.Get("default")
+				if tag != "" && IsEmptyValue(f.Interface()) {
+					if err := setDefaultValue(f, tag); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			if err := CheckAndSetDefault(f.Addr().Interface()); err != nil {
 				return err
 			}
 			continue
-		}
-
-		// 获取字段类型和默认值标签
-		tag := fieldType.Tag.Get("default")
-		fieldKind := field.Kind()
-
-		// 如果字段为空字符串，则设置为默认值
-		if fieldKind == reflect.String && field.Len() == 0 {
-			field.SetString(tag)
-		}
-
-		// 如果字段是bool类型，则设置默认值
-		if fieldKind == reflect.Bool && !field.Bool() {
-			defaultVal := tag == "true"
-			field.SetBool(defaultVal)
-		}
-
-		// 如果字段是int类型，则设置默认值
-		if strings.HasPrefix(field.Type().String(), "int") && field.Int() == 0 {
-			defaultVal, _ := strconv.ParseInt(tag, 10, 64)
-			field.SetInt(defaultVal)
-		}
-
-		// 如果字段是float类型，则设置默认值
-		if fieldKind == reflect.Float32 || fieldKind == reflect.Float64 {
-			defaultVal, _ := strconv.ParseFloat(tag, 64)
-			if field.Float() == 0 {
-				field.SetFloat(defaultVal)
+		case reflect.Interface:
+			if f.IsNil() {
+				tag := sf.Tag.Get("default")
+				if tag == "" {
+					continue
+				}
+				continue
 			}
+			dv := f.Elem()
+			if dv.Kind() == reflect.Struct {
+				if dv.CanAddr() {
+					if err := CheckAndSetDefault(dv.Addr().Interface()); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			if dv.Kind() == reflect.Ptr {
+				if err := CheckAndSetDefault(dv.Interface()); err != nil {
+					return err
+				}
+				continue
+			}
+		case reflect.Ptr:
+			elem := f.Type().Elem()
+			if elem.Kind() == reflect.Struct {
+				if f.IsNil() {
+					f.Set(reflect.New(elem))
+				}
+				if err := CheckAndSetDefault(f.Interface()); err != nil {
+					return err
+				}
+				continue
+			}
+			tag := sf.Tag.Get("default")
+			if tag == "" {
+				continue
+			}
+			if f.IsNil() {
+				nv := reflect.New(elem)
+				if err := setDefaultValue(nv.Elem(), tag); err != nil {
+					return err
+				}
+				f.Set(nv)
+			} else {
+				if IsEmptyValue(f.Elem().Interface()) {
+					if err := setDefaultValue(f.Elem(), tag); err != nil {
+						return err
+					}
+				}
+			}
+			continue
 		}
 
-		// 如果字段是time.Duration类型，则设置默认值
-		if field.Type() == reflect.TypeOf(time.Duration(0)) && field.Int() == 0 {
-			duration, err := time.ParseDuration(tag)
-			if err == nil {
-				field.SetInt(int64(duration))
+		tag := sf.Tag.Get("default")
+		if tag == "" {
+			continue
+		}
+
+		if IsEmptyValue(f.Interface()) {
+			if err := setDefaultValue(f, tag); err != nil {
+				return err
 			}
 		}
 	}
 
 	return nil
+}
+
+// setDefaultValue 根据字段类型解析并设置默认值
+// 函数名：setDefaultValue
+// 参数：
+// - field reflect.Value — 可设置的字段值，可能为基本类型、切片、映射、结构体（time.Time）
+// - tag string — `default` 标签文本，支持数字/布尔/字符串/JSON等表示
+// 返回值：error — 当解析失败或发生溢出时返回错误
+// 异常：不触发panic
+// 说明：
+// - 整数/无符号/浮点类型进行位宽溢出检查
+// - time.Duration 支持形如 "300ms" 的时长字符串
+// - 切片：支持 JSON 数组或逗号分隔；空标签初始化为空切片
+// - 映射：仅支持 string 键；值类型按目标元素类型转换；空标签初始化空映射
+// - time.Time：依赖 Convert.ToTime 支持多格式时间字符串
+func setDefaultValue(field reflect.Value, tag string) error {
+	switch field.Kind() {
+	case reflect.String:
+		field.SetString(tag)
+		return nil
+	case reflect.Bool:
+		if tag == "" {
+			return nil
+		}
+		b, err := strconv.ParseBool(tag)
+		if err != nil {
+			return err
+		}
+		field.SetBool(b)
+		return nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if field.Type() == reflect.TypeOf(time.Duration(0)) {
+			if tag == "" {
+				return nil
+			}
+			d, err := time.ParseDuration(tag)
+			if err != nil {
+				return err
+			}
+			field.SetInt(int64(d))
+			return nil
+		}
+		if tag == "" {
+			return nil
+		}
+		x, err := strconv.ParseInt(tag, 10, 64)
+		if err != nil {
+			return err
+		}
+		if field.OverflowInt(x) {
+			return fmt.Errorf("default value overflows %s", field.Type().String())
+		}
+		field.SetInt(x)
+		return nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		if tag == "" {
+			return nil
+		}
+		x, err := strconv.ParseUint(tag, 10, 64)
+		if err != nil {
+			return err
+		}
+		if field.OverflowUint(x) {
+			return fmt.Errorf("default value overflows %s", field.Type().String())
+		}
+		field.SetUint(x)
+		return nil
+	case reflect.Float32, reflect.Float64:
+		if tag == "" {
+			return nil
+		}
+		x, err := strconv.ParseFloat(tag, 64)
+		if err != nil {
+			return err
+		}
+		if field.OverflowFloat(x) {
+			return fmt.Errorf("default value overflows %s", field.Type().String())
+		}
+		field.SetFloat(x)
+		return nil
+	case reflect.Slice:
+		if tag == "" {
+			field.Set(reflect.MakeSlice(field.Type(), 0, 0))
+			return nil
+		}
+		arr := Convert{Value: tag}.ToSlice()
+		if arr == nil {
+			parts := strings.Split(tag, ",")
+			tmp := make([]interface{}, 0, len(parts))
+			for _, p := range parts {
+				s := strings.TrimSpace(p)
+				if s != "" {
+					tmp = append(tmp, s)
+				}
+			}
+			arr = tmp
+		}
+		if arr == nil {
+			return fmt.Errorf("invalid slice default for %s", field.Type().String())
+		}
+		elemType := field.Type().Elem()
+		newSlice := reflect.MakeSlice(field.Type(), 0, len(arr))
+		for _, it := range arr {
+			ev, ok := Convert{Value: it}.ToReflectValue(elemType)
+			if !ok {
+				return fmt.Errorf("invalid slice element for %s", field.Type().String())
+			}
+			newSlice = reflect.Append(newSlice, ev)
+		}
+		field.Set(newSlice)
+		return nil
+	case reflect.Map:
+		if tag == "" {
+			field.Set(reflect.MakeMap(field.Type()))
+			return nil
+		}
+		if field.Type().Key().Kind() != reflect.String {
+			return fmt.Errorf("map key must be string for defaults: %s", field.Type().String())
+		}
+		m := Convert{Value: tag}.ToMap()
+		if m == nil {
+			return fmt.Errorf("invalid map default for %s", field.Type().String())
+		}
+		newMap := reflect.MakeMap(field.Type())
+		valType := field.Type().Elem()
+		for k, v := range m {
+			ev, ok := Convert{Value: v}.ToReflectValue(valType)
+			if !ok {
+				return fmt.Errorf("invalid map value for %s", field.Type().String())
+			}
+			newMap.SetMapIndex(reflect.ValueOf(k), ev)
+		}
+		field.Set(newMap)
+		return nil
+	case reflect.Struct:
+		if field.Type() == reflect.TypeOf(time.Time{}) {
+			if tag == "" {
+				return nil
+			}
+			t := Convert{Value: tag}.ToTime()
+			field.Set(reflect.ValueOf(t))
+			return nil
+		}
+		return nil
+	default:
+		return nil
+	}
 }
 
 // CompareNumber 比较两个值，如果 a < b 返回 -1，如果 a == b 返回 0，如果 a > b 返回 1，如果错误则 panic
