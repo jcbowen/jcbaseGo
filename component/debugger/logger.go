@@ -11,20 +11,35 @@ import (
 	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
+type LogLevel int
+
 // 日志级别常量
 const (
-	LevelDebug = "debug" // 调试级别：记录所有详细信息
-	LevelInfo  = "info"  // 信息级别：只记录基本信息
-	LevelWarn  = "warn"  // 警告级别：记录警告信息
-	LevelError = "error" // 错误级别：记录错误信息
+	LevelSilent LogLevel = iota + 1 // 信息级别：不记录任何日志
+	LevelError                      // 错误级别：只记录错误信息
+	LevelWarn                       // 警告级别：记录错误+警告信息
+	LevelInfo                       // 调试级别：记录所有详细信息
 )
+
+// String 返回日志级别的字符串表示
+func (l LogLevel) String() string {
+	switch l {
+	case LevelSilent:
+		return "silent"
+	case LevelError:
+		return "error"
+	case LevelWarn:
+		return "warn"
+	case LevelInfo:
+		return "info"
+	default:
+		return "unknown"
+	}
+}
 
 // LoggerInterface 日志记录器接口
 // 支持不同级别的日志记录，可以在控制器中直接使用
 type LoggerInterface interface {
-	// Debug 记录调试级别日志
-	Debug(msg any, fields ...map[string]interface{})
-
 	// Info 记录信息级别日志
 	Info(msg any, fields ...map[string]interface{})
 
@@ -38,7 +53,7 @@ type LoggerInterface interface {
 	WithFields(fields map[string]interface{}) LoggerInterface
 
 	// GetLevel 获取当前日志记录器的日志级别
-	GetLevel() string
+	GetLevel() LogLevel
 }
 
 // ----- DefaultLogger 方法实现
@@ -47,7 +62,7 @@ type LoggerInterface interface {
 // 不能直接创建DefaultLogger实例，只能通过NewDefaultLogger创建
 type DefaultLogger struct {
 	debugger *Debugger
-	level    string // 当前日志记录器的日志级别
+	level    LogLevel // 当前日志记录器的日志级别
 	fields   map[string]interface{}
 	logs     []LoggerLog // 存储收集的日志
 }
@@ -60,11 +75,6 @@ func NewDefaultLogger(debugger *Debugger) LoggerInterface {
 		fields:   map[string]interface{}{},
 		logs:     []LoggerLog{},
 	}
-}
-
-// Debug 记录调试级别日志
-func (l *DefaultLogger) Debug(msg any, fields ...map[string]interface{}) {
-	l.log(LevelDebug, msg, fields...)
 }
 
 // Info 记录信息级别日志
@@ -102,15 +112,15 @@ func (l *DefaultLogger) WithFields(fields map[string]interface{}) LoggerInterfac
 }
 
 // GetLevel 获取当前日志记录器的日志级别
-func (l *DefaultLogger) GetLevel() string {
+func (l *DefaultLogger) GetLevel() LogLevel {
 	return l.debugger.config.Level
 }
 
 // log 内部日志记录方法
-// - level: 日志级别（debug/info/warn/error）
+// - level: 日志级别（info/warn/error/silent）
 // - msg: 日志消息（字符串、结构体、map、数组、实现了Stringer接口的类型等）
 // - fields: 可选的附加字段（键值对）
-func (l *DefaultLogger) log(level string, msg any, fields ...map[string]interface{}) {
+func (l *DefaultLogger) log(level LogLevel, msg any, fields ...map[string]interface{}) {
 	// 检查日志级别是否启用
 	if !l.shouldLog(level) {
 		return
@@ -165,7 +175,7 @@ func (l *DefaultLogger) log(level string, msg any, fields ...map[string]interfac
 	// 输出包含位置信息的日志（支持IDE可点击链接）
 	// 格式：[级别] 文件名:行号 - 函数名: 消息内容
 	// 注意：文件名:行号 格式是IDEA控制台可点击链接的标准格式
-	fmt.Printf("[%s] %s:%d - %s\n", level, fileName, line, message)
+	fmt.Printf("[%s] %s:%d - %s\n", level.String(), fileName, line, message)
 
 	// // 格式化日志输出
 	// logEntry := map[string]interface{}{
@@ -213,15 +223,12 @@ func getCallerInfo() (fileName string, line int, function string) {
 }
 
 // shouldLog 检查是否应该记录指定级别的日志
-func (l *DefaultLogger) shouldLog(level string) bool {
+func (l *DefaultLogger) shouldLog(level LogLevel) bool {
 	// 根据配置的日志级别决定是否记录
 	switch l.GetLevel() {
-	case LevelDebug:
+	case LevelInfo:
 		// 调试级别记录所有日志
 		return true
-	case LevelInfo:
-		// 信息级别记录info、warn、error
-		return level == LevelInfo || level == LevelWarn || level == LevelError
 	case LevelWarn:
 		// 警告级别记录warn、error
 		return level == LevelWarn || level == LevelError
@@ -229,8 +236,8 @@ func (l *DefaultLogger) shouldLog(level string) bool {
 		// 错误级别只记录error
 		return level == LevelError
 	default:
-		// 默认记录所有日志
-		return true
+		// 默认不记录日志
+		return false
 	}
 }
 
@@ -247,7 +254,7 @@ func (l *DefaultLogger) ClearLogs() {
 // LoggerLog 记录通过logger打印的日志信息
 type LoggerLog struct {
 	Timestamp time.Time              `json:"timestamp"` // 日志时间戳
-	Level     string                 `json:"level"`     // 日志级别：debug/info/warn/error
+	Level     LogLevel               `json:"level"`     // 日志级别：debug/info/warn/error
 	Message   string                 `json:"message"`   // 日志消息
 	Fields    map[string]interface{} `json:"fields"`    // 日志附加字段
 
@@ -475,21 +482,6 @@ func NewProcessLogger(debugger *Debugger, processName, processType string) *Proc
 	return logger
 }
 
-// Debug 记录调试级别日志
-// 记录详细的调试信息，适用于开发阶段的问题排查
-//
-// 参数:
-//
-//	msg: 日志消息，可以是字符串、结构体或实现了Stringer接口的类型
-//	fields: 可选的附加字段，用于记录额外的调试信息
-//
-// 示例:
-//
-//	logger.Debug("开始处理数据", map[string]interface{}{"file_count": 100})
-func (p *ProcessLogger) Debug(msg any, fields ...map[string]interface{}) {
-	p.logger.Debug(msg, fields...)
-}
-
 // Info 记录信息级别日志
 // 记录进程执行的关键信息，适用于监控和状态跟踪
 //
@@ -559,7 +551,7 @@ func (p *ProcessLogger) WithFields(fields map[string]interface{}) LoggerInterfac
 // 返回值:
 //
 //	string: 日志级别（debug/info/warn/error）
-func (p *ProcessLogger) GetLevel() string {
+func (p *ProcessLogger) GetLevel() LogLevel {
 	return p.logger.GetLevel()
 }
 
@@ -679,7 +671,7 @@ func GetLoggerFromContext(c *gin.Context) LoggerInterface {
 	config := &Config{
 		Enabled: true,
 		Storage: memoryStorage,
-		Level:   LevelDebug,
+		Level:   LevelInfo,
 	}
 	// 设置默认值
 	if err := helper.CheckAndSetDefault(config); err != nil {

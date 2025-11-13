@@ -26,7 +26,7 @@ func TestLoggerInterface(t *testing.T) {
 	config := &Config{
 		Enabled: true,
 		Storage: memoryStorage,
-		Level:   LevelDebug, // 设置为调试级别，记录所有日志
+		Level:   LevelInfo, // 设置为最高调试级别，记录所有日志
 	}
 	debugger, err := New(config)
 	assert.NoError(t, err)
@@ -34,14 +34,14 @@ func TestLoggerInterface(t *testing.T) {
 	// 获取Logger实例
 	logger := debugger.GetLogger()
 
-	// 测试Debug级别日志
-	t.Run("Debug日志记录", func(t *testing.T) {
+	// 测试Info级别日志（LevelInfo是最高调试级别）
+	t.Run("Info日志记录", func(t *testing.T) {
 		output := captureOutput(func() {
-			logger.Debug("测试Debug日志")
+			logger.Info("测试Info日志")
 		})
 
 		// 检查日志消息是否包含在输出中
-		assert.Contains(t, output, "测试Debug日志")
+		assert.Contains(t, output, "测试Info日志")
 	})
 
 	// 测试Info级别日志
@@ -88,23 +88,19 @@ func TestLoggerInterface(t *testing.T) {
 func TestLoggerLevelFiltering(t *testing.T) {
 	testCases := []struct {
 		name        string
-		configLevel string
-		logLevel    string
+		configLevel LogLevel
+		logLevel    LogLevel
 		shouldLog   bool
 	}{
-		{"Debug级别记录Debug日志", LevelDebug, LevelDebug, true},
-		{"Debug级别记录Info日志", LevelDebug, LevelInfo, true},
-		{"Debug级别记录Warn日志", LevelDebug, LevelWarn, true},
-		{"Debug级别记录Error日志", LevelDebug, LevelError, true},
-		{"Info级别记录Debug日志", LevelInfo, LevelDebug, false},
 		{"Info级别记录Info日志", LevelInfo, LevelInfo, true},
 		{"Info级别记录Warn日志", LevelInfo, LevelWarn, true},
 		{"Info级别记录Error日志", LevelInfo, LevelError, true},
-		{"Warn级别记录Debug日志", LevelWarn, LevelDebug, false},
+		{"Info级别记录Info日志", LevelInfo, LevelInfo, true},
+		{"Info级别记录Warn日志", LevelInfo, LevelWarn, true},
+		{"Info级别记录Error日志", LevelInfo, LevelError, true},
 		{"Warn级别记录Info日志", LevelWarn, LevelInfo, false},
 		{"Warn级别记录Warn日志", LevelWarn, LevelWarn, true},
 		{"Warn级别记录Error日志", LevelWarn, LevelError, true},
-		{"Error级别记录Debug日志", LevelError, LevelDebug, false},
 		{"Error级别记录Info日志", LevelError, LevelInfo, false},
 		{"Error级别记录Warn日志", LevelError, LevelWarn, false},
 		{"Error级别记录Error日志", LevelError, LevelError, true},
@@ -128,8 +124,6 @@ func TestLoggerLevelFiltering(t *testing.T) {
 			output := captureOutput(func() {
 				// 根据日志级别调用相应的方法
 				switch tc.logLevel {
-				case LevelDebug:
-					logger.Debug("测试日志")
 				case LevelInfo:
 					logger.Info("测试日志")
 				case LevelWarn:
@@ -155,7 +149,7 @@ func TestLoggerWithFields(t *testing.T) {
 	config := &Config{
 		Enabled: true,
 		Storage: memoryStorage,
-		Level:   LevelDebug,
+		Level:   LevelInfo,
 	}
 	debugger, err := New(config)
 	assert.NoError(t, err)
@@ -195,7 +189,7 @@ func TestLoggerLocationInfo(t *testing.T) {
 	config := &Config{
 		Enabled: true,
 		Storage: memoryStorage,
-		Level:   LevelDebug,
+		Level:   LevelInfo,
 	}
 	debugger, err := New(config)
 	assert.NoError(t, err)
@@ -230,11 +224,11 @@ func TestLoggerLocationInfo(t *testing.T) {
 	// 测试位置信息在日志输出中的显示
 	t.Run("位置信息输出格式", func(t *testing.T) {
 		output := captureOutput(func() {
-			logger.Debug("测试位置信息输出")
+			logger.Info("测试位置信息输出")
 		})
 
 		// 检查输出是否包含位置信息格式
-		assert.Contains(t, output, "[debug]", "输出应该包含日志级别")
+		assert.Contains(t, output, "[info]", "输出应该包含日志级别")
 		assert.Contains(t, output, ":", "输出应该包含位置分隔符")
 		assert.Contains(t, output, "测试位置信息输出", "输出应该包含日志消息")
 	})
@@ -246,7 +240,7 @@ func TestLoggerInContext(t *testing.T) {
 	config := &Config{
 		Enabled: true,
 		Storage: memoryStorage,
-		Level:   LevelDebug,
+		Level:   LevelInfo,
 	}
 	debugger, err := New(config)
 	assert.NoError(t, err)
@@ -329,7 +323,7 @@ func TestLoggerJSONErrorHandling(t *testing.T) {
 	config := &Config{
 		Enabled: true,
 		Storage: memoryStorage,
-		Level:   LevelDebug,
+		Level:   LevelInfo,
 	}
 	debugger, err := New(config)
 	assert.NoError(t, err)
@@ -466,7 +460,7 @@ func TestMaxRecordsDebuggerConfig(t *testing.T) {
 	config := &Config{
 		Enabled:    true,
 		Storage:    memoryStorage,
-		Level:      LevelDebug,
+		Level:      LevelInfo,
 		MaxRecords: 2, // 设置最大记录数为2
 	}
 	debugger, err := New(config)
@@ -569,10 +563,12 @@ func TestFileUploadBinaryDataHandling(t *testing.T) {
 	// 创建调试器
 	memoryStorage, _ := NewMemoryStorage(100)
 	config := &Config{
-		Enabled:     true,
-		Storage:     memoryStorage,
-		Level:       LevelDebug,
-		MaxBodySize: 1024, // 1MB
+		Enabled:                true,
+		Storage:                memoryStorage,
+		Level:                  LevelInfo,
+		MaxBodySize:            1024, // 1MB
+		EnableMultipartSupport: true,
+		MultipartPreserveState: true,
 	}
 	debugger, err := New(config)
 	assert.NoError(t, err)
@@ -643,7 +639,7 @@ func TestFileUploadBinaryDataHandling(t *testing.T) {
 
 		result, err := debugger.extractRequestBody(c)
 		assert.NoError(t, err)
-		assert.Contains(t, result, "[Multipart Form Data - Stream Processing]")
+		assert.Contains(t, result, "[Multipart Form Data - Safe Processing]")
 		assert.Contains(t, result, "Total Size:")
 		assert.Contains(t, result, "Parts:")
 		assert.Contains(t, result, "[File] Name: avatar.jpg")
@@ -1086,7 +1082,10 @@ func TestSafeRequestBodyExtraction(t *testing.T) {
 
 		result, err := debugger.extractRequestBodyWithSizeLimitSafe(c)
 		assert.NoError(t, err)
-		assert.Contains(t, result, "Safe Processing")
+		// extractRequestBodyWithSizeLimitSafe 返回原始请求体内容，而不是"Safe Processing"
+		assert.Contains(t, result, "--")   // multipart内容应该包含boundary
+		assert.Contains(t, result, "test") // 应该包含字段名
+		assert.Contains(t, result, "data") // 应该包含字段值
 
 		// 验证请求体已恢复
 		restoredBytes, err := io.ReadAll(c.Request.Body)

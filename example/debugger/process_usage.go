@@ -82,7 +82,7 @@ func batchProcessor(debuggerInstance *debugger.Debugger) {
 
 	// 模拟处理多个文件
 	for i := 1; i <= 10; i++ {
-		logger.Debug(fmt.Sprintf("处理文件 %d", i), debugger.Fields{
+		logger.Info(fmt.Sprintf("处理文件 %d", i), debugger.Fields{
 			"file_name": fmt.Sprintf("data_%d.csv", i),
 			"file_size": i * 1024,
 		})
@@ -122,7 +122,7 @@ func main() {
 	// 创建调试器实例（使用内存存储）
 	debuggerInstance, err := debugger.NewWithMemoryStorage(&debugger.Config{
 		Enabled:         true,
-		LogLevel:        debugger.LevelDebug,
+		LogLevel:        debugger.LevelInfo,
 		MaxBodySize:     1024 * 1024, // 1MB
 		RetentionPeriod: 24 * time.Hour,
 	})
@@ -202,7 +202,7 @@ func main() {
 				"http_request_id": c.GetHeader("X-Request-ID"),
 			})
 			time.Sleep(100 * time.Millisecond)
-			logger.Debug("后台任务完成")
+			logger.Info("后台任务完成")
 			debuggerInstance.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
 		}()
 

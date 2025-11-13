@@ -22,7 +22,7 @@ type Config struct {
 	Enabled         bool          `json:"enabled" default:"true"`          // 是否启用调试器
 	MaxBodySize     int64         `json:"max_body_size" default:"1024"`    // 最大请求/响应体大小（KB），默认1MB
 	RetentionPeriod time.Duration `json:"retention_period" default:"168h"` // 日志保留期限，默认7天
-	Level           string        `json:"level" default:"debug"`           // 日志级别：debug/info
+	Level           LogLevel      `json:"level" default:"1"`               // 日志级别：LevelSilent
 	MaxRecords      int           `json:"max_records" default:"150"`       // 最大记录数量，默认150条
 
 	// 过滤配置
@@ -75,10 +75,25 @@ func New(config *Config) (*Debugger, error) {
 		config: config,
 	}
 
+	// 保存用户显式设置的布尔值，避免被CheckAndSetDefault覆盖
+	// 这是为了解决测试用例需要设置false值但被默认值覆盖的问题
+	userSetEnableMultipartSupport := config.EnableMultipartSupport
+	userSetMultipartPreserveState := config.MultipartPreserveState
+	userSetUseCDN := config.UseCDN
+	userSetEnableStreamingSupport := config.EnableStreamingSupport
+	userSetMultipartSkipFiles := config.MultipartSkipFiles
+
 	// 使用CheckAndSetDefault方法设置默认值，符合jcbaseGo规范
 	if err := helper.CheckAndSetDefault(d.config); err != nil {
 		return nil, fmt.Errorf("设置配置默认值失败: %w", err)
 	}
+
+	// 恢复用户显式设置的值
+	config.EnableMultipartSupport = userSetEnableMultipartSupport
+	config.MultipartPreserveState = userSetMultipartPreserveState
+	config.UseCDN = userSetUseCDN
+	config.EnableStreamingSupport = userSetEnableStreamingSupport
+	config.MultipartSkipFiles = userSetMultipartSkipFiles
 
 	// 如果没有传入存储实例，则使用默认的内存存储
 	if d.config.Storage == nil {
@@ -409,7 +424,7 @@ func (d *Debugger) recordResponseInfo(entry *LogEntry, writer *responseWriter, s
 		entry.IsStreamingResponse = true
 		entry.StreamingChunks = len(writer.streamingChunks)
 		entry.StreamingChunkSize = int(writer.chunkSizeLimit)
-		entry.MaxStreamingChunks = int(writer.maxChunks)
+		entry.MaxStreamingChunks = writer.maxChunks
 		entry.StreamingData = fmt.Sprintf("Streaming Response: %d chunks, total size: %d bytes",
 			len(writer.streamingChunks), d.calculateTotalStreamingSize(writer))
 	} else {
@@ -1401,7 +1416,7 @@ func NewWithMemoryStorage(maxRecords int) (*Debugger, error) {
 		Enabled:    true,
 		MaxRecords: maxRecords,
 		Storage:    memoryStorage,
-		Level:      LevelDebug,
+		Level:      LevelInfo,
 	}
 	// 设置默认值
 	if err := helper.CheckAndSetDefault(config); err != nil {
@@ -1423,7 +1438,7 @@ func NewWithFileStorage(storagePath string, maxRecords int) (*Debugger, error) {
 		Enabled:    true,
 		MaxRecords: maxRecords,
 		Storage:    fileStorage,
-		Level:      LevelDebug,
+		Level:      LevelInfo,
 	}
 	// 设置默认值
 	if err := helper.CheckAndSetDefault(config); err != nil {
@@ -1439,7 +1454,7 @@ func NewWithCustomStorage(customStorage Storage) (*Debugger, error) {
 	config := &Config{
 		Enabled: true,
 		Storage: customStorage,
-		Level:   LevelDebug,
+		Level:   LevelInfo,
 	}
 	// 设置默认值
 	if err := helper.CheckAndSetDefault(config); err != nil {

@@ -144,7 +144,7 @@ config := &debugger.Config{
 	Storage:         memoryStorage,           // 必须传入实例化的存储器
 	MaxBodySize:     1024,                    // 最大请求/响应体大小（KB），默认1MB
 	RetentionPeriod: 7 * 24 * time.Hour,      // 日志保留期限，默认7天
-	Level:           debugger.LevelDebug,     // 日志级别：LevelDebug/LevelInfo/LevelWarn/LevelError
+	Level:           debugger.LevelInfo,     // 日志级别：LevelInfo/LevelWarn/LevelError/LevelSilent
 	MaxRecords:      150,                     // 最大记录数量，默认150
 
 	// 过滤配置
@@ -172,8 +172,8 @@ router.Use(dbg.Middleware())
 
 ### 日志级别说明
 
-- **LevelDebug**: 记录所有详细信息，包括请求体、响应体等（开发环境）
-- **LevelInfo**: 记录基本信息，包括请求头、响应头等（生产环境）
+- **LevelSilent**: 静默模式，不记录任何调试日志（生产环境/关闭调试）
+- **LevelInfo**: 记录所有详细信息，包括请求体、响应体等（开发环境/最高调试级别）
 - **LevelWarn**: 只记录警告级别的信息
 - **LevelError**: 只记录错误级别的信息
 
