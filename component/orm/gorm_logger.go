@@ -42,21 +42,21 @@ func (l *GormDebuggerLogger) LogMode(level logger.LogLevel) logger.Interface {
 
 // Info 记录信息级别日志
 func (l *GormDebuggerLogger) Info(ctx context.Context, msg string, data ...interface{}) {
-	if l.logLevel <= logger.Info { // GORM级别数值越小越详细
+	if l.logLevel >= logger.Info {
 		l.debuggerLogger.Info(fmt.Sprintf(msg, data...))
 	}
 }
 
 // Warn 记录警告级别日志
 func (l *GormDebuggerLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
-	if l.logLevel <= logger.Warn { // GORM级别数值越小越详细
+	if l.logLevel >= logger.Warn {
 		l.debuggerLogger.Warn(fmt.Sprintf(msg, data...))
 	}
 }
 
 // Error 记录错误级别日志
 func (l *GormDebuggerLogger) Error(ctx context.Context, msg string, data ...interface{}) {
-	if l.logLevel <= logger.Error { // GORM级别数值越小越详细
+	if l.logLevel >= logger.Error {
 		l.debuggerLogger.Error(fmt.Sprintf(msg, data...))
 	}
 }
@@ -64,7 +64,7 @@ func (l *GormDebuggerLogger) Error(ctx context.Context, msg string, data ...inte
 // Trace 记录SQL跟踪日志
 // 这是记录SQL执行情况的核心方法
 func (l *GormDebuggerLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	if l.logLevel <= logger.Silent {
+	if l.logLevel == logger.Silent {
 		return
 	}
 
@@ -96,7 +96,7 @@ func (l *GormDebuggerLogger) Trace(ctx context.Context, begin time.Time, fc func
 	}
 
 	// 记录调试级别日志 - 仅在debug级别时记录正常SQL
-	if l.logLevel <= logger.Info {
+	if l.logLevel >= logger.Info {
 		l.debuggerLogger.Info("SQL执行成功", fields)
 	}
 }
@@ -131,9 +131,26 @@ func EnableSQLLogging(db *gorm.DB, debuggerLogger debugger.LoggerInterface, opts
 
 	// 处理可选参数
 	if len(opts) > 0 {
-		// 第一个参数可能是日志级别
-		if levelStr, ok := opts[0].(debugger.LogLevel); ok {
-			logLevel = levelStr
+		switch v := opts[0].(type) {
+		case debugger.LogLevel:
+			logLevel = v
+		case logger.LogLevel:
+			logLevel = debugger.LogLevel(v)
+		case string:
+			switch v {
+			case "silent":
+				logLevel = debugger.LevelSilent
+			case "error":
+				logLevel = debugger.LevelError
+			case "warn", "warning":
+				logLevel = debugger.LevelWarn
+			case "info", "debug":
+				logLevel = debugger.LevelInfo
+			}
+		case int:
+			if v >= int(debugger.LevelSilent) && v <= int(debugger.LevelInfo) {
+				logLevel = debugger.LogLevel(v)
+			}
 		}
 	}
 
