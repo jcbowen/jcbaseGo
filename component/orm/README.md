@@ -221,6 +221,54 @@ debugDB := db.Debug()
 debugDB.GetDb().Find(&users)  // 会输出 SQL 语句
 ```
 
+### 与 Debugger 集成
+
+#### 启用 SQL 日志记录（便捷用法）
+
+```go
+import (
+    "time"
+    "github.com/jcbowen/jcbaseGo/component/debugger"
+    "github.com/jcbowen/jcbaseGo/component/orm/mysql"
+)
+
+// 初始化 Debugger
+dbg, _ := debugger.New(&debugger.Config{Enabled: true, Level: "info"})
+
+// 创建数据库实例并自动集成 SQL 日志
+db := mysql.NewWithDebugger(dbConfig, dbg.GetLogger())
+
+// 之后的所有 SQL 执行将按 Debugger 的日志级别记录
+```
+
+#### 运行时启用/配置 SQL 日志
+
+```go
+// 已有实例场景：启用 SQL 日志记录并自定义级别与慢查询阈值
+db.EnableSQLLogging(dbg.GetLogger(), "debug", 100*time.Millisecond)
+
+// 仅设置日志记录器（沿用默认阈值与 Debugger 级别）
+db.SetDebuggerLogger(dbg.GetLogger())
+```
+
+#### 在 gorm.Open 中使用配置选项
+
+```go
+import (
+    "time"
+    "github.com/jcbowen/jcbaseGo/component/orm"
+    "gorm.io/gorm"
+    "gorm.io/driver/mysql"
+)
+
+gormDB, err := gorm.Open(
+    mysql.Open(dsn),
+    orm.WithSQLLogging(dbg.GetLogger(), "info", 200*time.Millisecond),
+)
+```
+
+日志内容包含：SQL 语句、耗时、影响行数、错误信息与慢查询标记；慢查询阈值与日志级别可按需调整。
+
 ## 详细功能说明
 
 ### 数据库配置
@@ -383,22 +431,34 @@ type Instance interface {
 ### MySQL Instance 方法
 
 - `New(dbConfig DbStruct, opts ...string) *Instance` - 创建实例
+- `NewWithDebugger(dbConfig DbStruct, debuggerLogger debugger.LoggerInterface, opts ...string) *Instance` - 创建并集成 Debugger
 - `Debug() *Instance` - 开启调试模式
 - `GetAllTableName() ([]AllTableName, error)` - 获取所有表名
 - `TableName(tableName *string, quotes ...bool) *Instance` - 处理表名
 - `FindForPage(model interface{}, options *FindPageOptions) (ListData, error)` - 分页查询
 - `AddError(err error)` - 添加错误
 - `Error() []error` - 获取错误列表
+- `SetDebuggerLogger(debugger.LoggerInterface)` - 设置 Debugger 日志记录器
+- `GetDebuggerLogger() debugger.LoggerInterface` - 获取 Debugger 日志记录器
+- `EnableSQLLogging(debugger.LoggerInterface, opts ...interface{}) *Instance` - 启用 SQL 日志记录
 
 ### SQLite Instance 方法
 
 - `New(conf SqlLiteStruct, opts ...string) *Instance` - 创建实例
+- `NewWithDebugger(conf SqlLiteStruct, debuggerLogger debugger.LoggerInterface, opts ...string) *Instance` - 创建并集成 Debugger
 - `Debug() *Instance` - 开启调试模式
 - `GetAllTableName() ([]string, error)` - 获取所有表名
 - `TableName(tableName *string, quotes ...bool) *Instance` - 处理表名
 - `FindForPage(model interface{}, options *FindPageOptions) (ListData, error)` - 分页查询
 - `AddError(err error)` - 添加错误
 - `Error() []error` - 获取错误列表
+- `SetDebuggerLogger(debugger.LoggerInterface)` - 设置 Debugger 日志记录器
+- `GetDebuggerLogger() debugger.LoggerInterface` - 获取 Debugger 日志记录器
+- `EnableSQLLogging(debugger.LoggerInterface, opts ...interface{}) *Instance` - 启用 SQL 日志记录
+
+### 其他
+
+- `orm.WithSQLLogging(debugger.LoggerInterface, opts ...interface{}) gorm.Option` - 在 gorm.Open 初始化阶段启用 SQL 日志记录
 
 ### 基础模型方法
 

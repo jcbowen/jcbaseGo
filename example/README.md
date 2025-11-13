@@ -41,6 +41,9 @@ example/
 ├── orm/                        # 数据库 ORM 示例
 │   ├── mysql/                  # MySQL 数据库示例
 │   │   └── main.go
+│   ├── debugger_integration/   # ORM 与 Debugger 集成示例
+│   │   ├── README.md
+│   │   └── main.go
 │   └── sqlite/                 # SQLite 数据库示例（待补充）
 │       └── .gitkeep
 ├── redis/                      # Redis 缓存组件示例
@@ -130,6 +133,7 @@ go run example/debugger/config_examples.go
 
 ### 数据库 ORM (orm/)
 - **mysql**: MySQL 数据库操作示例，包含 CRUD、事务等操作
+- **debugger_integration**: 与 Debugger 集成的 SQL 日志记录示例
 - **sqlite**: SQLite 数据库操作示例（待补充）
 
 ### 调试器组件 (debugger/)
