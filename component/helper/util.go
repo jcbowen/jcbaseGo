@@ -940,6 +940,79 @@ func CheckAndSetDefault(i interface{}) error {
 	return nil
 }
 
+// CheckAndSetDefaultWithPreserveTag 按 `default` 标签设置默认值，同时保留带有 `preserve:"true"` 标签字段的原始值
+// 函数名：CheckAndSetDefaultWithPreserveTag
+// 参数：i interface{} — 结构体或其指针，支持多层指针；顶层为nil指针时直接返回
+// 返回值：error — 当默认值解析失败、类型溢出或不支持的类型时返回错误
+// 异常：不触发panic，本函数所有失败均以error返回
+// 使用说明：
+// - 为需要保留用户显式设置零值（如 bool=false）的字段添加 `preserve:"true"` 标签
+// - 本函数先快照这些字段的原始值，再调用 CheckAndSetDefault 设置默认值，最后恢复快照值
+// 使用示例：
+//
+//	type Config struct {
+//	    EnableFeature bool `json:"enable_feature" default:"true" preserve:"true"`
+//	}
+//	cfg := &Config{}
+//	_ = helper.CheckAndSetDefaultWithPreserveTag(cfg)
+func CheckAndSetDefaultWithPreserveTag(i interface{}) error {
+	v := reflect.ValueOf(i)
+	if !v.IsValid() {
+		return nil
+	}
+
+	// 解引用到结构体
+	for v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
+
+	if v.Kind() != reflect.Struct {
+		return nil
+	}
+
+	t := v.Type()
+	// 快照需要保留的字段值
+	snapshots := make(map[int]interface{})
+	for idx := 0; idx < v.NumField(); idx++ {
+		f := v.Field(idx)
+		sf := t.Field(idx)
+		if !f.CanSet() {
+			continue
+		}
+		if sf.Tag.Get("preserve") == "true" {
+			snapshots[idx] = f.Interface()
+		}
+	}
+
+	// 设置默认值
+	if err := CheckAndSetDefault(i); err != nil {
+		return err
+	}
+
+	// 恢复快照值
+	for idx, val := range snapshots {
+		f := v.Field(idx)
+		if !f.CanSet() {
+			continue
+		}
+		rv := reflect.ValueOf(val)
+		// 处理类型适配（如接口字段）
+		if rv.IsValid() && rv.Type().AssignableTo(f.Type()) {
+			f.Set(rv)
+			continue
+		}
+		// 指针/接口类型兼容赋值
+		if rv.IsValid() && rv.Type().ConvertibleTo(f.Type()) {
+			f.Set(rv.Convert(f.Type()))
+		}
+	}
+
+	return nil
+}
+
 // setDefaultValue 根据字段类型解析并设置默认值
 // 函数名：setDefaultValue
 // 参数：

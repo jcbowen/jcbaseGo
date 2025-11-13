@@ -19,11 +19,11 @@ import (
 
 // Config 调试器配置结构
 type Config struct {
-	Enabled         bool          `json:"enabled" default:"true"`          // 是否启用调试器
-	MaxBodySize     int64         `json:"max_body_size" default:"1024"`    // 最大请求/响应体大小（KB），默认1MB
-	RetentionPeriod time.Duration `json:"retention_period" default:"168h"` // 日志保留期限，默认7天
-	Level           LogLevel      `json:"level" default:"1"`               // 日志级别：LevelSilent
-	MaxRecords      int           `json:"max_records" default:"150"`       // 最大记录数量，默认150条
+	Enabled         bool          `json:"enabled" default:"true" preserve:"true"` // 是否启用调试器
+	MaxBodySize     int64         `json:"max_body_size" default:"1024"`           // 最大请求/响应体大小（KB），默认1MB
+	RetentionPeriod time.Duration `json:"retention_period" default:"168h"`        // 日志保留期限，默认7天
+	Level           LogLevel      `json:"level" default:"1"`                      // 日志级别：LevelSilent
+	MaxRecords      int           `json:"max_records" default:"150"`              // 最大记录数量，默认150条
 
 	// 过滤配置
 	SkipPaths   []string `json:"skip_paths" default:""`          // 跳过的路径（如静态文件："/static/,/favicon.ico"）
@@ -33,20 +33,20 @@ type Config struct {
 	SampleRate float64 `json:"sample_rate" default:"1.0"` // 采样率（0-1之间），默认记录所有请求
 
 	// IP访问控制配置
-	AllowedIPs []string `json:"allowed_ips" default:""`  // 允许访问的IP白名单，空数组表示不限制
-	UseCDN     bool     `json:"use_cdn" default:"false"` // 是否使用CDN，影响真实IP获取方式
+	AllowedIPs []string `json:"allowed_ips" default:""`                  // 允许访问的IP白名单，空数组表示不限制
+	UseCDN     bool     `json:"use_cdn" default:"false" preserve:"true"` // 是否使用CDN，影响真实IP获取方式
 
 	// 流式请求配置
-	EnableStreamingSupport bool  `json:"enable_streaming_support" default:"false"` // 是否启用流式请求支持
-	StreamingChunkSize     int64 `json:"streaming_chunk_size" default:"1024"`      // 流式响应分块大小（KB），默认1MB，0表示无限制
-	MaxStreamingChunks     int   `json:"max_streaming_chunks" default:"10"`        // 最大流式响应分块数量，默认10个，0表示无限制
-	MaxStreamingMemory     int64 `json:"max_streaming_memory" default:"10485760"`  // 流式响应最大内存使用量（字节），默认10MB，0表示无限制
+	EnableStreamingSupport bool  `json:"enable_streaming_support" default:"false" preserve:"true"` // 是否启用流式请求支持
+	StreamingChunkSize     int64 `json:"streaming_chunk_size" default:"1024"`                      // 流式响应分块大小（KB），默认1MB，0表示无限制
+	MaxStreamingChunks     int   `json:"max_streaming_chunks" default:"10"`                        // 最大流式响应分块数量，默认10个，0表示无限制
+	MaxStreamingMemory     int64 `json:"max_streaming_memory" default:"10485760"`                  // 流式响应最大内存使用量（字节），默认10MB，0表示无限制
 
 	// Multipart请求配置
-	EnableMultipartSupport bool  `json:"enable_multipart_support" default:"true"` // 是否启用multipart请求支持
-	MultipartMaxPartSize   int64 `json:"multipart_max_part_size" default:"64"`    // multipart单个部分最大大小（KB），默认64KB
-	MultipartSkipFiles     bool  `json:"multipart_skip_files" default:"false"`    // 是否跳过文件内容记录，只记录元数据
-	MultipartPreserveState bool  `json:"multipart_preserve_state" default:"true"` // 是否保持Gin上下文状态，避免破坏后续中间件
+	EnableMultipartSupport bool  `json:"enable_multipart_support" default:"true" preserve:"true"` // 是否启用multipart请求支持
+	MultipartMaxPartSize   int64 `json:"multipart_max_part_size" default:"64"`                    // multipart单个部分最大大小（KB），默认64KB
+	MultipartSkipFiles     bool  `json:"multipart_skip_files" default:"false" preserve:"true"`    // 是否跳过文件内容记录，只记录元数据
+	MultipartPreserveState bool  `json:"multipart_preserve_state" default:"true" preserve:"true"` // 是否保持Gin上下文状态，避免破坏后续中间件
 
 	// 中间件执行顺序配置
 	MiddlewareOrder string `json:"middleware_order" default:"normal"` // 中间件执行顺序：normal（正常）、early（优先）、late（最后）
@@ -75,25 +75,10 @@ func New(config *Config) (*Debugger, error) {
 		config: config,
 	}
 
-	// 保存用户显式设置的布尔值，避免被CheckAndSetDefault覆盖
-	// 这是为了解决测试用例需要设置false值但被默认值覆盖的问题
-	userSetEnableMultipartSupport := config.EnableMultipartSupport
-	userSetMultipartPreserveState := config.MultipartPreserveState
-	userSetUseCDN := config.UseCDN
-	userSetEnableStreamingSupport := config.EnableStreamingSupport
-	userSetMultipartSkipFiles := config.MultipartSkipFiles
-
-	// 使用CheckAndSetDefault方法设置默认值，符合jcbaseGo规范
-	if err := helper.CheckAndSetDefault(d.config); err != nil {
+	// 使用CheckAndSetDefaultWithPreserveTag方法设置默认值，并保留关键布尔字段的用户显式设置
+	if err := helper.CheckAndSetDefaultWithPreserveTag(d.config); err != nil {
 		return nil, fmt.Errorf("设置配置默认值失败: %w", err)
 	}
-
-	// 恢复用户显式设置的值
-	config.EnableMultipartSupport = userSetEnableMultipartSupport
-	config.MultipartPreserveState = userSetMultipartPreserveState
-	config.UseCDN = userSetUseCDN
-	config.EnableStreamingSupport = userSetEnableStreamingSupport
-	config.MultipartSkipFiles = userSetMultipartSkipFiles
 
 	// 如果没有传入存储实例，则使用默认的内存存储
 	if d.config.Storage == nil {
