@@ -73,7 +73,6 @@ func (l *GormDebuggerLogger) Trace(ctx context.Context, begin time.Time, fc func
 
 	// 预分配map容量，避免多次内存分配
 	fields := make(map[string]interface{}, 6)
-	fields["sql"] = sql
 	fields["duration_ms"] = elapsed.Milliseconds()
 	fields["rows_affected"] = rowsAffected
 
@@ -81,9 +80,10 @@ func (l *GormDebuggerLogger) Trace(ctx context.Context, begin time.Time, fc func
 	if err != nil {
 		fields["error"] = err.Error()
 		fields["error_type"] = fmt.Sprintf("%T", err)
+		fields["message_text"] = "SQL执行失败"
 
 		// 记录错误级别日志
-		l.debuggerLogger.Error("SQL执行失败", fields)
+		l.debuggerLogger.Error(fmt.Sprintf("SQL执行失败:\n %s", sql), fields)
 		return
 	}
 
@@ -91,13 +91,14 @@ func (l *GormDebuggerLogger) Trace(ctx context.Context, begin time.Time, fc func
 	if elapsed > l.slowThreshold {
 		fields["slow_query"] = true
 		fields["slow_threshold_ms"] = l.slowThreshold.Milliseconds()
-		l.debuggerLogger.Warn("慢SQL查询", fields)
+		l.debuggerLogger.Warn(fmt.Sprintf("慢SQL查询:\n %s", sql), fields)
 		return
 	}
 
-	// 记录调试级别日志 - 仅在debug级别时记录正常SQL
-	if l.logLevel >= logger.Info {
-		l.debuggerLogger.Info("SQL执行成功", fields)
+	// 记录调试级别日志 - 根据GORM日志级别和debugger日志级别共同决定是否记录
+	// 只有当GORM日志级别为Info及以上，并且debugger日志级别也为Info及以上时才记录正常SQL
+	if l.logLevel >= logger.Info && l.debuggerLogger.GetLevel() >= debugger.LevelInfo {
+		l.debuggerLogger.Info(fmt.Sprintf("SQL执行成功:\n %s", sql), fields)
 	}
 }
 

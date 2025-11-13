@@ -128,7 +128,12 @@ func (c *Instance) GetDb() *gorm.DB {
 	}
 	db := c.Db
 	if c.debug {
-		db = db.Debug()
+		if c.debuggerLogger != nil {
+			c.Db = orm.EnableSQLLogging(c.Db, c.debuggerLogger, debugger.LevelInfo)
+			db = c.Db
+		} else {
+			db = db.Debug()
+		}
 	}
 	return db
 }
