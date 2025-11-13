@@ -820,16 +820,6 @@ func IsEmptyValue(val interface{}) bool {
 	}
 }
 
-// isEmptyStruct 检查是否是一个空结构体
-func isEmptyStruct(value reflect.Value) bool {
-	for i := 0; i < value.NumField(); i++ {
-		if !IsEmptyValue(value.Field(i).Interface()) {
-			return false
-		}
-	}
-	return true
-}
-
 // CheckAndSetDefault 检查结构体中的字段是否为空，如果为空则设置为默认值
 // 常见问题：如果发现默认值赋值失败，但是又没有出现报错，可以看看是不是传递的指针的指针
 func CheckAndSetDefault(i interface{}) error {
