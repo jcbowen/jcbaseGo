@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -26,8 +27,10 @@ type Config struct {
 	MaxRecords      int           `json:"max_records" default:"150"`              // 最大记录数量，默认150条
 
 	// 过滤配置
-	SkipPaths   []string `json:"skip_paths" default:""`          // 跳过的路径（如静态文件："/static/,/favicon.ico"）
-	SkipMethods []string `json:"skip_methods" default:"OPTIONS"` // 跳过的HTTP方法
+	SkipPaths        []string `json:"skip_paths" default:""`                                                                                                               // 跳过的路径（如静态文件："/static/,/favicon.ico"）
+	SkipMethods      []string `json:"skip_methods" default:"OPTIONS"`                                                                                                      // 跳过的HTTP方法
+	AutoSkipStatic   bool     `json:"auto_skip_static" default:"true" preserve:"true"`                                                                                     // 是否自动跳过静态资源请求
+	StaticExtensions []string `json:"static_extensions" default:".css,.js,.map,.png,.jpg,.jpeg,.gif,.svg,.ico,.woff,.woff2,.ttf,.eot,.otf,.webp,.txt,.xml,.pdf,.mp4,.mp3"` // 静态资源扩展名列表
 
 	// 采样配置
 	SampleRate float64 `json:"sample_rate" default:"1.0"` // 采样率（0-1之间），默认记录所有请求
@@ -551,6 +554,11 @@ func (d *Debugger) shouldSkip(c *gin.Context) bool {
 		}
 	}
 
+	// 自动跳过静态资源请求
+	if d.config.AutoSkipStatic && d.isStaticRequest(c) {
+		return true
+	}
+
 	// 检查路径
 	for _, path := range d.config.SkipPaths {
 		if strings.HasPrefix(c.Request.URL.Path, path) {
@@ -565,6 +573,41 @@ func (d *Debugger) shouldSkip(c *gin.Context) bool {
 		}
 	}
 
+	return false
+}
+
+// isStaticRequest 检查是否为静态资源请求
+// 函数名：isStaticRequest
+// 参数：
+// - c *gin.Context — Gin上下文
+// 返回值：
+// - bool — 是静态资源请求返回 true，否则返回 false
+// 异常：不触发 panic
+// 使用示例：
+//
+//	if d.isStaticRequest(c) { return }
+//
+// 说明：通过目录提示和扩展名判断静态资源，仅针对 GET/HEAD 方法
+func (d *Debugger) isStaticRequest(c *gin.Context) bool {
+	p := c.Request.URL.Path
+	m := c.Request.Method
+	if m != http.MethodGet && m != http.MethodHead {
+		return false
+	}
+	// for _, hint := range []string{"/static/", "/assets/", "/public/", "/uploads/", "/favicon.ico"} {
+	// 	if strings.Contains(p, hint) || strings.HasSuffix(p, hint) {
+	// 		return true
+	// 	}
+	// }
+	ext := strings.ToLower(path.Ext(p))
+	if ext == "" {
+		return false
+	}
+	for _, e := range d.config.StaticExtensions {
+		if strings.ToLower(e) == ext {
+			return true
+		}
+	}
 	return false
 }
 
