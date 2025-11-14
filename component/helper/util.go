@@ -989,17 +989,26 @@ func CheckAndSetDefaultWithPreserveTag(i interface{}) error {
 			continue
 		}
 		if sf.Tag.Get("preserve") == "true" {
+			defTag, hasDef := sf.Tag.Lookup("default")
+			if !hasDef {
+				continue
+			}
+			defVal, ok := buildDefaultValueForType(f.Type(), defTag)
+			if !ok {
+				continue
+			}
 			switch f.Kind() {
 			case reflect.Ptr, reflect.Interface:
-				// 非nil指针/接口视为显式提供（即使其内部为零值）
-				if !f.IsNil() {
-					snapshots[idx] = f.Interface()
+				if f.IsNil() {
+					continue
 				}
 			default:
-				// 非零值视为显式提供；零值不保留，允许默认值覆盖
-				if !IsEmptyValue(f.Interface()) {
-					snapshots[idx] = f.Interface()
+				if IsEmptyValue(f.Interface()) {
+					continue
 				}
+			}
+			if !equalToDefault(f, defVal) {
+				snapshots[idx] = f.Interface()
 			}
 		}
 	}
@@ -1028,6 +1037,83 @@ func CheckAndSetDefaultWithPreserveTag(i interface{}) error {
 	}
 
 	return nil
+}
+
+// buildDefaultValueForType 根据字段类型与 `default` 标签构造用于比较的默认值
+// 函数名：buildDefaultValueForType
+// 参数：
+// - typ reflect.Type — 字段的类型（可能为基本类型、指针、结构体等）
+// - tag string — `default` 标签文本
+// 返回值：
+// - reflect.Value — 构造出的默认值（类型与字段匹配；指针字段返回指针）
+// - bool — 构造是否成功（当类型不支持或解析失败时返回 false）
+// 异常：不触发 panic；内部依赖的解析失败会通过返回 false 表示
+// 使用示例：
+//
+//	def, ok := buildDefaultValueForType(field.Type(), sf.Tag.Get("default"))
+//	if ok && !equalToDefault(field, def) { /* 记录快照 */ }
+func buildDefaultValueForType(typ reflect.Type, tag string) (reflect.Value, bool) {
+	if tag == "" {
+		return reflect.Value{}, false
+	}
+	switch typ.Kind() {
+	case reflect.Ptr:
+		elem := typ.Elem()
+		if elem.Kind() == reflect.Struct && elem != reflect.TypeOf(time.Time{}) {
+			nv := reflect.New(elem)
+			_ = CheckAndSetDefault(nv.Interface())
+			return nv, true
+		}
+		nv := reflect.New(elem)
+		if err := setDefaultValue(nv.Elem(), tag); err != nil {
+			return reflect.Value{}, false
+		}
+		return nv, true
+	case reflect.Struct:
+		if typ == reflect.TypeOf(time.Time{}) {
+			dv := reflect.New(typ).Elem()
+			if err := setDefaultValue(dv, tag); err != nil {
+				return reflect.Value{}, false
+			}
+			return dv, true
+		}
+		return reflect.Value{}, false
+	default:
+		dv := reflect.New(typ).Elem()
+		if err := setDefaultValue(dv, tag); err != nil {
+			return reflect.Value{}, false
+		}
+		return dv, true
+	}
+}
+
+// equalToDefault 判断字段当前值是否等于构造出的默认值
+// 函数名：equalToDefault
+// 参数：
+// - f reflect.Value — 字段当前值
+// - def reflect.Value — 默认值（类型需与字段匹配；指针字段默认值应为指针）
+// 返回值：
+// - bool — 两值是否相等
+// 异常：不触发 panic
+// 使用示例：
+//
+//	if def.IsValid() && !equalToDefault(field, def) { /* 记录快照 */ }
+func equalToDefault(f reflect.Value, def reflect.Value) bool {
+	if !def.IsValid() {
+		return false
+	}
+	switch f.Kind() {
+	case reflect.Ptr:
+		if f.IsNil() {
+			return def.IsNil()
+		}
+		if def.IsNil() {
+			return false
+		}
+		return reflect.DeepEqual(f.Elem().Interface(), def.Elem().Interface())
+	default:
+		return reflect.DeepEqual(f.Interface(), def.Interface())
+	}
 }
 
 // setDefaultValue 根据字段类型解析并设置默认值
