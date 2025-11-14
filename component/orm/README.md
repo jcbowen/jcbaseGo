@@ -227,7 +227,6 @@ debugDB.GetDb().Find(&users)  // 会输出 SQL 语句
 
 ```go
 import (
-    "time"
     "github.com/jcbowen/jcbaseGo/component/debugger"
     "github.com/jcbowen/jcbaseGo/component/orm/mysql"
 )
@@ -244,6 +243,8 @@ db := mysql.NewWithDebugger(dbConfig, dbg.GetLogger())
 #### 运行时启用/配置 SQL 日志
 
 ```go
+import "time"
+
 // 已有实例场景：启用 SQL 日志记录并自定义级别与慢查询阈值
 db.EnableSQLLogging(dbg.GetLogger(), "debug", 100*time.Millisecond)
 
@@ -306,10 +307,11 @@ type SqlLiteStruct struct {
 
 ORM 组件提供强大的模型解析功能：
 
-1. **表名解析**：自动根据模型名称生成表名
-2. **字段映射**：解析 GORM 标签，处理字段映射
-3. **软删除识别**：自动识别软删除字段和条件
-4. **配置别名**：支持多数据库配置
+1. **表名解析**：自动根据模型名称生成表名，支持表前缀和单复数配置
+2. **字段映射**：解析 GORM 标签，处理字段映射，支持自定义字段名
+3. **软删除识别**：自动识别软删除字段和条件，支持 `soft_delete` 标签自定义
+4. **配置别名**：支持多数据库配置，通过环境变量管理配置信息
+5. **时间字段处理**：自动设置创建时间和更新时间
 
 ### 分页查询选项
 
@@ -317,19 +319,19 @@ ORM 组件提供强大的模型解析功能：
 type FindPageOptions struct {
     // 查询配置
     Page        int  `default:"1"`     // 页码，默认 1
-    PageSize    int  `default:"10"`   // 分页大小，默认 10，最大 1000
-    ShowDeleted bool `default:"false"` // 是否显示软删除数据
-    
+    PageSize    int  `default:"10"`    // 分页大小，默认 10，最大 1000
+    ShowDeleted bool `default:"false"` // 是否显示软删除数据，默认 false
+
     // 模型配置
-    PkId            string `default:"id"` // 主键字段名
-    ModelTableAlias string `default:""`   // 模型表别名
-    
+    PkId            string `default:"id"` // 主键字段名，默认 "id"
+    ModelTableAlias string `default:""`   // 模型表别名，默认为表名
+
     // 回调函数
-    ListQuery  func(*gorm.DB) *gorm.DB                   // 自定义查询条件
-    ListSelect func(*gorm.DB) *gorm.DB                   // 自定义查询字段
-    ListOrder  func() interface{}                        // 自定义排序
-    ListEach   func(interface{}) interface{}             // 自定义结果处理
-    ListReturn func(jcbaseGo.ListData) jcbaseGo.ListData // 自定义返回格式
+    ListQuery  func(*gorm.DB) *gorm.DB                   // 可选，自定义查询回调
+    ListSelect func(*gorm.DB) *gorm.DB                   // 可选，自定义查询字段回调
+    ListOrder  func() interface{}                        // 可选，自定义排序回调
+    ListEach   func(interface{}) interface{}             // 可选，自定义遍历回调
+    ListReturn func(jcbaseGo.ListData) jcbaseGo.ListData // 可选，自定义返回回调
 }
 ```
 
@@ -433,6 +435,8 @@ type Instance interface {
 - `New(dbConfig DbStruct, opts ...string) *Instance` - 创建实例
 - `NewWithDebugger(dbConfig DbStruct, debuggerLogger debugger.LoggerInterface, opts ...string) *Instance` - 创建并集成 Debugger
 - `Debug() *Instance` - 开启调试模式
+- `GetDb() *gorm.DB` - 获取数据库连接（支持调试模式优先级：debuggerLogger > debug标志）
+- `GetConf() interface{}` - 获取配置信息
 - `GetAllTableName() ([]AllTableName, error)` - 获取所有表名
 - `TableName(tableName *string, quotes ...bool) *Instance` - 处理表名
 - `FindForPage(model interface{}, options *FindPageOptions) (ListData, error)` - 分页查询
@@ -447,6 +451,8 @@ type Instance interface {
 - `New(conf SqlLiteStruct, opts ...string) *Instance` - 创建实例
 - `NewWithDebugger(conf SqlLiteStruct, debuggerLogger debugger.LoggerInterface, opts ...string) *Instance` - 创建并集成 Debugger
 - `Debug() *Instance` - 开启调试模式
+- `GetDb() *gorm.DB` - 获取数据库连接（支持调试模式优先级：debuggerLogger > debug标志）
+- `GetConf() interface{}` - 获取配置信息
 - `GetAllTableName() ([]string, error)` - 获取所有表名
 - `TableName(tableName *string, quotes ...bool) *Instance` - 处理表名
 - `FindForPage(model interface{}, options *FindPageOptions) (ListData, error)` - 分页查询
@@ -459,13 +465,14 @@ type Instance interface {
 ### 其他
 
 - `orm.WithSQLLogging(debugger.LoggerInterface, opts ...interface{}) gorm.Option` - 在 gorm.Open 初始化阶段启用 SQL 日志记录
+- `orm.EnableSQLLogging(db *gorm.DB, debuggerLogger debugger.LoggerInterface, opts ...interface{}) *gorm.DB` - 为现有 GORM 实例启用 SQL 日志记录
 
 ### 基础模型方法
 
-- `ModelParse(modelType reflect.Type) (tableName, fields, softDeleteField, softDeleteCondition)` - 解析模型
-- `BeforeCreate(tx *gorm.DB) error` - 创建前回调
-- `BeforeUpdate(tx *gorm.DB) error` - 更新前回调
-- `GetConfigAlias(model interface{}) string` - 获取配置别名
+- `ModelParse(modelType reflect.Type) (tableName, fields, softDeleteField, softDeleteCondition)` - 解析模型（支持软删除标签识别）
+- `BeforeCreate(tx *gorm.DB) error` - 创建前回调（自动设置创建时间和更新时间）
+- `BeforeUpdate(tx *gorm.DB) error` - 更新前回调（自动设置更新时间）
+- `GetConfigAlias(model interface{}) string` - 获取配置别名（支持模型自定义别名）
 
 ## 错误处理
 
