@@ -821,6 +821,25 @@ func IsEmptyValue(val interface{}) bool {
 }
 
 // CheckAndSetDefault 检查结构体中的字段是否为空，如果为空则设置为默认值
+// 函数名：CheckAndSetDefault
+// 参数：i interface{} — 结构体或其指针，支持一层指针传入
+// 返回值：error — 始终返回nil；本函数不抛出解析错误，保持兼容的静默行为
+// 异常：不触发panic（除非外部传入不可寻址的值并强制Addr）
+// 使用说明：
+// - 仅对以下类型在“空值”时设置默认：string、bool、int系、float32/float64、time.Duration
+// - struct与interface字段将递归调用本函数（interface字段递归对原逻辑无实际效果，保持兼容）
+// - default标签为空时不会报错，数值/布尔解析失败会被忽略（保持原有逻辑）
+// 使用示例：
+//
+//	type AppConfig struct {
+//	    Name    string        `json:"name" default:"myapp"`
+//	    Enabled bool          `json:"enabled" default:"true"`
+//	    Port    int           `json:"port" default:"8080"`
+//	    Timeout time.Duration `json:"timeout" default:"300ms"`
+//	}
+//	cfg := &AppConfig{}
+//	_ = helper.CheckAndSetDefault(cfg)
+//
 // 常见问题：如果发现默认值赋值失败，但是又没有出现报错，可以看看是不是传递的指针的指针
 func CheckAndSetDefault(i interface{}) error {
 	// 获取结构体反射值
@@ -838,16 +857,16 @@ func CheckAndSetDefault(i interface{}) error {
 	}
 
 	// 遍历结构体字段
-	for i := 0; i < val.NumField(); i++ {
-		field := val.Field(i)
-		fieldType := val.Type().Field(i)
+	for idx := 0; idx < val.NumField(); idx++ {
+		field := val.Field(idx)
+		fieldType := val.Type().Field(idx)
 
 		// 忽略非导出字段
 		if !field.CanSet() {
 			continue
 		}
 
-		// 如果字段是struct或interface，则递归检查
+		// 递归处理 struct 或 interface 字段
 		if field.Kind() == reflect.Struct || field.Kind() == reflect.Interface {
 			if err := CheckAndSetDefault(field.Addr().Interface()); err != nil {
 				return err
@@ -859,24 +878,24 @@ func CheckAndSetDefault(i interface{}) error {
 		tag := fieldType.Tag.Get("default")
 		fieldKind := field.Kind()
 
-		// 如果字段为空字符串，则设置为默认值
+		// 字符串：空字符串设置为默认值
 		if fieldKind == reflect.String && field.Len() == 0 {
 			field.SetString(tag)
 		}
 
-		// 如果字段是bool类型，则设置默认值
+		// 布尔：为 false 时，default=="true" 设置为 true
 		if fieldKind == reflect.Bool && !field.Bool() {
 			defaultVal := tag == "true"
 			field.SetBool(defaultVal)
 		}
 
-		// 如果字段是int类型，则设置默认值
+		// 整型：为 0 时设置默认值，解析失败忽略（默认0）
 		if strings.HasPrefix(field.Type().String(), "int") && field.Int() == 0 {
 			defaultVal, _ := strconv.ParseInt(tag, 10, 64)
 			field.SetInt(defaultVal)
 		}
 
-		// 如果字段是float类型，则设置默认值
+		// 浮点：为 0.0 时设置默认值，解析失败忽略（默认0.0）
 		if fieldKind == reflect.Float32 || fieldKind == reflect.Float64 {
 			defaultVal, _ := strconv.ParseFloat(tag, 64)
 			if field.Float() == 0 {
@@ -884,7 +903,7 @@ func CheckAndSetDefault(i interface{}) error {
 			}
 		}
 
-		// 如果字段是time.Duration类型，则设置默认值
+		// time.Duration：为 0 时设置默认值，解析失败忽略
 		if field.Type() == reflect.TypeOf(time.Duration(0)) && field.Int() == 0 {
 			duration, err := time.ParseDuration(tag)
 			if err == nil {
