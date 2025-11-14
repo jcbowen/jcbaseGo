@@ -820,125 +820,75 @@ func IsEmptyValue(val interface{}) bool {
 	}
 }
 
-// CheckAndSetDefault 检查结构体中的字段是否为空，并按 `default` 标签设置默认值
-// 函数名：CheckAndSetDefault
-// 参数：i interface{} — 结构体或其指针，支持多层指针；顶层为nil指针时直接返回
-// 返回值：error — 当默认值解析失败、类型溢出或不支持的类型时返回错误
-// 异常：不触发panic，本函数所有失败均以error返回
-// 说明：
-// - 仅当字段为零值且存在 `default` 标签时赋默认值
-// - 支持基本类型、指针、结构体递归；time.Time 字段支持字符串默认解析
-// - 支持切片默认值（JSON数组或逗号分隔字符串）和 map[string]V 默认值（JSON对象）
+// CheckAndSetDefault 检查结构体中的字段是否为空，如果为空则设置为默认值
 // 常见问题：如果发现默认值赋值失败，但是又没有出现报错，可以看看是不是传递的指针的指针
 func CheckAndSetDefault(i interface{}) error {
-	v := reflect.ValueOf(i)
-	if !v.IsValid() {
+	// 获取结构体反射值
+	val := reflect.ValueOf(i)
+
+	// 如果传入的是指针类型，获取指向的结构体
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+
+	// 不是结构体的时候直接跳过处理
+	if val.Kind() != reflect.Struct {
+		// log.Printf("%s 不是结构体，直接跳过处理", val.String())
 		return nil
 	}
 
-	for v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return nil
-		}
-		v = v.Elem()
-	}
+	// 遍历结构体字段
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		fieldType := val.Type().Field(i)
 
-	if v.Kind() != reflect.Struct {
-		return nil
-	}
-
-	t := v.Type()
-	for idx := 0; idx < v.NumField(); idx++ {
-		f := v.Field(idx)
-		sf := t.Field(idx)
-
-		if !f.CanSet() {
+		// 忽略非导出字段
+		if !field.CanSet() {
 			continue
 		}
 
-		switch f.Kind() {
-		case reflect.Struct:
-			if f.Type() == reflect.TypeOf(time.Time{}) {
-				tag := sf.Tag.Get("default")
-				if tag != "" && IsEmptyValue(f.Interface()) {
-					if err := setDefaultValue(f, tag); err != nil {
-						return err
-					}
-				}
-				continue
-			}
-			if err := CheckAndSetDefault(f.Addr().Interface()); err != nil {
+		// 如果字段是struct或interface，则递归检查
+		if field.Kind() == reflect.Struct || field.Kind() == reflect.Interface {
+			if err := CheckAndSetDefault(field.Addr().Interface()); err != nil {
 				return err
 			}
 			continue
-		case reflect.Interface:
-			if f.IsNil() {
-				tag := sf.Tag.Get("default")
-				if tag == "" {
-					continue
-				}
-				continue
-			}
-			dv := f.Elem()
-			if dv.Kind() == reflect.Struct {
-				if dv.CanAddr() {
-					if err := CheckAndSetDefault(dv.Addr().Interface()); err != nil {
-						return err
-					}
-				}
-				continue
-			}
-			if dv.Kind() == reflect.Ptr {
-				if err := CheckAndSetDefault(dv.Interface()); err != nil {
-					return err
-				}
-				continue
-			}
-		case reflect.Ptr:
-			elem := f.Type().Elem()
-			if elem.Kind() == reflect.Struct {
-				// 仅当字段存在 default 标签时才初始化 nil 的结构体指针，避免递归自引用导致的无限展开
-				tag := sf.Tag.Get("default")
-				if f.IsNil() {
-					if tag == "" {
-						// 无默认标签，不初始化，避免潜在的无限递归
-						continue
-					}
-					f.Set(reflect.New(elem))
-				}
-				if err := CheckAndSetDefault(f.Interface()); err != nil {
-					return err
-				}
-				continue
-			}
-			tag := sf.Tag.Get("default")
-			if tag == "" {
-				continue
-			}
-			if f.IsNil() {
-				nv := reflect.New(elem)
-				if err := setDefaultValue(nv.Elem(), tag); err != nil {
-					return err
-				}
-				f.Set(nv)
-			} else {
-				if IsEmptyValue(f.Elem().Interface()) {
-					if err := setDefaultValue(f.Elem(), tag); err != nil {
-						return err
-					}
-				}
-			}
-			continue
 		}
 
-		tag := sf.Tag.Get("default")
-		if tag == "" {
-			continue
+		// 获取字段类型和默认值标签
+		tag := fieldType.Tag.Get("default")
+		fieldKind := field.Kind()
+
+		// 如果字段为空字符串，则设置为默认值
+		if fieldKind == reflect.String && field.Len() == 0 {
+			field.SetString(tag)
 		}
 
-		if IsEmptyValue(f.Interface()) {
-			if err := setDefaultValue(f, tag); err != nil {
-				return err
+		// 如果字段是bool类型，则设置默认值
+		if fieldKind == reflect.Bool && !field.Bool() {
+			defaultVal := tag == "true"
+			field.SetBool(defaultVal)
+		}
+
+		// 如果字段是int类型，则设置默认值
+		if strings.HasPrefix(field.Type().String(), "int") && field.Int() == 0 {
+			defaultVal, _ := strconv.ParseInt(tag, 10, 64)
+			field.SetInt(defaultVal)
+		}
+
+		// 如果字段是float类型，则设置默认值
+		if fieldKind == reflect.Float32 || fieldKind == reflect.Float64 {
+			defaultVal, _ := strconv.ParseFloat(tag, 64)
+			if field.Float() == 0 {
+				field.SetFloat(defaultVal)
+			}
+		}
+
+		// 如果字段是time.Duration类型，则设置默认值
+		if field.Type() == reflect.TypeOf(time.Duration(0)) && field.Int() == 0 {
+			duration, err := time.ParseDuration(tag)
+			if err == nil {
+				field.SetInt(int64(duration))
 			}
 		}
 	}
