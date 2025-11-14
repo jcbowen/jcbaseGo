@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo/component/debugger"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/orm"
 )
@@ -22,6 +23,12 @@ type ControllerInterface interface {
 	//   - ctx any: crud上下文对象(*crud.Context或者*gin.Context,不同的传入，处理不同的逻辑)
 	// 功能：在CRUD初始化时调用，用于控制器级别的初始化确认
 	CheckInit(ctx any) *Context
+
+	// GetLogger 获取日志记录器
+	// 返回值：
+	//   - debugger.LoggerInterface: 日志记录器接口实例
+	//   - bool: 是否成功获取日志记录器
+	GetLogger() debugger.LoggerInterface
 }
 
 type Trait struct {
@@ -76,6 +83,12 @@ func (t *Trait) InitCrud(ginContext *gin.Context, args ...any) (ctx *Context) {
 	// 调用控制器初始化确认方法
 	if t.Controller != nil {
 		t.Controller.CheckInit(ctx)
+		// 给DBI设置日志记录器
+		if t.DBI != nil {
+			// 获取日志记录器
+			logger := t.Controller.GetLogger()
+			t.DBI.SetDebuggerLogger(logger)
+		}
 	}
 
 	// 判断模型是否为空
