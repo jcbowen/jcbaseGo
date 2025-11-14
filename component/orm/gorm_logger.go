@@ -2,6 +2,7 @@ package orm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -77,7 +78,7 @@ func (l *GormDebuggerLogger) Trace(ctx context.Context, begin time.Time, fc func
 	fields["rows_affected"] = rowsAffected
 
 	// 添加错误信息（如果有）
-	if err != nil {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		fields["error"] = err.Error()
 		fields["error_type"] = fmt.Sprintf("%T", err)
 		fields["message_text"] = "SQL执行失败"
