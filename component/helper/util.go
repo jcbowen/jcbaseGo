@@ -980,7 +980,7 @@ func CheckAndSetDefaultWithPreserveTag(i interface{}) error {
 	}
 
 	t := v.Type()
-	// 快照需要保留的字段值
+	// 快照需要保留的字段值（仅保留可判定为“显式提供”的值）
 	snapshots := make(map[int]interface{})
 	for idx := 0; idx < v.NumField(); idx++ {
 		f := v.Field(idx)
@@ -989,7 +989,18 @@ func CheckAndSetDefaultWithPreserveTag(i interface{}) error {
 			continue
 		}
 		if sf.Tag.Get("preserve") == "true" {
-			snapshots[idx] = f.Interface()
+			switch f.Kind() {
+			case reflect.Ptr, reflect.Interface:
+				// 非nil指针/接口视为显式提供（即使其内部为零值）
+				if !f.IsNil() {
+					snapshots[idx] = f.Interface()
+				}
+			default:
+				// 非零值视为显式提供；零值不保留，允许默认值覆盖
+				if !IsEmptyValue(f.Interface()) {
+					snapshots[idx] = f.Interface()
+				}
+			}
 		}
 	}
 
