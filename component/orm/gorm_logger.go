@@ -76,15 +76,16 @@ func (l *GormDebuggerLogger) Trace(ctx context.Context, begin time.Time, fc func
 	fields := make(map[string]interface{}, 6)
 	fields["duration_ms"] = elapsed.Milliseconds()
 	fields["rows_affected"] = rowsAffected
+	fields["status_text"] = "SQL执行成功"
 
 	// 添加错误信息（如果有）
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		fields["error"] = err.Error()
 		fields["error_type"] = fmt.Sprintf("%T", err)
-		fields["message_text"] = "SQL执行失败"
+		fields["status_text"] = "SQL执行失败"
 
 		// 记录错误级别日志
-		l.debuggerLogger.Error(fmt.Sprintf("SQL执行失败:\n %s", sql), fields)
+		l.debuggerLogger.Error(sql, fields)
 		return
 	}
 
@@ -92,13 +93,14 @@ func (l *GormDebuggerLogger) Trace(ctx context.Context, begin time.Time, fc func
 	if elapsed > l.slowThreshold {
 		fields["slow_query"] = true
 		fields["slow_threshold_ms"] = l.slowThreshold.Milliseconds()
-		l.debuggerLogger.Warn(fmt.Sprintf("慢SQL查询:\n %s", sql), fields)
+		fields["status_text"] = "慢SQL查询"
+		l.debuggerLogger.Warn(sql, fields)
 		return
 	}
 
 	// 记录调试级别日志
 	if l.debuggerLogger.GetLevel() >= debugger.LevelInfo {
-		l.debuggerLogger.Info(fmt.Sprintf("SQL执行成功:\n %s", sql), fields)
+		l.debuggerLogger.Info(sql, fields)
 	}
 }
 
