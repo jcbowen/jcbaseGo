@@ -137,54 +137,213 @@ func (t *Trait) InitCrud(ginContext *gin.Context, args ...any) (ctx *Context) {
 	return
 }
 
-// callCustomMethod 调用自定义方法，如果方法不存在则调用默认方法
-// 参数说明：
-//   - methodName string: 要调用的方法名称
-//   - args ...interface{}: 传递给方法的可变参数列表
+// callCustomMethod 调用自定义方法（优先控制器方法），否则调用默认方法
+// 功能：
+//   - 优先在控制器上查找并调用名为 methodName 的方法；若不存在则调用 Trait 自身同名默认方法
+//   - 自动适配入参（含类型转换与零值补齐），完整支持可变参方法（使用 CallSlice）
+//   - 安全提取返回值，避免因不可导出类型导致崩溃
+//
+// 参数：
+//   - methodName string: 方法名称
+//   - args ...interface{}: 入参数组（按目标方法签名顺序传入）
 //
 // 返回值：
-//   - results []interface{}: 方法调用的返回值列表
+//   - results []interface{}: 方法调用返回的所有结果值（按声明顺序）
+//
+// 异常：
+//   - 当默认方法不存在时触发 panic（保留原行为以提示缺失实现）
+//
+// 使用示例：
+//   - t.callCustomMethod("List", ctx)
+//   - t.callCustomMethod("Format", 1, "a")
+//   - t.callCustomMethod("Sum", 1, 2, 3) // 对变参方法自动打包
 func (t *Trait) callCustomMethod(methodName string, args ...interface{}) (results []interface{}) {
-	// 调用自定义方法
-	method := reflect.ValueOf(t.Controller).MethodByName(methodName)
-	if method.IsValid() {
-		in := make([]reflect.Value, len(args))
-		for i, arg := range args {
-			if arg == nil {
-				// 如果参数为nil，则创建一个零值
-				in[i] = reflect.Zero(method.Type().In(i))
-			} else {
-				in[i] = reflect.ValueOf(arg)
+	// 优先尝试控制器方法
+	var ctrlMethod reflect.Value
+	if t.Controller != nil {
+		rv := reflect.ValueOf(t.Controller)
+		ctrlMethod = rv.MethodByName(methodName)
+		if !ctrlMethod.IsValid() {
+			// 兼容指针接收者方法
+			if rv.Kind() != reflect.Ptr {
+				if rv.CanAddr() {
+					ctrlMethod = rv.Addr().MethodByName(methodName)
+				} else {
+					// 创建可寻址副本以获取指针方法集（副本调用）
+					tmp := reflect.New(rv.Type())
+					if tmp.Elem().CanSet() {
+						tmp.Elem().Set(rv)
+					}
+					ctrlMethod = tmp.MethodByName(methodName)
+				}
 			}
 		}
-		resultValues := method.Call(in)
-		for ind := 0; ind < len(resultValues); ind++ {
-			results = append(results, resultValues[ind].Interface())
-		}
-
-		return results
 	}
 
-	// 调用默认方法
+	if ctrlMethod.IsValid() {
+		in, ok, useSlice := buildCallInputs(ctrlMethod, args)
+		if ok {
+			var resultValues []reflect.Value
+			if useSlice {
+				resultValues = ctrlMethod.CallSlice(in)
+			} else {
+				resultValues = ctrlMethod.Call(in)
+			}
+			for i := 0; i < len(resultValues); i++ {
+				if resultValues[i].CanInterface() {
+					results = append(results, resultValues[i].Interface())
+				} else {
+					results = append(results, nil)
+				}
+			}
+			return results
+		}
+		// 参数不匹配时回退到默认方法
+	}
+
+	// 默认方法路径（保持原有 panic 行为）
 	defaultMethod := reflect.ValueOf(t).MethodByName(methodName)
 	if !defaultMethod.IsValid() {
 		log.Panic("默认方法不存在：" + methodName)
 	}
-	in := make([]reflect.Value, len(args))
-	for i, arg := range args {
-		if arg == nil {
-			// 如果参数为nil，则创建一个零值
-			in[i] = reflect.Zero(defaultMethod.Type().In(i))
-		} else {
-			in[i] = reflect.ValueOf(arg)
-		}
-
+	in, ok, useSlice := buildCallInputs(defaultMethod, args)
+	if !ok {
+		// 参数不匹配时，用零值补齐或截断以避免崩溃
+		in, _, useSlice = buildCallInputs(defaultMethod, nil)
 	}
-	resultsValue := defaultMethod.Call(in)
-	for ind := 0; ind < len(resultsValue); ind++ {
-		results = append(results, resultsValue[ind].Interface())
+	var resultsValue []reflect.Value
+	if useSlice {
+		resultsValue = defaultMethod.CallSlice(in)
+	} else {
+		resultsValue = defaultMethod.Call(in)
+	}
+	for i := 0; i < len(resultsValue); i++ {
+		if resultsValue[i].CanInterface() {
+			results = append(results, resultsValue[i].Interface())
+		} else {
+			results = append(results, nil)
+		}
 	}
 	return
+}
+
+// buildCallInputs 构造反射调用入参，支持可变参与类型转换
+// 功能：
+//   - 非变参：按方法参数列表顺序构造入参；当传入不足或类型不匹配时使用参数类型零值
+//   - 变参：固定参数位按上诉规则构造；剩余参数自动打包为目标切片类型并使用 CallSlice 调用
+//   - 若调用者已传入一个与目标切片类型一致的值，则直接使用该切片
+//
+// 参数：
+//   - method reflect.Value: 目标方法
+//   - args []interface{}: 原始参数
+//
+// 返回值：
+//   - in []reflect.Value: 适配后的入参
+//   - ok bool: 是否成功适配（始终返回 true；保守策略避免崩溃）
+//   - useSlice bool: 是否需使用 CallSlice（仅在变参方法时为 true）
+//
+// 异常：
+//   - 无
+//
+// 使用示例：
+//   - in, ok, useSlice := buildCallInputs(m, []interface{}{1, "a"})
+func buildCallInputs(method reflect.Value, args []interface{}) (in []reflect.Value, ok bool, useSlice bool) {
+	mt := method.Type()
+	nin := mt.NumIn()
+	variadic := mt.IsVariadic()
+
+	if !variadic {
+		in = make([]reflect.Value, nin)
+		for i := 0; i < nin; i++ {
+			var a interface{}
+			if i < len(args) {
+				a = args[i]
+			}
+			pt := mt.In(i)
+			if a == nil {
+				in[i] = reflect.Zero(pt)
+				continue
+			}
+			av := reflect.ValueOf(a)
+			if av.Type().AssignableTo(pt) {
+				in[i] = av
+				continue
+			}
+			if av.Type().ConvertibleTo(pt) {
+				in[i] = av.Convert(pt)
+				continue
+			}
+			in[i] = reflect.Zero(pt)
+		}
+		return in, true, false
+	}
+
+	// 处理变参：前置固定参数 + 最后一个切片参数
+	fixed := nin - 1
+	in = make([]reflect.Value, nin)
+	for i := 0; i < fixed; i++ {
+		var a interface{}
+		if i < len(args) {
+			a = args[i]
+		}
+		pt := mt.In(i)
+		if a == nil {
+			in[i] = reflect.Zero(pt)
+			continue
+		}
+		av := reflect.ValueOf(a)
+		if av.Type().AssignableTo(pt) {
+			in[i] = av
+			continue
+		}
+		if av.Type().ConvertibleTo(pt) {
+			in[i] = av.Convert(pt)
+			continue
+		}
+		in[i] = reflect.Zero(pt)
+	}
+
+	sliceT := mt.In(nin - 1)
+	elemT := sliceT.Elem()
+	remain := 0
+	if len(args) > fixed {
+		remain = len(args) - fixed
+	}
+	// 单个切片参数直接使用，否则构造切片
+	if remain == 1 {
+		last := args[fixed]
+		if last != nil {
+			lv := reflect.ValueOf(last)
+			if lv.Type().AssignableTo(sliceT) {
+				in[nin-1] = lv
+				return in, true, true
+			}
+		}
+	}
+
+	sl := reflect.MakeSlice(sliceT, remain, remain)
+	for i := 0; i < remain; i++ {
+		var a interface{}
+		if fixed+i < len(args) {
+			a = args[fixed+i]
+		}
+		if a == nil {
+			sl.Index(i).Set(reflect.Zero(elemT))
+			continue
+		}
+		av := reflect.ValueOf(a)
+		if av.Type().AssignableTo(elemT) {
+			sl.Index(i).Set(av)
+			continue
+		}
+		if av.Type().ConvertibleTo(elemT) {
+			sl.Index(i).Set(av.Convert(elemT))
+			continue
+		}
+		sl.Index(i).Set(reflect.Zero(elemT))
+	}
+	in[nin-1] = sl
+	return in, true, true
 }
 
 // ----- 公共方法 ----- /
