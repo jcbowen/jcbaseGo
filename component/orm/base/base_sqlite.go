@@ -130,17 +130,43 @@ func (b *SqliteBaseModel) ModelParse(modelType reflect.Type) (tableName string, 
 	return
 }
 
+// BeforeCreate 创建前钩子
+// 函数名：BeforeCreate
+// 参数：
+//   - tx *gorm.DB：当前事务上下文
+//
+// 返回值：
+//   - err error：错误信息（当前不返回错误）
+//
+// 说明：设置 CreatedAt/UpdatedAt 等时间字段；在使用 Select 限定字段时，确保时间字段包含在持久化列表中
+// 使用示例：
+//
+//	db.Create(&model) // 自动触发
 func (b *SqliteBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
 	strTime := time.Now().Format("2006-01-02 15:04:05")
 	SetFieldIfExist(tx.Statement.Dest, "CreatedAt", strTime)
 	SetFieldIfExist(tx.Statement.Dest, "Created", strTime)
 	SetFieldIfExist(tx.Statement.Dest, "UpdatedAt", strTime)
 	SetFieldIfExist(tx.Statement.Dest, "Updated", strTime)
+	EnsureSelects(tx, "CreatedAt", "Created", "UpdatedAt", "Updated")
 	return
 }
 
+// BeforeUpdate 更新前钩子
+// 函数名：BeforeUpdate
+// 参数：
+//   - tx *gorm.DB：当前事务上下文
+//
+// 返回值：
+//   - err error：错误信息（当前不返回错误）
+//
+// 说明：更新 UpdatedAt/Updated 时间字段；在使用 Select 限定字段时，确保时间字段包含在持久化列表中
+// 使用示例：
+//
+//	db.Model(&model).Updates(map[string]interface{}{...}) // 自动触发
 func (b *SqliteBaseModel) BeforeUpdate(tx *gorm.DB) (err error) {
 	SetFieldIfExist(tx.Statement.Dest, "UpdatedAt", time.Now().Format("2006-01-02 15:04:05"))
 	SetFieldIfExist(tx.Statement.Dest, "Updated", time.Now().Format("2006-01-02 15:04:05"))
+	EnsureSelects(tx, "UpdatedAt", "Updated")
 	return
 }
