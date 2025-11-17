@@ -54,10 +54,10 @@ func setupHTTPSServer() {
 ```go
 // 安全的 HTTPS 客户端配置
 func createSecureHTTPClient() *http.Client {
-    tlsConf := &tls.Config{
-        MinVersion:         tls.VersionTLS12,
-        InsecureSkipVerify: false, // 生产环境必须为 false
-        ServerName:         "example.com",
+    // 基于项目封装的 tlsconfig.Get
+    tlsConf, err := tlsconfig.Get("client-cert.pem", "client-key.pem", "server-ca.pem", "api.example.com")
+    if err != nil {
+        panic(err)
     }
     
     transport := &http.Transport{
@@ -535,3 +535,8 @@ description:
 globs:
 alwaysApply: false
 ---
+### 封装函数行为说明
+- `tlsconfig.Get(certFile, keyFile, caFile, serverName)` 返回 `*tls.Config`：
+  - 当提供 `certFile/keyFile` 时，加载客户端或服务端证书
+  - 当提供 `caFile` 时，加载 CA 并启用证书链校验
+  - 当未提供 `caFile` 时，`InsecureSkipVerify=true`，仅适用于开发环境，生产必须提供 CA 并进行校验

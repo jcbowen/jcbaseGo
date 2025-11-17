@@ -6,6 +6,7 @@
 - 通过 [component/orm/instance.go](mdc:component/orm/instance.go) 接口进行数据库操作
 - 支持 MySQL 和 SQLite 两种数据库
 - 所有数据库操作都应该遵循事务安全原则
+- 数据库实例支持注入调试日志记录器，便于统一调试输出
 
 ## 数据库连接管理
 
@@ -57,6 +58,17 @@ func initSqlite() *sqlite.Instance {
     }
     
     return sqlite.New(config, "main")
+}
+```
+
+### 接口定义
+```go
+// 统一数据库实例接口
+type Instance interface {
+    GetDb() *gorm.DB                             // 获取数据库连接
+    GetConf() interface{}                        // 获取配置信息（MySQL/SQLite）
+    SetDebuggerLogger(debugger.LoggerInterface)  // 注入调试日志记录器
+    GetDebuggerLogger() debugger.LoggerInterface // 获取调试日志记录器
 }
 ```
 
@@ -168,9 +180,9 @@ type FlexibleUser struct {
 ```
 
 ### 软删除标签说明
-- **默认配置**：如果模型中存在 `deleted_at` 字段且没有 `soft_delete` 标签，系统会自动使用 `IS NULL` 作为软删除条件
-- **自定义字段名**：通过 `soft_delete` 标签可以指定任意字段作为软删除字段
-- **自定义条件**：`soft_delete` 标签的值就是软删除的判断条件
+- 默认：存在 `deleted_at` 字段且未设置 `soft_delete` 时，条件为 `IS NULL`
+- 自定义：`soft_delete:条件表达式` 可指定任意字段与判断条件
+- 无值标记：支持 `soft_delete`（无值）用以声明软删除字段，条件由基础模型或默认规则决定
 
 ## GORM 标签规范
 
@@ -244,6 +256,13 @@ query.Order("created_at desc").
     Limit(pageSize).
     Offset((page - 1) * pageSize).
     Find(&users)
+```
+
+### 字段选择与钩子
+```go
+// 当使用 Select 限定字段时，确保钩子中设置的必需字段不会被遗漏
+// 例如在创建/更新钩子中设置 CreatedAt/UpdatedAt
+base.EnsureSelects(tx, "CreatedAt", "UpdatedAt")
 ```
 
 ### 聚合查询
