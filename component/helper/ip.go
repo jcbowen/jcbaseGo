@@ -214,71 +214,55 @@ func GetValidClientIP(ips []string) string {
 	return ""
 }
 
-// GetRealIPFromHeaders 从HTTP头信息中获取真实IP地址
-// 该方法会依次检查X-Real-IP、X-Forwarded-For等代理头信息来获取真实客户端IP
+// GetRealIPFromHeaders 从HTTP头信息中获取真实客户端IP
+// 函数名：GetRealIPFromHeaders
+// 参数：
+// - headers map[string]string — 经过提取与归一化的请求头映射
+// 返回值：
+// - string — 解析出的真实客户端IP；当不可判定时返回空字符串
+// 异常：不触发 panic
+// 使用示例：
 //
-// 参数:
-//   - headers: HTTP头信息映射
-//
-// 返回值:
-//   - string: 真实IP地址
+//	ip := GetRealIPFromHeaders(map[string]string{
+//	    "Ali-Cdn-Real-Ip":  "203.0.113.1",
+//	    "X-Forwarded-For":  "203.0.113.1, 198.51.100.2",
+//	    "X-Real-IP":        "198.51.100.2",
+//	})
+//	// ip == "203.0.113.1"
 func GetRealIPFromHeaders(headers map[string]string) string {
-	var realIP string
-
-	// 尝试从 X-Real-IP 中获取
-	if xRealIP, ok := headers["X-Real-IP"]; ok && xRealIP != "" {
-		realIP = strings.TrimSpace(xRealIP)
+	// 1) 先读各厂商/通用的“客户端真实IP”专用头（单值）
+	for _, k := range []string{"Ali-Cdn-Real-Ip", "CF-Connecting-IP", "True-Client-IP", "X-Client-IP"} {
+		v := strings.TrimSpace(headers[k])
+		if v != "" && NewIP(v).IsValid() {
+			return v
+		}
 	}
 
-	// 如果X-Real-IP为空，尝试从 X-Forwarded-For 中获取
-	if realIP == "" {
-		if xForwardedFor, ok := headers["X-Forwarded-For"]; ok && xForwardedFor != "" {
-			// X-Forwarded-For 可能包含多个IP地址，用逗号分隔
-			ips := SplitAndValidateIPs(xForwardedFor)
-			if len(ips) > 0 {
-				// 获取第一个有效的客户端IP（跳过可能的伪造IP）
-				realIP = GetValidClientIP(ips)
+	// 2) 再读标准代理链：X-Forwarded-For（取第一个有效客户端IP，优先公网）
+	if xff := strings.TrimSpace(headers["X-Forwarded-For"]); xff != "" {
+		ips := SplitAndValidateIPs(xff)
+		if len(ips) > 0 {
+			if ip := GetValidClientIP(ips); ip != "" && NewIP(ip).IsValid() {
+				return ip
 			}
 		}
 	}
 
-	// 如果仍然为空，尝试从其他常见代理头中获取
-	if realIP == "" {
-		// 尝试从 X-Forwarded 中获取
-		if xForwarded, ok := headers["X-Forwarded"]; ok && xForwarded != "" {
-			realIP = strings.TrimSpace(xForwarded)
+	// 3) 兜底使用 X-Real-IP（常见反向代理传入）
+	if xr := strings.TrimSpace(headers["X-Real-IP"]); xr != "" && NewIP(xr).IsValid() {
+		return xr
+	}
+
+	// 4) 进一步兜底：历史/部分代理头（需校验）
+	for _, k := range []string{"X-Cluster-Client-IP", "X-Originating-IP"} {
+		v := strings.TrimSpace(headers[k])
+		if v != "" && NewIP(v).IsValid() {
+			return v
 		}
 	}
 
-	if realIP == "" {
-		// 尝试从 X-Forwarded-Host 中获取
-		if xForwardedHost, ok := headers["X-Forwarded-Host"]; ok && xForwardedHost != "" {
-			realIP = strings.TrimSpace(xForwardedHost)
-		}
-	}
-
-	if realIP == "" {
-		// 尝试从 X-Originating-IP 中获取
-		if xOriginatingIP, ok := headers["X-Originating-IP"]; ok && xOriginatingIP != "" {
-			realIP = strings.TrimSpace(xOriginatingIP)
-		}
-	}
-
-	if realIP == "" {
-		// 尝试从 X-Originating-IP 中获取
-		if xClusterClientIP, ok := headers["X-Cluster-Client-IP"]; ok && xClusterClientIP != "" {
-			realIP = strings.TrimSpace(xClusterClientIP)
-		}
-	}
-
-	if realIP == "" {
-		// 尝试从 True-Client-IP 中获取
-		if trueClientIP, ok := headers["True-Client-IP"]; ok && trueClientIP != "" {
-			realIP = strings.TrimSpace(trueClientIP)
-		}
-	}
-
-	return realIP
+	// 不返回非IP头（如 X-Forwarded、X-Forwarded-Host）以避免误判域名/主机名
+	return ""
 }
 
 // SplitIPs 分割多个IP地址字符串

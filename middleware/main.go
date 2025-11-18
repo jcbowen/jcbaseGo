@@ -111,13 +111,14 @@ func GetRealIPWithFilter(c *gin.Context, useCDN bool, whitelist, blacklist []str
 
 	// 构建HTTP头信息映射
 	headers := map[string]string{
-		"X-Real-IP":           c.GetHeader("X-Real-IP"),
+		"Ali-Cdn-Real-Ip":     c.GetHeader("Ali-Cdn-Real-Ip"),
+		"CF-Connecting-IP":    c.GetHeader("CF-Connecting-IP"),
+		"True-Client-IP":      c.GetHeader("True-Client-IP"),
+		"X-Client-IP":         c.GetHeader("X-Client-IP"),
 		"X-Forwarded-For":     c.GetHeader("X-Forwarded-For"),
-		"X-Forwarded":         c.GetHeader("X-Forwarded"),
-		"X-Forwarded-Host":    c.GetHeader("X-Forwarded-Host"),
+		"X-Real-IP":           c.GetHeader("X-Real-IP"),
 		"X-Originating-IP":    c.GetHeader("X-Originating-IP"),
 		"X-Cluster-Client-IP": c.GetHeader("X-Cluster-Client-IP"),
-		"True-Client-IP":      c.GetHeader("True-Client-IP"),
 	}
 
 	// 使用helper包中的函数获取真实IP
