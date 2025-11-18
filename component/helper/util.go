@@ -966,16 +966,6 @@ func CheckAndSetDefaultWithPreserveTag(i interface{}) error {
 			if !ok {
 				continue
 			}
-			switch f.Kind() {
-			case reflect.Ptr, reflect.Interface:
-				if f.IsNil() {
-					continue
-				}
-			default:
-				if IsEmptyValue(f.Interface()) {
-					continue
-				}
-			}
 			if !equalToDefault(f, defVal) {
 				snapshots[idx] = f.Interface()
 			}
@@ -993,13 +983,15 @@ func CheckAndSetDefaultWithPreserveTag(i interface{}) error {
 		if !f.CanSet() {
 			continue
 		}
+		if val == nil {
+			f.Set(reflect.Zero(f.Type()))
+			continue
+		}
 		rv := reflect.ValueOf(val)
-		// 处理类型适配（如接口字段）
 		if rv.IsValid() && rv.Type().AssignableTo(f.Type()) {
 			f.Set(rv)
 			continue
 		}
-		// 指针/接口类型兼容赋值
 		if rv.IsValid() && rv.Type().ConvertibleTo(f.Type()) {
 			f.Set(rv.Convert(f.Type()))
 		}
