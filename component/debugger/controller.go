@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -138,6 +139,12 @@ func (c *Controller) ipAccessControlMiddleware(useCDN bool) gin.HandlerFunc {
 			ctx.Next()
 			return
 		}
+
+		log.Println("debugger禁止访问")
+		headerJson, _ := json.Marshal(ctx.Request.Header)
+		log.Println("Request Header:", string(headerJson))
+		bodyJson, _ := json.Marshal(ctx.Request.Body)
+		log.Println("Request Body:", string(bodyJson))
 
 		// IP不在白名单中，返回403禁止访问
 		ctx.JSON(http.StatusForbidden, gin.H{
