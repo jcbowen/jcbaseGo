@@ -41,10 +41,21 @@ type Trait struct {
 
 ### Instance 接口
 ```go
-// Instance 定义数据库实例接口
+// 统一数据库实例接口，支持调试日志注入
 type Instance interface {
-    // GetDb 获取数据库连接
-    GetDb() *gorm.DB
+    GetDb() *gorm.DB                             // 获取数据库连接
+    GetConf() interface{}                        // 获取配置信息（MySQL/SQLite）
+    SetDebuggerLogger(debugger.LoggerInterface)  // 注入调试日志记录器
+    GetDebuggerLogger() debugger.LoggerInterface // 获取调试日志记录器
+}
+```
+
+### 控制器接口
+```go
+// 控制器需实现以下接口以供 Trait 调用
+type ControllerInterface interface {
+    CheckInit(ctx any) *Context                     // 初始化上下文与参数解析
+    GetLogger() debugger.LoggerInterface            // 提供调试日志记录器
 }
 ```
 
@@ -78,6 +89,8 @@ func New() *Index {
     }
     
     index.Trait.Controller = index
+    // 注入调试日志记录器，便于在 CRUD 内部输出统一日志
+    index.Trait.DBI.SetDebuggerLogger(index.GetLogger())
     return index
 }
 
@@ -275,6 +288,10 @@ FormData → 查询原始数据 → UpdateBefore → [事务开始] → 更新�
 保存流程:
 判断是否有主键ID → 调用Create或Update流程
 ```
+
+### 初始化流程说明
+- `InitCrud(ginContext, actionName)` 统一解析请求上下文，准备 GPC 参数、模型信息、软删除条件、表别名等。
+- 当控制器实现了同名自定义方法（如 `CreateBefore` 等），Trait 会优先调用控制器的方法；否则回退到默认实现。
 
 ### 创建操作钩子
 

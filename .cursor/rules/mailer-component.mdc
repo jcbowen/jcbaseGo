@@ -8,76 +8,51 @@
 
 ## 基本使用方式
 
-### 初始化邮件服务
+### 初始化邮件实例
 ```go
-import "github.com/jcbowen/jcbaseGo/component/mailer"
+import (
+    "github.com/jcbowen/jcbaseGo"
+    "github.com/jcbowen/jcbaseGo/component/mailer"
+)
 
-// 创建邮件实例
-mailer := mailer.Mailer{
-    Host:     "smtp.example.com",           // SMTP 服务器地址
-    Port:     587,                          // SMTP 端口
-    Username: "your-email@example.com",     // 发送邮箱
-    Password: "your-password",              // 邮箱密码或应用密码
-    From:     "your-email@example.com",     // 发件人邮箱
-    FromName: "系统通知",                    // 发件人名称
-    TLS:      true,                         // 是否启用 TLS
+conf := jcbaseGo.MailerStruct{
+    Host:     "smtp.qq.com",
+    Port:     "465",
+    Username: "example@qq.com",
+    Password: "your-auth-code",
+    From:     "example@qq.com",
+    UseTLS:   true,
+    CertPath: "", // 可选
+    KeyPath:  "", // 可选
+    CAPath:   "", // 可选
 }
+
+email := mailer.New(conf)
 ```
 
 ### 发送简单文本邮件
 ```go
-err := mailer.Send("recipient@example.com", "邮件主题", "邮件内容")
-if err != nil {
+email.AddRecipient("recipient@example.com")
+email.SetSubject("邮件主题")
+email.SetBody("邮件内容", false)
+
+if err := email.Send(); err != nil {
     log.Printf("邮件发送失败: %v", err)
-    return
 }
 ```
 
-### 发送 HTML 邮件
+### 发送 HTML 与内嵌图片
 ```go
-htmlContent := `
-<html>
-<body>
-    <h1>欢迎注册</h1>
-    <p>感谢您注册我们的服务！</p>
-    <a href="https://example.com/activate">点击激活账户</a>
-</body>
-</html>
-`
+email.AddRecipient("recipient@example.com")
+email.SetSubject("账户激活")
+email.SetBody(`<html><body><img src="cid:logo"/>欢迎注册</body></html>`, true)
+email.AddInlineImage("logo", base64ImageData)
 
-err := mailer.SendHTML("recipient@example.com", "账户激活", htmlContent)
-if err != nil {
+if err := email.Send(); err != nil {
     log.Printf("HTML 邮件发送失败: %v", err)
-    return
 }
 ```
 
-### 发送带附件的邮件
-```go
-// 准备附件
-attachments := []mailer.Attachment{
-    {
-        Name:     "document.pdf",
-        Content:  pdfBytes,        // 文件内容（[]byte）
-        MimeType: "application/pdf",
-    },
-    {
-        Name:     "image.jpg",
-        Content:  imageBytes,
-        MimeType: "image/jpeg",
-    },
-}
-
-err := mailer.SendWithAttachments(
-    "recipient@example.com",
-    "带附件的邮件",
-    "请查看附件中的文档。",
-    attachments,
-)
-if err != nil {
-    log.Printf("带附件邮件发送失败: %v", err)
-    return
-}
 ```
 
 ### 批量发送邮件
@@ -101,51 +76,22 @@ for _, recipient := range recipients {
 }
 ```
 
-## 常见 SMTP 服务配置
-
-### Gmail
+## SMTP 配置示例（基于 MailerStruct）
 ```go
-mailer := mailer.Mailer{
-    Host:     "smtp.gmail.com",
-    Port:     587,
-    Username: "your-gmail@gmail.com",
-    Password: "your-app-password", // 使用应用专用密码
-    TLS:      true,
-}
-```
-
-### QQ 邮箱
-```go
-mailer := mailer.Mailer{
+conf := jcbaseGo.MailerStruct{
     Host:     "smtp.qq.com",
-    Port:     587,
-    Username: "your-qq@qq.com",
-    Password: "your-authorization-code", // 使用授权码
-    TLS:      true,
+    Port:     "465",
+    Username: "example@qq.com",
+    Password: "your-auth-code",
+    From:     "example@qq.com",
+    UseTLS:   true,
 }
+email := mailer.New(conf)
 ```
 
-### 163 邮箱
-```go
-mailer := mailer.Mailer{
-    Host:     "smtp.163.com",
-    Port:     25, // 或 465（SSL）
-    Username: "your-email@163.com",
-    Password: "your-authorization-code", // 使用授权码
-    TLS:      false, // 25 端口不使用 TLS，465 端口使用 SSL
-}
-```
-
-### 企业邮箱
-```go
-mailer := mailer.Mailer{
-    Host:     "smtp.exmail.qq.com", // 腾讯企业邮箱
-    Port:     587,
-    Username: "your-email@company.com",
-    Password: "your-password",
-    TLS:      true,
-}
-```
+## TLS/SSL 连接说明
+- 通过 `component/tlsconfig.Get(cert,key,ca,serverName)` 生成 `*tls.Config`。
+- 未提供 `caFile` 时会启用 `InsecureSkipVerify`，仅用于开发环境；生产环境必须提供 CA 并进行证书校验。
 
 ## 高级功能
 

@@ -147,8 +147,11 @@ fullURL := att.ToMedia(relativePath)
 // 强制使用本地域名
 fullURL := att.ToMedia(relativePath, true)
 
-// 不添加时间戳缓存参数
+// 添加时间戳参数以规避缓存（isCache=false 将追加 ?v=timestamp）
 fullURL := att.ToMedia(relativePath, false, false)
+
+// 不添加时间戳（默认行为，isCache=true 或省略）
+fullURL := att.ToMedia(relativePath, false, true)
 ```
 
 ## 远程存储配置

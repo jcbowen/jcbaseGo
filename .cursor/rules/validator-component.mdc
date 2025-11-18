@@ -67,7 +67,7 @@ for _, phone := range validPhones {
 ```go
 // 验证身份证号码（支持15位和18位）
 idCard := "110101199001011234"
-if validator.IsIDCard(idCard) {
+if validator.IsChineseIDCard(idCard) {
     fmt.Println("身份证号码格式正确")
 } else {
     fmt.Println("身份证号码格式错误")
@@ -81,7 +81,7 @@ idCards := []string{
 }
 
 for _, id := range idCards {
-    if validator.IsIDCard(id) {
+    if validator.IsChineseIDCard(id) {
         fmt.Printf("✅ %s: 有效身份证\n", id)
     } else {
         fmt.Printf("❌ %s: 无效身份证\n", id)
@@ -118,22 +118,20 @@ for _, url := range urls {
 
 ### IP 地址验证
 ```go
-// 验证 IPv4 地址
-ipv4 := "192.168.1.1"
-if validator.IsIPv4(ipv4) {
-    fmt.Println("IPv4 地址格式正确")
-}
-
-// 验证 IPv6 地址
-ipv6 := "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
-if validator.IsIPv6(ipv6) {
-    fmt.Println("IPv6 地址格式正确")
-}
-
-// 通用 IP 地址验证（IPv4 或 IPv6）
+// 通用 IP 地址验证（IPv4 或 IPv6），返回类型
 ip := "192.168.1.1"
-if validator.IsIP(ip) {
-    fmt.Println("IP 地址格式正确")
+ok, ipType := validator.IsIP(ip)
+if ok {
+    switch ipType {
+    case validator.IPv4:
+        fmt.Println("有效 IPv4 地址")
+    case validator.IPv6:
+        fmt.Println("有效 IPv6 地址")
+    default:
+        fmt.Println("有效 IP 地址")
+    }
+} else {
+    fmt.Println("IP 地址格式错误")
 }
 ```
 
@@ -230,7 +228,7 @@ func BatchValidate(data map[string]string) []ValidationResult {
             isValid = validator.IsMobile(value)
             message = "手机号格式验证"
         case "id_card":
-            isValid = validator.IsIDCard(value)
+            isValid = validator.IsChineseIDCard(value)
             message = "身份证号码验证"
         case "url":
             isValid = validator.IsURL(value)
