@@ -889,11 +889,11 @@ func CheckAndSetDefault(i interface{}) error {
 			field.SetBool(defaultVal)
 		}
 
-		// 整型：为 0 时设置默认值，解析失败忽略（默认0）
-		if strings.HasPrefix(field.Type().String(), "int") && field.Int() == 0 {
-			defaultVal, _ := strconv.ParseInt(tag, 10, 64)
-			field.SetInt(defaultVal)
-		}
+        // 整型：为 0 时设置默认值，支持命名整型类型，解析失败忽略（默认0）
+        if (fieldKind == reflect.Int || fieldKind == reflect.Int8 || fieldKind == reflect.Int16 || fieldKind == reflect.Int32 || fieldKind == reflect.Int64) && field.Int() == 0 {
+            defaultVal, _ := strconv.ParseInt(tag, 10, 64)
+            field.SetInt(defaultVal)
+        }
 
 		// 浮点：为 0.0 时设置默认值，解析失败忽略（默认0.0）
 		if fieldKind == reflect.Float32 || fieldKind == reflect.Float64 {

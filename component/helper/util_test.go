@@ -1,9 +1,9 @@
 package helper
 
 import (
-	"reflect"
-	"testing"
-	"time"
+    "reflect"
+    "testing"
+    "time"
 )
 
 // TestCheckAndSetDefault 测试 CheckAndSetDefault
@@ -250,4 +250,19 @@ func Test_buildDefaultValueForType_equalToDefault(t *testing.T) {
 	if !ok || !equalToDefault(reflect.ValueOf(250*time.Millisecond), ddef) {
 		t.Fatalf("equalToDefault failed for duration")
 	}
+}
+
+// 命名整型类型默认值赋值（仅内部命名类型，避免引入循环依赖）
+func TestCheckAndSetDefault_NamedIntTypes_Internal(t *testing.T) {
+    type myInt int
+    type C1 struct {
+        Level myInt `default:"2"`
+    }
+    c1 := &C1{}
+    if err := CheckAndSetDefault(c1); err != nil {
+        t.Fatalf("unexpected error: %v", err)
+    }
+    if c1.Level != myInt(2) {
+        t.Fatalf("expected myInt Level=2, got %v", c1.Level)
+    }
 }
