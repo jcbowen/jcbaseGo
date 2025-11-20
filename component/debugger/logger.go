@@ -275,6 +275,7 @@ type LogEntry struct {
 	Duration   time.Duration `json:"duration"`    // 处理耗时
 	ClientIP   string        `json:"client_ip"`   // 客户端IP（HTTP记录专用）
 	UserAgent  string        `json:"user_agent"`  // 用户代理（HTTP记录专用）
+	Host       string        `json:"host"`        // 请求域名（HTTP记录专用）
 	RequestID  string        `json:"request_id"`  // 请求ID（用于追踪）
 
 	// 记录类型标识
@@ -679,7 +680,15 @@ func GetLoggerFromContext(c *gin.Context) LoggerInterface {
 	}
 	debugger, _ := New(config)
 
+	var host string
+	if c != nil && c.Request != nil {
+		host = c.Request.Header.Get("X-Forwarded-Host")
+		if host == "" {
+			host = c.Request.Host
+		}
+	}
 	return debugger.GetLogger().WithFields(map[string]interface{}{
 		"context_error": "logger_not_found_in_context",
+		"host":          host,
 	})
 }

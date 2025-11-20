@@ -484,6 +484,10 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 			if entry.ClientIP != value && !strings.Contains(entry.ClientIP, value.(string)) && !strings.HasPrefix(entry.ClientIP, value.(string)) {
 				return false
 			}
+		case "host":
+			if entry.Host != value && !strings.Contains(entry.Host, value.(string)) && !strings.HasPrefix(entry.Host, value.(string)) {
+				return false
+			}
 		case "process_name":
 			if !strings.Contains(entry.ProcessName, value.(string)) {
 				return false

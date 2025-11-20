@@ -416,6 +416,7 @@ const indexTemplate = `<!DOCTYPE html>
                         </div>
                         <div class="filter-row">
                             <input type="text" name="client_ip" placeholder="客户端IP地址" value="{{.Filters.client_ip}}">
+                            <input type="text" name="host" placeholder="域名包含" value="{{.Filters.host}}">
                             <input type="text" name="url" placeholder="URL路径包含" value="{{.Filters.url}}">
                         </div>
                         <div class="filter-row">
@@ -493,12 +494,13 @@ const indexTemplate = `<!DOCTYPE html>
                             </div>
                             {{else}}
                             <div class="http-details">
-								{{if .IsStreamingResponse}}
-								<div class="streaming-badge streaming-active" title="流式请求: {{.StreamingChunks}}个分块，分块大小: {{.StreamingChunkSize}}字节">流式</div>
-								{{else}}
-								<div class="streaming-badge streaming-inactive" title="非流式请求">-</div>
-								{{end}}
+							{{if .IsStreamingResponse}}
+							<div class="streaming-badge streaming-active" title="流式请求: {{.StreamingChunks}}个分块，分块大小: {{.StreamingChunkSize}}字节">流式</div>
+							{{else}}
+							<div class="streaming-badge streaming-inactive" title="非流式请求">-</div>
+							{{end}}
                                 {{if .ClientIP}}<div class="client-ip">{{.ClientIP}}</div>{{end}}
+                                {{if .Host}}<div class="client-ip" title="域名">{{.Host}}</div>{{end}}
                             </div>
                             {{end}}
                         </div>
@@ -522,7 +524,7 @@ const indexTemplate = `<!DOCTYPE html>
         {{if .Pagination}}
         <div class="pagination">
             {{if .Pagination.HasPrev}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}{{if .Filters.is_streaming}}&is_streaming={{.Filters.is_streaming}}{{end}}{{if .Filters.streaming_status}}&streaming_status={{.Filters.streaming_status}}{{end}}">上一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.host}}&host={{.Filters.host}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}{{if .Filters.is_streaming}}&is_streaming={{.Filters.is_streaming}}{{end}}{{if .Filters.streaming_status}}&streaming_status={{.Filters.streaming_status}}{{end}}">上一页</a>
             {{else}}
             <span class="disabled">上一页</span>
             {{end}}
@@ -541,13 +543,13 @@ const indexTemplate = `<!DOCTYPE html>
                 {{if eq $i $page}}
                 <span class="current">{{$i}}</span>
                 {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}{{if $filters.is_streaming}}&is_streaming={{$filters.is_streaming}}{{end}}{{if $filters.streaming_status}}&streaming_status={{$filters.streaming_status}}{{end}}">{{$i}}</a>
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.host}}&host={{$filters.host}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}{{if $filters.is_streaming}}&is_streaming={{$filters.is_streaming}}{{end}}{{if $filters.streaming_status}}&streaming_status={{$filters.streaming_status}}{{end}}">{{$i}}</a>
                 {{end}}
                 {{end}}
             {{else}}
                 {{/* 总页数大于7时，使用智能分页 */}}
                 {{if gt $page 4}}
-                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}{{if $filters.is_streaming}}&is_streaming={{$filters.is_streaming}}{{end}}{{if $filters.streaming_status}}&streaming_status={{$filters.streaming_status}}{{end}}">1</a>
+                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.host}}&host={{$filters.host}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}{{if $filters.is_streaming}}&is_streaming={{$filters.is_streaming}}{{end}}{{if $filters.streaming_status}}&streaming_status={{$filters.streaming_status}}{{end}}">1</a>
                     {{if gt $page 5}}
                     <span class="ellipsis">...</span>
                     {{end}}
@@ -568,7 +570,7 @@ const indexTemplate = `<!DOCTYPE html>
                 {{if eq $i $page}}
                 <span class="current">{{$i}}</span>
                 {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.host}}&host={{$filters.host}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
                 {{end}}
                 {{end}}
                 
@@ -583,7 +585,7 @@ const indexTemplate = `<!DOCTYPE html>
             {{end}}
             
             {{if .Pagination.HasNext}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}{{if .Filters.is_streaming}}&is_streaming={{.Filters.is_streaming}}{{end}}{{if .Filters.streaming_status}}&streaming_status={{.Filters.streaming_status}}{{end}}">下一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.host}}&host={{.Filters.host}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}{{if .Filters.is_streaming}}&is_streaming={{.Filters.is_streaming}}{{end}}{{if .Filters.streaming_status}}&streaming_status={{.Filters.streaming_status}}{{end}}">下一页</a>
             {{else}}
             <span class="disabled">下一页</span>
             {{end}}
@@ -1119,6 +1121,10 @@ const detailTemplate = `<!DOCTYPE html>
                         <div class="info-value">{{.Entry.URL}}</div>
                     </div>
                     <div class="info-item">
+                        <div class="info-label">域名</div>
+                        <div class="info-value">{{.Entry.Host}}</div>
+                    </div>
+                    <div class="info-item">
                         <div class="info-label">User Agent</div>
                         <div class="info-value">{{.Entry.UserAgent}}</div>
                     </div>
@@ -1284,8 +1290,7 @@ const detailTemplate = `<!DOCTYPE html>
                         {{if .Fields}}
                         <div class="log-fields">
                             {{range $key, $value := .Fields}}
-                            {{/* 过滤掉在基本信息区域已经展示过的字段 */}}
-                            {{if and (ne $key "level") (ne $key "message") (ne $key "timestamp") (ne $key "request_id") (ne $key "method") (ne $key "url") (ne $key "client_ip") (ne $key "process_id") (ne $key "process_name") (ne $key "process_type")}}
+                            {{if and (ne $key "level") (ne $key "message") (ne $key "timestamp") (ne $key "request_id") (ne $key "method") (ne $key "url") (ne $key "host") (ne $key "client_ip") (ne $key "process_id") (ne $key "process_name") (ne $key "process_type")}}
                             <span class="log-field">{{$key}}: {{$value}}</span>
                             {{end}}
                             {{end}}

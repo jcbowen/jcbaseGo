@@ -337,6 +337,10 @@ func (ms *MemoryStorage) filterEntry(entry *LogEntry, filters map[string]interfa
 			if !strings.Contains(entry.ClientIP, value.(string)) {
 				return false
 			}
+		case "host":
+			if !strings.Contains(entry.Host, value.(string)) {
+				return false
+			}
 		case "process_name":
 			if !strings.Contains(entry.ProcessName, value.(string)) {
 				return false

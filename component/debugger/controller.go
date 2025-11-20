@@ -467,6 +467,7 @@ func (c *Controller) cleanupAPIHandler(ctx *gin.Context) {
 //   - method: HTTP方法（GET/POST/PUT/DELETE等）
 //   - status_code: HTTP状态码（200/404/500等）
 //   - client_ip: 客户端IP地址
+//   - host: 域名（支持模糊匹配）
 //   - process_name: 进程名称
 //   - process_id: 进程ID
 //   - process_status: 进程状态（running/completed/failed/error）
@@ -498,6 +499,11 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 	// IP地址过滤
 	if ip := ctx.Query("client_ip"); ip != "" {
 		filters["client_ip"] = ip
+	}
+
+	// 域名过滤
+	if host := ctx.Query("host"); host != "" {
+		filters["host"] = host
 	}
 
 	// 进程名称过滤

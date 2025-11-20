@@ -157,10 +157,17 @@ func (d *Debugger) createNormalMiddleware() gin.HandlerFunc {
 		c.Set("debugger_request_id", entry.ID)
 
 		// 设置Logger到上下文，供控制器使用
+		// 计算主机信息（优先使用X-Forwarded-Host）
+		host := c.Request.Header.Get("X-Forwarded-Host")
+		if host == "" {
+			host = c.Request.Host
+		}
+
 		c.Set("debugger_logger", d.logger.WithFields(map[string]interface{}{
 			"request_id": entry.ID,
 			"method":     c.Request.Method,
 			"url":        c.Request.URL.String(),
+			"host":       host,
 			"client_ip":  middleware.GetRealIP(c, d.config.UseCDN),
 		}))
 
@@ -374,10 +381,17 @@ func (d *Debugger) restoreMultipartRequestBody(c *gin.Context) {
 // createLogEntry 创建日志条目
 func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry {
 	entry := &LogEntry{
-		ID:             GenerateID(),
-		Timestamp:      startTime,
-		Method:         c.Request.Method,
-		URL:            c.Request.URL.String(),
+		ID:        GenerateID(),
+		Timestamp: startTime,
+		Method:    c.Request.Method,
+		URL:       c.Request.URL.String(),
+		Host: func() string {
+			h := c.Request.Header.Get("X-Forwarded-Host")
+			if h == "" {
+				h = c.Request.Host
+			}
+			return h
+		}(),
 		ClientIP:       middleware.GetRealIP(c, d.config.UseCDN),
 		UserAgent:      c.Request.UserAgent(),
 		RequestID:      c.GetHeader("X-Request-ID"),
