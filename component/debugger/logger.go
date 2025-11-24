@@ -202,24 +202,45 @@ func (l *DefaultLogger) log(level LogLevel, msg any, fields ...map[string]interf
 // getCallerInfo 获取调用位置信息
 // 返回文件名、行号和函数名
 func getCallerInfo() (fileName string, line int, function string) {
-	// 跳过当前函数和log方法，获取调用者的信息
-	pc, file, lineNo, ok := runtime.Caller(3)
-	if !ok {
-		return "unknown", 0, "unknown"
+	// 从调用栈中查找第一个非调试器/非GORM的调用位置
+	// 跳过 runtime.Callers 和本函数自身
+	pcs := make([]uintptr, 32)
+	n := runtime.Callers(2, pcs)
+	frames := runtime.CallersFrames(pcs[:n])
+
+	var found runtime.Frame
+	for {
+		f, more := frames.Next()
+		file := f.File
+		fn := f.Function
+
+		// 过滤调试器自身和GORM内部调用栈
+		if !(strings.Contains(file, "/component/debugger/logger.go") ||
+			strings.Contains(file, "/component/debugger/debugger.go") ||
+			strings.Contains(file, "/component/orm/gorm_logger.go") ||
+			strings.Contains(fn, "gorm.io/gorm") ||
+			strings.Contains(fn, "gorm.io/driver") ||
+			strings.Contains(fn, "database/sql")) {
+			found = f
+			break
+		}
+
+		if !more {
+			// 未找到合适的帧，使用最后一个可用帧作为回退
+			found = f
+			break
+		}
 	}
 
-	// 获取函数名
-	funcName := runtime.FuncForPC(pc).Name()
-
-	// 简化文件名，只保留最后一部分
-	parts := strings.Split(file, "/")
+	// 简化文件名
+	parts := strings.Split(found.File, "/")
 	if len(parts) > 0 {
 		fileName = parts[len(parts)-1]
 	} else {
-		fileName = file
+		fileName = found.File
 	}
 
-	return fileName, lineNo, funcName
+	return fileName, found.Line, found.Function
 }
 
 // shouldLog 检查是否应该记录指定级别的日志
