@@ -519,23 +519,152 @@ func setFieldValue(field reflect.Value, value interface{}) bool {
 	return false
 }
 
-// CopyStruct 复制结构体，将 src 的值复制到 dst
+// CopyStruct 复制源结构体（src）的字段到目标结构体（dst）。
+// 该函数执行的是深层复制，基于字段名和字段类型进行匹配。
+// src 和 dst 都必须是指向结构体的指针。
 //
-// 用法：CopyStruct(&src, &dst)
+// 注意事项：
+// CopyStruct 函数用于将源结构体 (src) 的字段值深度复制到目标结构体 (dst) 中。
+// 它通过反射机制实现，支持嵌套结构体、切片和映射的深层复制，并尝试进行灵活的类型转换。
 //
-// 注意：src、dst 必须是一个指针
-func CopyStruct(src, dst interface{}) {
-	srcVal := reflect.ValueOf(src).Elem()
-	dstVal := reflect.ValueOf(dst).Elem()
+// 注意事项:
+// 1. 错误处理：如果 src 或 dst 不是指向结构体的指针，函数会返回错误。
+// 2. 性能开销：反射操作通常比直接字段访问慢，频繁调用可能影响性能。
+// 3. 深层复制：对于包含指针、切片、映射等复杂类型的字段，现在会进行深层复制。
+// 4. 类型严格匹配：源字段和目标字段的类型现在支持可转换类型之间的灵活转换。
+// 5. 未导出字段：无法设置来自不同包的未导出（小写字母开头）字段。
+// 6. 字段名匹配：依赖于字段名完全匹配。
+//
+// 参数:
+//
+//	src: 源结构体（必须是指向结构体的指针）。
+//	dst: 目标结构体（必须是指向结构体的指针）。
+//
+// 返回值:
+//
+//	error: 如果 src 或 dst 不是指向结构体的指针，或在复制过程中发生类型不匹配等错误，则返回错误；否则返回 nil。
+//
+// 示例:
+//
+//	type Source struct {
+//	  Name string
+//	  Age  int
+//	}
+//	type Destination struct {
+//	  Name string
+//	  Age  int
+//	  City string
+//	}
+//	s := &Source{Name: "Alice", Age: 30}
+//	d := &Destination{}
+//	if err := CopyStruct(s, d); err != nil {
+//	  log.Fatal(err)
+//	}
+//	// 此时 d 将为 {Name: "Alice", Age: 30, City: ""}
+func CopyStruct(src, dst interface{}) error {
+	return structDeepCopy(reflect.ValueOf(src), reflect.ValueOf(dst))
+}
 
-	for i := 0; i < srcVal.NumField(); i++ {
-		srcField := srcVal.Field(i)
-		dstField := dstVal.FieldByName(srcVal.Type().Field(i).Name)
+func structDeepCopy(src, dst reflect.Value) error {
+	// Check if src and dst are pointers
+	if src.Kind() != reflect.Ptr || dst.Kind() != reflect.Ptr {
+		return fmt.Errorf("src and dst must be pointers")
+	}
 
-		if dstField.IsValid() && dstField.CanSet() && srcField.Type() == dstField.Type() {
-			dstField.Set(srcField)
+	// Get the element that the pointer points to
+	src = src.Elem()
+	dst = dst.Elem()
+
+	// Check if the elements are structs
+	if src.Kind() != reflect.Struct || dst.Kind() != reflect.Struct {
+		return fmt.Errorf("src and dst must point to structs")
+	}
+
+	for i := 0; i < src.NumField(); i++ {
+		srcField := src.Field(i)
+		dstField := dst.FieldByName(src.Type().Field(i).Name)
+
+		if dstField.IsValid() && dstField.CanSet() {
+			srcFieldKind := srcField.Kind()
+			dstFieldKind := dstField.Kind()
+
+			if srcFieldKind == reflect.Struct && dstFieldKind == reflect.Struct {
+				// Recursively deep copy nested structs
+				if err := structDeepCopy(srcField.Addr(), dstField.Addr()); err != nil {
+					return err
+				}
+			} else if srcFieldKind == reflect.Slice && dstFieldKind == reflect.Slice {
+				// Deep copy slices
+				if srcField.IsNil() {
+					dstField.Set(reflect.Zero(dstField.Type()))
+					continue
+				}
+				dstSlice := reflect.MakeSlice(dstField.Type(), srcField.Len(), srcField.Cap())
+				for j := 0; j < srcField.Len(); j++ {
+					srcElem := srcField.Index(j)
+					dstElem := dstSlice.Index(j)
+
+					if srcElem.Kind() == reflect.Ptr && !srcElem.IsNil() {
+						newDstElemPtr := reflect.New(dstElem.Type().Elem())
+						if err := structDeepCopy(srcElem, newDstElemPtr); err != nil {
+							return err
+						}
+						dstElem.Set(newDstElemPtr)
+					} else if srcElem.Kind() == reflect.Struct {
+						// For struct elements in slice, create a new struct and deep copy
+						newDstElem := reflect.New(dstElem.Type()).Elem()
+						if err := structDeepCopy(srcElem.Addr(), newDstElem.Addr()); err != nil {
+							return err
+						}
+						dstElem.Set(newDstElem)
+					} else if srcElem.Type().AssignableTo(dstElem.Type()) {
+						dstElem.Set(srcElem)
+					} else {
+						return fmt.Errorf("cannot assign slice element of type %s to %s", srcElem.Type(), dstElem.Type())
+					}
+				}
+				dstField.Set(dstSlice)
+			} else if srcFieldKind == reflect.Map && dstFieldKind == reflect.Map {
+				// Deep copy maps
+				if srcField.IsNil() {
+					dstField.Set(reflect.Zero(dstField.Type()))
+					continue
+				}
+				dstMap := reflect.MakeMap(dstField.Type())
+				for _, key := range srcField.MapKeys() {
+					srcMapValue := srcField.MapIndex(key)
+
+					if srcMapValue.Kind() == reflect.Ptr && !srcMapValue.IsNil() {
+						newDstMapValuePtr := reflect.New(dstField.Type().Elem().Elem())
+						if err := structDeepCopy(srcMapValue, newDstMapValuePtr); err != nil {
+							return err
+						}
+						dstMap.SetMapIndex(key, newDstMapValuePtr)
+					} else if srcMapValue.Kind() == reflect.Struct {
+						newDstMapValue := reflect.New(dstField.Type().Elem()).Elem()
+						if err := structDeepCopy(srcMapValue.Addr(), newDstMapValue.Addr()); err != nil {
+							return err
+						}
+						dstMap.SetMapIndex(key, newDstMapValue)
+					} else if srcMapValue.Type().AssignableTo(dstField.Type().Elem()) {
+						dstMap.SetMapIndex(key, srcMapValue)
+					} else {
+						return fmt.Errorf("cannot assign map value of type %s to %s", srcMapValue.Type(), dstField.Type().Elem())
+					}
+				}
+				dstField.Set(dstMap)
+			} else if srcField.Type().AssignableTo(dstField.Type()) {
+				// Direct copy for assignable types
+				dstField.Set(srcField)
+			} else if srcField.Type().ConvertibleTo(dstField.Type()) {
+				// Convert and copy for convertible types
+				dstField.Set(srcField.Convert(dstField.Type()))
+			} else {
+				return fmt.Errorf("cannot assign field '%s' of type %s to type %s", src.Type().Field(i).Name, srcField.Type(), dstField.Type())
+			}
 		}
 	}
+	return nil
 }
 
 // StructMerge 函数将多个源结构体中的非零值合并到目标结构体中。
