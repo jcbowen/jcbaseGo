@@ -197,9 +197,8 @@ func (s *Str) ConvertCamelToSnake() string {
 	// 将整个字符串转换为小写
 	snake = strings.ToLower(snake)
 	// 删除前导下划线（如果存在）
-	if strings.HasPrefix(snake, "_") {
-		snake = snake[1:]
-	}
+	snake = strings.TrimPrefix(snake, "_")
+
 	return snake
 }
 
