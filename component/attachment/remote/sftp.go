@@ -3,11 +3,12 @@ package remote
 import (
 	"context"
 	"errors"
-	"github.com/jcbowen/jcbaseGo"
 	"io"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/jcbowen/jcbaseGo"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
@@ -18,8 +19,9 @@ type SFTPConfig jcbaseGo.SFTPStruct
 // SFTPClient 实现了SFTP存储的客户端。
 // 注意：SFTPClient是并发安全的。
 type SFTPClient struct {
-	client *sftp.Client
-	mu     sync.Mutex
+	client  *sftp.Client
+	sshConn *ssh.Client
+	mu      sync.Mutex
 }
 
 // NewSFTPClient 创建一个新的SFTP客户端。
@@ -68,10 +70,11 @@ func NewSFTPClient(config SFTPConfig, args ...ssh.HostKeyCallback) (*SFTPClient,
 
 	client, err := sftp.NewClient(conn)
 	if err != nil {
+		_ = conn.Close()
 		return nil, &Error{Op: "NewSFTPClient", Err: err}
 	}
 
-	return &SFTPClient{client: client}, nil
+	return &SFTPClient{client: client, sshConn: conn}, nil
 }
 
 // Upload 实现了Client接口的Upload方法。
@@ -79,23 +82,16 @@ func (c *SFTPClient) Upload(ctx context.Context, remotePath string, data []byte)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return &Error{Op: "Upload", Err: ctx.Err()}
-	default:
-	}
+	return withContextTimeoutVoid(ctx, "Upload", func() error {
+		remoteFile, err := c.client.Create(remotePath)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = remoteFile.Close() }()
 
-	remoteFile, err := c.client.Create(remotePath)
-	if err != nil {
-		return &Error{Op: "Upload", Err: err}
-	}
-	defer func() { _ = remoteFile.Close() }()
-
-	_, err = remoteFile.Write(data)
-	if err != nil {
-		return &Error{Op: "Upload", Err: err}
-	}
-	return nil
+		_, err = remoteFile.Write(data)
+		return err
+	})
 }
 
 // Download 实现了Client接口的Download方法。
@@ -103,23 +99,15 @@ func (c *SFTPClient) Download(ctx context.Context, remotePath string) ([]byte, e
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return nil, &Error{Op: "Download", Err: ctx.Err()}
-	default:
-	}
+	return withContextTimeout(ctx, "Download", func() ([]byte, error) {
+		remoteFile, err := c.client.Open(remotePath)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = remoteFile.Close() }()
 
-	remoteFile, err := c.client.Open(remotePath)
-	if err != nil {
-		return nil, &Error{Op: "Download", Err: err}
-	}
-	defer func() { _ = remoteFile.Close() }()
-
-	data, err := io.ReadAll(remoteFile)
-	if err != nil {
-		return nil, &Error{Op: "Download", Err: err}
-	}
-	return data, nil
+		return io.ReadAll(remoteFile)
+	})
 }
 
 // Delete 实现了Client接口的Delete方法。
@@ -127,17 +115,9 @@ func (c *SFTPClient) Delete(ctx context.Context, remotePath string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return &Error{Op: "Delete", Err: ctx.Err()}
-	default:
-	}
-
-	err := c.client.Remove(remotePath)
-	if err != nil {
-		return &Error{Op: "Delete", Err: err}
-	}
-	return nil
+	return withContextTimeoutVoid(ctx, "Delete", func() error {
+		return c.client.Remove(remotePath)
+	})
 }
 
 // List 实现了Client接口的List方法。
@@ -145,15 +125,12 @@ func (c *SFTPClient) List(ctx context.Context, options ListOptions) (ListResult,
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return ListResult{}, &Error{Op: "List", Err: ctx.Err()}
-	default:
-	}
-
-	entries, err := c.client.ReadDir(options.Prefix)
+	// 获取文件列表
+	entries, err := withContextTimeout(ctx, "List", func() ([]os.FileInfo, error) {
+		return c.client.ReadDir(options.Prefix)
+	})
 	if err != nil {
-		return ListResult{}, &Error{Op: "List", Err: err}
+		return ListResult{}, err
 	}
 
 	var files []FileInfo // 使用 var 声明空切片
@@ -201,9 +178,20 @@ func (c *SFTPClient) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	err := c.client.Close()
-	if err != nil {
-		return &Error{Op: "Close", Err: err}
+	var err1, err2 error
+	// 先关闭SFTP客户端，再关闭SSH连接
+	if c.client != nil {
+		err1 = c.client.Close()
+	}
+	if c.sshConn != nil {
+		err2 = c.sshConn.Close()
+	}
+
+	if err1 != nil {
+		return &Error{Op: "Close", Err: err1}
+	}
+	if err2 != nil {
+		return &Error{Op: "Close", Err: err2}
 	}
 	return nil
 }

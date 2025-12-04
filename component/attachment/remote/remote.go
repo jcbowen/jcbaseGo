@@ -5,8 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/crypto/ssh"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // 存储类型常量定义
@@ -29,6 +30,66 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error {
 	return e.Err
+}
+
+// withContextTimeout 包装一个操作，使其能够响应上下文的取消信号
+func withContextTimeout[T any](ctx context.Context, op string, fn func() (T, error)) (T, error) {
+	select {
+	case <-ctx.Done():
+		var zero T
+		return zero, &Error{Op: op, Err: ctx.Err()}
+	default:
+	}
+
+	// 使用channel来实现操作超时
+	resultChan := make(chan T, 1)
+	errChan := make(chan error, 1)
+
+	go func() {
+		result, err := fn()
+		if err != nil {
+			errChan <- err
+			return
+		}
+		resultChan <- result
+	}()
+
+	select {
+	case <-ctx.Done():
+		var zero T
+		return zero, &Error{Op: op, Err: ctx.Err()}
+	case err := <-errChan:
+		var zero T
+		return zero, &Error{Op: op, Err: err}
+	case result := <-resultChan:
+		return result, nil
+	}
+}
+
+// withContextTimeoutVoid 包装一个无返回值的操作，使其能够响应上下文的取消信号
+func withContextTimeoutVoid(ctx context.Context, op string, fn func() error) error {
+	select {
+	case <-ctx.Done():
+		return &Error{Op: op, Err: ctx.Err()}
+	default:
+	}
+
+	// 使用channel来实现操作超时
+	errChan := make(chan error, 1)
+
+	go func() {
+		errChan <- fn()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return &Error{Op: op, Err: ctx.Err()}
+	case err := <-errChan:
+		if err != nil {
+			return &Error{Op: op, Err: err}
+		}
+		return nil
+	}
 }
 
 // ListOptions 定义了分页和过滤选项

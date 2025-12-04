@@ -3,11 +3,11 @@ package remote
 import (
 	"bytes"
 	"context"
-	"github.com/jcbowen/jcbaseGo"
 	"io"
 	"sync"
 	"time"
 
+	"github.com/jcbowen/jcbaseGo"
 	"github.com/jlaffaye/ftp"
 )
 
@@ -46,17 +46,9 @@ func (c *FTPClient) Upload(ctx context.Context, remotePath string, data []byte) 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return &Error{Op: "Upload", Err: ctx.Err()}
-	default:
-	}
-
-	err := c.conn.Stor(remotePath, bytes.NewReader(data))
-	if err != nil {
-		return &Error{Op: "Upload", Err: err}
-	}
-	return nil
+	return withContextTimeoutVoid(ctx, "Upload", func() error {
+		return c.conn.Stor(remotePath, bytes.NewReader(data))
+	})
 }
 
 // Download 实现了Client接口的Download方法。
@@ -64,23 +56,19 @@ func (c *FTPClient) Download(ctx context.Context, remotePath string) ([]byte, er
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return nil, &Error{Op: "Download", Err: ctx.Err()}
-	default:
-	}
-
-	resp, err := c.conn.Retr(remotePath)
+	// 第一步：获取文件响应
+	resp, err := withContextTimeout(ctx, "Download", func() (*ftp.Response, error) {
+		return c.conn.Retr(remotePath)
+	})
 	if err != nil {
-		return nil, &Error{Op: "Download", Err: err}
+		return nil, err
 	}
 	defer func() { _ = resp.Close() }()
 
-	data, err := io.ReadAll(resp)
-	if err != nil {
-		return nil, &Error{Op: "Download", Err: err}
-	}
-	return data, nil
+	// 第二步：读取文件数据
+	return withContextTimeout(ctx, "Download", func() ([]byte, error) {
+		return io.ReadAll(resp)
+	})
 }
 
 // Delete 实现了Client接口的Delete方法。
@@ -88,17 +76,9 @@ func (c *FTPClient) Delete(ctx context.Context, remotePath string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return &Error{Op: "Delete", Err: ctx.Err()}
-	default:
-	}
-
-	err := c.conn.Delete(remotePath)
-	if err != nil {
-		return &Error{Op: "Delete", Err: err}
-	}
-	return nil
+	return withContextTimeoutVoid(ctx, "Delete", func() error {
+		return c.conn.Delete(remotePath)
+	})
 }
 
 // List 实现了Client接口的List方法。
@@ -106,15 +86,12 @@ func (c *FTPClient) List(ctx context.Context, options ListOptions) (ListResult, 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return ListResult{}, &Error{Op: "List", Err: ctx.Err()}
-	default:
-	}
-
-	entries, err := c.conn.List(options.Prefix)
+	// 获取文件列表
+	entries, err := withContextTimeout(ctx, "List", func() ([]*ftp.Entry, error) {
+		return c.conn.List(options.Prefix)
+	})
 	if err != nil {
-		return ListResult{}, &Error{Op: "List", Err: err}
+		return ListResult{}, err
 	}
 
 	var files []FileInfo // 使用 var 声明空切片
@@ -161,6 +138,10 @@ func (c *FTPClient) List(ctx context.Context, options ListOptions) (ListResult, 
 func (c *FTPClient) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.conn == nil {
+		return nil
+	}
 
 	err := c.conn.Quit()
 	if err != nil {

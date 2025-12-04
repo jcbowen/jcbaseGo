@@ -3,13 +3,12 @@ package remote
 import (
 	"bytes"
 	"context"
-	"github.com/jcbowen/jcbaseGo"
 	"io"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
+	"github.com/jcbowen/jcbaseGo"
 	"github.com/tencentyun/cos-go-sdk-v5"
 )
 
@@ -17,10 +16,9 @@ import (
 type COSConfig jcbaseGo.COSStruct
 
 // COSClient 实现了腾讯云COS存储的客户端。
-// 注意：COSClient是并发安全的。
+// 注意：COSClient是并发安全的，因为底层COS SDK客户端本身是并发安全的。
 type COSClient struct {
 	client *cos.Client
-	mu     sync.Mutex
 }
 
 // NewCOSClient 创建一个新的COS客户端。
@@ -43,9 +41,6 @@ func NewCOSClient(config COSConfig) (*COSClient, error) {
 
 // Upload 实现了Client接口的Upload方法。
 func (c *COSClient) Upload(ctx context.Context, remotePath string, data []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	_, err := c.client.Object.Put(ctx, remotePath, bytes.NewReader(data), nil)
 	if err != nil {
 		return &Error{Op: "Upload", Err: err}
@@ -55,9 +50,6 @@ func (c *COSClient) Upload(ctx context.Context, remotePath string, data []byte) 
 
 // Download 实现了Client接口的Download方法。
 func (c *COSClient) Download(ctx context.Context, remotePath string) ([]byte, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	resp, err := c.client.Object.Get(ctx, remotePath, nil)
 	if err != nil {
 		return nil, &Error{Op: "Download", Err: err}
@@ -73,9 +65,6 @@ func (c *COSClient) Download(ctx context.Context, remotePath string) ([]byte, er
 
 // Delete 实现了Client接口的Delete方法。
 func (c *COSClient) Delete(ctx context.Context, remotePath string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	_, err := c.client.Object.Delete(ctx, remotePath)
 	if err != nil {
 		return &Error{Op: "Delete", Err: err}
@@ -85,9 +74,6 @@ func (c *COSClient) Delete(ctx context.Context, remotePath string) error {
 
 // List 实现了Client接口的List方法。
 func (c *COSClient) List(ctx context.Context, options ListOptions) (ListResult, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	opt := &cos.BucketGetOptions{
 		Prefix:  options.Prefix,
 		Marker:  options.Marker,
