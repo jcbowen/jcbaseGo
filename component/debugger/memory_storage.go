@@ -12,10 +12,12 @@ import (
 // MemoryStorage 内存存储器实现
 // 将调试日志保存在内存中，适合开发环境使用
 type MemoryStorage struct {
-	entries []*LogEntry    // 日志条目列表
+	entries []*LogEntry    // 日志条目环形缓冲区
 	index   map[string]int // ID到索引的映射
 	mutex   sync.RWMutex   // 读写锁
 	maxSize int            // 最大存储条目数
+	head    int            // 下一个要插入的位置
+	count   int            // 当前存储的条目数量
 }
 
 // NewMemoryStorage 创建新的内存存储器
@@ -27,9 +29,11 @@ func NewMemoryStorage(maxSize ...int) (*MemoryStorage, error) {
 	}
 
 	return &MemoryStorage{
-		entries: make([]*LogEntry, 0),
+		entries: make([]*LogEntry, size), // 预分配环形缓冲区
 		index:   make(map[string]int),
 		maxSize: size,
+		head:    0,
+		count:   0,
 	}, nil
 }
 
@@ -47,9 +51,10 @@ func NewMemoryStorage(maxSize ...int) (*MemoryStorage, error) {
 //
 // 保存逻辑:
 //   - 如果条目ID已存在，则更新现有条目（支持进程记录的动态更新）
-//   - 如果超过最大存储限制，自动删除最旧的条目（FIFO策略）
+//   - 使用环形缓冲区存储条目，当超过最大存储限制时，自动覆盖最旧的条目（FIFO策略）
 //   - 维护ID到索引的映射，提高FindByID等操作的性能
 //   - 使用读写锁确保多线程环境下的数据一致性
+//   - 时间复杂度O(1)，避免了重建索引的开销
 func (ms *MemoryStorage) Save(entry *LogEntry) error {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
@@ -61,20 +66,28 @@ func (ms *MemoryStorage) Save(entry *LogEntry) error {
 		return nil
 	}
 
-	// 检查是否超过最大存储限制
-	if ms.maxSize > 0 && len(ms.entries) >= ms.maxSize {
-		// 删除最旧的条目
-		oldestID := ms.entries[0].ID
-		ms.entries = ms.entries[1:]
-		delete(ms.index, oldestID)
+	// 计算要插入的位置
+	insertPos := ms.head
 
-		// 重新构建索引
-		ms.rebuildIndex()
+	// 如果缓冲区已满，需要覆盖最旧的条目
+	if ms.count >= ms.maxSize {
+		// 获取要被覆盖的旧条目ID
+		oldEntry := ms.entries[insertPos]
+		if oldEntry != nil {
+			// 从索引中删除旧条目
+			delete(ms.index, oldEntry.ID)
+		}
+	} else {
+		// 缓冲区未满，增加计数
+		ms.count++
 	}
 
-	// 添加新条目
-	ms.entries = append(ms.entries, entry)
-	ms.index[entry.ID] = len(ms.entries) - 1
+	// 插入新条目
+	ms.entries[insertPos] = entry
+	ms.index[entry.ID] = insertPos
+
+	// 更新head指针，指向下一个要插入的位置
+	ms.head = (ms.head + 1) % ms.maxSize
 
 	return nil
 }
@@ -109,25 +122,41 @@ func (ms *MemoryStorage) FindByID(id string) (*LogEntry, error) {
 //	error: 如果查询过程中发生错误返回错误信息，否则返回nil
 //
 // 优化逻辑:
-//   - 首先计算符合条件的总条目数（不加载具体数据）
-//   - 按时间倒序排序后，只加载当前页需要的数据
+//   - 首先收集所有有效的日志条目（非nil）
+//   - 计算符合条件的总条目数
+//   - 按时间倒序排序后，只返回当前页需要的数据
 //   - 支持空过滤条件，返回分页数据
 //   - 减少锁持有时间，提高并发性能
 func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error) {
-	// 第一阶段：快速计算总数（只读锁）
+	// 收集所有有效的日志条目
 	ms.mutex.RLock()
-	total := 0
+	var allEntries []*LogEntry
 	for _, entry := range ms.entries {
-		if ms.filterEntry(entry, filters) {
-			total++
+		if entry != nil {
+			allEntries = append(allEntries, entry)
 		}
 	}
 	ms.mutex.RUnlock()
+
+	// 应用过滤器
+	var filteredEntries []*LogEntry
+	for _, entry := range allEntries {
+		if ms.filterEntry(entry, filters) {
+			filteredEntries = append(filteredEntries, entry)
+		}
+	}
+
+	total := len(filteredEntries)
 
 	// 检查是否需要返回空结果
 	if total == 0 {
 		return []*LogEntry{}, 0, nil
 	}
+
+	// 按时间倒序排序
+	sort.Slice(filteredEntries, func(i, j int) bool {
+		return filteredEntries[i].Timestamp.After(filteredEntries[j].Timestamp)
+	})
 
 	// 计算分页范围
 	start := (page - 1) * pageSize
@@ -141,33 +170,8 @@ func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interfac
 		end = total
 	}
 
-	// 第二阶段：只加载当前页需要的数据（只读锁）
-	ms.mutex.RLock()
-	defer ms.mutex.RUnlock()
-
-	var result []*LogEntry
-	currentIndex := 0
-
-	for _, entry := range ms.entries {
-		if ms.filterEntry(entry, filters) {
-			if currentIndex >= start && currentIndex < end {
-				result = append(result, entry)
-			}
-			currentIndex++
-
-			// 如果已经收集到足够的数据，提前退出
-			if len(result) >= pageSize {
-				break
-			}
-		}
-	}
-
-	// 按时间倒序排序当前页数据
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Timestamp.After(result[j].Timestamp)
-	})
-
-	return result, total, nil
+	// 返回分页数据
+	return filteredEntries[start:end], total, nil
 }
 
 // Search 搜索日志内容
@@ -189,9 +193,9 @@ func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interfac
 //	error: 如果搜索过程中发生错误返回错误信息，否则返回nil
 //
 // 优化逻辑:
-//   - 首先计算符合条件的总条目数（不加载具体数据）
-//   - 按时间倒序排序后，只加载当前页需要的数据
-//   - 避免全量数据遍历，提高搜索性能
+//   - 首先收集所有有效的日志条目（非nil）
+//   - 搜索符合条件的条目
+//   - 按时间倒序排序后，只返回当前页需要的数据
 //   - 减少锁持有时间，提高并发性能
 //
 // 搜索范围:
@@ -203,20 +207,35 @@ func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interfac
 //   - 请求头（request_headers）的所有值
 //   - 响应头（response_headers）的所有值
 func (ms *MemoryStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, int, error) {
-	// 第一阶段：快速计算总数（只读锁）
+	// 收集所有有效的日志条目
 	ms.mutex.RLock()
-	total := 0
+	var allEntries []*LogEntry
 	for _, entry := range ms.entries {
-		if ms.containsKeyword(entry, keyword) {
-			total++
+		if entry != nil {
+			allEntries = append(allEntries, entry)
 		}
 	}
 	ms.mutex.RUnlock()
+
+	// 搜索符合条件的条目
+	var matchedEntries []*LogEntry
+	for _, entry := range allEntries {
+		if ms.containsKeyword(entry, keyword) {
+			matchedEntries = append(matchedEntries, entry)
+		}
+	}
+
+	total := len(matchedEntries)
 
 	// 检查是否需要返回空结果
 	if total == 0 {
 		return []*LogEntry{}, 0, nil
 	}
+
+	// 按时间倒序排序
+	sort.Slice(matchedEntries, func(i, j int) bool {
+		return matchedEntries[i].Timestamp.After(matchedEntries[j].Timestamp)
+	})
 
 	// 计算分页范围
 	start := (page - 1) * pageSize
@@ -230,33 +249,8 @@ func (ms *MemoryStorage) Search(keyword string, page, pageSize int) ([]*LogEntry
 		end = total
 	}
 
-	// 第二阶段：只加载当前页需要的数据（只读锁）
-	ms.mutex.RLock()
-	defer ms.mutex.RUnlock()
-
-	var result []*LogEntry
-	currentIndex := 0
-
-	for _, entry := range ms.entries {
-		if ms.containsKeyword(entry, keyword) {
-			if currentIndex >= start && currentIndex < end {
-				result = append(result, entry)
-			}
-			currentIndex++
-
-			// 如果已经收集到足够的数据，提前退出
-			if len(result) >= pageSize {
-				break
-			}
-		}
-	}
-
-	// 按时间倒序排序当前页数据
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Timestamp.After(result[j].Timestamp)
-	})
-
-	return result, total, nil
+	// 返回分页数据
+	return matchedEntries[start:end], total, nil
 }
 
 // Cleanup 清理过期日志
@@ -264,17 +258,36 @@ func (ms *MemoryStorage) Cleanup(before time.Time) error {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
-	// 过滤出未过期的条目
-	var remaining []*LogEntry
-	for _, entry := range ms.entries {
-		if !entry.Timestamp.Before(before) {
-			remaining = append(remaining, entry)
+	// 重置索引
+	ms.index = make(map[string]int)
+	newHead := 0
+	newCount := 0
+
+	// 遍历所有条目，保留未过期的
+	for i := 0; i < ms.maxSize; i++ {
+		entry := ms.entries[i]
+		if entry != nil && !entry.Timestamp.Before(before) {
+			// 保留未过期的条目，重新放入环形缓冲区
+			ms.entries[newHead] = entry
+			ms.index[entry.ID] = newHead
+			newHead = (newHead + 1) % ms.maxSize
+			newCount++
+		} else {
+			// 删除过期的条目
+			ms.entries[i] = nil
 		}
 	}
 
-	// 更新条目列表和索引
-	ms.entries = remaining
-	ms.rebuildIndex()
+	// 清空剩余的位置
+	for i := 0; i < ms.maxSize; i++ {
+		if i >= newCount {
+			ms.entries[(newHead+i)%ms.maxSize] = nil
+		}
+	}
+
+	// 更新头部和计数
+	ms.head = newHead
+	ms.count = newCount
 
 	return nil
 }
@@ -458,8 +471,15 @@ func (ms *MemoryStorage) GetStats() (map[string]interface{}, error) {
 	var streamingRequestCount int
 	var totalStreamingChunks int
 	var maxStreamingChunks int
+	var validEntryCount int
 
 	for _, entry := range ms.entries {
+		if entry == nil {
+			continue
+		}
+
+		validEntryCount++
+
 		// 使用与CalculateStorageSize相同的计算逻辑
 		entrySize := int64(len(entry.ID) + len(entry.URL) + len(entry.Method) +
 			len(entry.RequestBody) + len(entry.ResponseBody) + len(entry.Error) +
@@ -516,7 +536,7 @@ func (ms *MemoryStorage) GetStats() (map[string]interface{}, error) {
 	}
 
 	stats := map[string]interface{}{
-		"total_requests": len(ms.entries), // 总请求数
+		"total_requests": validEntryCount, // 总请求数
 		"max_size":       ms.maxSize,
 		"storage_type":   "memory",
 	}
@@ -525,15 +545,19 @@ func (ms *MemoryStorage) GetStats() (map[string]interface{}, error) {
 	stats["storage_size"] = fmt.Sprintf("%.2f KB", float64(storageSize)/1024)
 
 	// 计算平均响应时间
-	if len(ms.entries) > 0 {
-		stats["avg_duration"] = totalDuration / time.Duration(len(ms.entries))
-		stats["error_rate"] = float64(errorCount) / float64(len(ms.entries))
+	if validEntryCount > 0 {
+		stats["avg_duration"] = totalDuration / time.Duration(validEntryCount)
+		stats["error_rate"] = float64(errorCount) / float64(validEntryCount)
 		stats["error_count"] = errorCount
 	}
 
 	// 添加流式请求统计信息
 	stats["streaming_request_count"] = streamingRequestCount
-	stats["streaming_request_rate"] = float64(streamingRequestCount) / float64(len(ms.entries))
+	if validEntryCount > 0 {
+		stats["streaming_request_rate"] = float64(streamingRequestCount) / float64(validEntryCount)
+	} else {
+		stats["streaming_request_rate"] = 0
+	}
 	stats["total_streaming_chunks"] = totalStreamingChunks
 	if streamingRequestCount > 0 {
 		stats["avg_streaming_chunks"] = float64(totalStreamingChunks) / float64(streamingRequestCount)
@@ -551,8 +575,15 @@ func (ms *MemoryStorage) Clear() error {
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
-	ms.entries = make([]*LogEntry, 0)
+	// 清空环形缓冲区
+	for i := 0; i < ms.maxSize; i++ {
+		ms.entries[i] = nil
+	}
+
+	// 重置索引和计数器
 	ms.index = make(map[string]int)
+	ms.head = 0
+	ms.count = 0
 
 	return nil
 }
@@ -562,17 +593,26 @@ func (ms *MemoryStorage) GetRecent(count int) ([]*LogEntry, error) {
 	ms.mutex.RLock()
 	defer ms.mutex.RUnlock()
 
-	if count <= 0 || count > len(ms.entries) {
-		count = len(ms.entries)
+	// 收集所有有效的日志条目
+	var allEntries []*LogEntry
+	for _, entry := range ms.entries {
+		if entry != nil {
+			allEntries = append(allEntries, entry)
+		}
+	}
+
+	// 按时间倒序排序
+	sort.Slice(allEntries, func(i, j int) bool {
+		return allEntries[i].Timestamp.After(allEntries[j].Timestamp)
+	})
+
+	// 限制返回数量
+	if count <= 0 || count > len(allEntries) {
+		count = len(allEntries)
 	}
 
 	// 返回最近的count条记录
-	start := len(ms.entries) - count
-	if start < 0 {
-		start = 0
-	}
-
-	return ms.entries[start:], nil
+	return allEntries[:count], nil
 }
 
 // GetByTimeRange 根据时间范围获取日志条目
@@ -582,11 +622,16 @@ func (ms *MemoryStorage) GetByTimeRange(startTime, endTime time.Time) ([]*LogEnt
 
 	var results []*LogEntry
 	for _, entry := range ms.entries {
-		if (entry.Timestamp.Equal(startTime) || entry.Timestamp.After(startTime)) &&
+		if entry != nil && (entry.Timestamp.Equal(startTime) || entry.Timestamp.After(startTime)) &&
 			(entry.Timestamp.Equal(endTime) || entry.Timestamp.Before(endTime)) {
 			results = append(results, entry)
 		}
 	}
+
+	// 按时间倒序排序
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Timestamp.After(results[j].Timestamp)
+	})
 
 	return results, nil
 }
@@ -635,23 +680,33 @@ func (ms *MemoryStorage) ImportEntries(entries []*LogEntry) error {
 	defer ms.mutex.Unlock()
 
 	for _, entry := range entries {
-		// 检查是否已存在
-		if _, exists := ms.index[entry.ID]; !exists {
-			// 检查是否超过最大存储限制
-			if ms.maxSize > 0 && len(ms.entries) >= ms.maxSize {
-				// 删除最旧的条目
-				oldestID := ms.entries[0].ID
-				ms.entries = ms.entries[1:]
-				delete(ms.index, oldestID)
-
-				// 重新构建索引
-				ms.rebuildIndex()
-			}
-
-			// 添加新条目
-			ms.entries = append(ms.entries, entry)
-			ms.index[entry.ID] = len(ms.entries) - 1
+		// 检查是否已存在相同ID的条目
+		if _, exists := ms.index[entry.ID]; exists {
+			continue
 		}
+
+		// 计算要插入的位置
+		insertPos := ms.head
+
+		// 如果缓冲区已满，需要覆盖最旧的条目
+		if ms.count >= ms.maxSize {
+			// 获取要被覆盖的旧条目ID
+			oldEntry := ms.entries[insertPos]
+			if oldEntry != nil {
+				// 从索引中删除旧条目
+				delete(ms.index, oldEntry.ID)
+			}
+		} else {
+			// 缓冲区未满，增加计数
+			ms.count++
+		}
+
+		// 插入新条目
+		ms.entries[insertPos] = entry
+		ms.index[entry.ID] = insertPos
+
+		// 更新head指针，指向下一个要插入的位置
+		ms.head = (ms.head + 1) % ms.maxSize
 	}
 
 	return nil
