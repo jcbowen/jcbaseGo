@@ -158,6 +158,9 @@ func (c Convert) ToInt() int {
 	case float64:
 		return int(v)
 	case string:
+		if v == "" {
+			return 0
+		}
 		i, err := strconv.Atoi(v)
 		if err != nil {
 			log.Println("Error parsing int from string:", err)
