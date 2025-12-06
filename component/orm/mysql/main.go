@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jcbowen/jcbaseGo"
@@ -34,6 +35,33 @@ type Instance struct {
 	debug          bool                     // 是否开启debug
 	debuggerLogger debugger.LoggerInterface // debugger日志记录器
 	Errors         []error
+
+	// 连接重连配置
+	reconnectConfig ReconnectConfig
+
+	// 连接状态管理
+	lastValidCheck time.Time     // 最后一次有效性检查时间
+	validityCache  time.Duration // 有效性缓存时间，默认30秒
+	mu             sync.RWMutex  // 读写锁，保护并发访问
+}
+
+// ReconnectConfig 定义连接重连配置
+// 用于控制连接失效时的重连行为
+type ReconnectConfig struct {
+	MaxRetries          int           // 最大重试次数，默认3次
+	RetryInterval       time.Duration // 重试间隔，默认1秒
+	PingTimeout         time.Duration // Ping测试超时时间，默认2秒
+	EnableAutoReconnect bool          // 是否启用自动重连，默认true
+}
+
+// DefaultReconnectConfig 返回默认的重连配置
+func DefaultReconnectConfig() ReconnectConfig {
+	return ReconnectConfig{
+		MaxRetries:          3,
+		RetryInterval:       time.Second,
+		PingTimeout:         2 * time.Second,
+		EnableAutoReconnect: true,
+	}
 }
 
 // getDSN 拼接 Data Source Name（数据源）字符串，基于提供的 `DbStruct`。
@@ -52,7 +80,11 @@ func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
 // New 创建一个 MySQL 实例并建立数据库连接；
 // 可通过可选参数 `opts[0]` 指定配置别名以存入环境变量。
 func New(dbConfig jcbaseGo.DbStruct, opts ...string) (*Instance, error) {
-	inst := &Instance{}
+	inst := &Instance{
+		reconnectConfig: DefaultReconnectConfig(),
+		validityCache:   30 * time.Second, // 默认30秒缓存
+		lastValidCheck:  time.Now(),       // 初始化最后检查时间
+	}
 
 	alias := "db"
 	if len(opts) > 0 && opts[0] != "" {
@@ -155,13 +187,93 @@ func (c *Instance) Debug() *Instance {
 
 // GetDb 返回当前数据库连接；若已开启调试模式返回 Debug 包装的连接。
 // 调试模式优先级：debuggerLogger > debug标志
-// 注意：此方法为只读方法，不会修改实例状态
+// 注意：此方法会验证连接有效性并在需要时尝试重连，支持并发安全
 func (c *Instance) GetDb() *gorm.DB {
+	// 获取读锁，允许多个读操作并发
+	c.mu.RLock()
+
+	// 检查连接是否为 nil
 	if c.Db == nil {
-		log.Println("Database connection is nil")
+		c.mu.RUnlock() // 释放读锁
+
+		// 尝试重新连接（需要写锁）
+		if !c.reconnectConfig.EnableAutoReconnect {
+			log.Println("Database connection is nil and auto reconnect is disabled")
+			return nil
+		}
+
+		return c.tryReconnect()
+	}
+
+	// 检查是否需要验证连接有效性（基于缓存时间）
+	needCheck := time.Since(c.lastValidCheck) > c.validityCache
+
+	// 如果不需要检查，直接返回当前连接
+	if !needCheck {
+		db := c.applyDebugMode(c.Db)
+		c.mu.RUnlock()
+		return db
+	}
+
+	c.mu.RUnlock() // 释放读锁，准备进行写操作
+
+	// 验证连接有效性并处理重连
+	return c.validateAndReconnect()
+}
+
+// tryReconnect 尝试重新连接（带写锁保护）
+func (c *Instance) tryReconnect() *gorm.DB {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 双重检查，防止多个goroutine同时重连
+	if c.Db != nil {
+		return c.applyDebugMode(c.Db)
+	}
+
+	log.Println("Database connection is nil, attempting to reconnect...")
+
+	if err := c.reconnect(); err != nil {
+		log.Printf("Failed to reconnect: %v", err)
 		return nil
 	}
-	db := c.Db
+
+	c.lastValidCheck = time.Now()
+	return c.applyDebugMode(c.Db)
+}
+
+// validateAndReconnect 验证连接有效性并处理重连（带写锁保护）
+func (c *Instance) validateAndReconnect() *gorm.DB {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 双重检查，防止其他goroutine已经处理过
+	if time.Since(c.lastValidCheck) <= c.validityCache {
+		return c.applyDebugMode(c.Db)
+	}
+
+	// 验证连接有效性
+	if c.isConnectionValid() {
+		c.lastValidCheck = time.Now()
+		return c.applyDebugMode(c.Db)
+	}
+
+	log.Println("Database connection is invalid, attempting to reconnect...")
+
+	if err := c.reconnect(); err != nil {
+		log.Printf("Failed to reconnect: %v", err)
+		return nil
+	}
+
+	c.lastValidCheck = time.Now()
+	return c.applyDebugMode(c.Db)
+}
+
+// applyDebugMode 应用调试模式配置
+func (c *Instance) applyDebugMode(db *gorm.DB) *gorm.DB {
+	if db == nil {
+		return nil
+	}
 
 	// 调试模式优先级：debuggerLogger > debug标志
 	if c.debuggerLogger != nil {
@@ -171,6 +283,8 @@ func (c *Instance) GetDb() *gorm.DB {
 			// 已经通过SetDebuggerLogger或EnableSQLLogging配置过，直接返回
 			return db
 		}
+		// 如果debuggerLogger级别为静默模式，返回原始连接
+		return db
 	} else if c.debug {
 		// 如果没有设置debuggerLogger但开启了debug标志，使用GORM的Debug模式
 		db = db.Debug()
@@ -193,6 +307,99 @@ func (c *Instance) SetDebuggerLogger(debuggerLogger debugger.LoggerInterface) {
 // GetDebuggerLogger 获取debugger日志记录器
 func (c *Instance) GetDebuggerLogger() debugger.LoggerInterface {
 	return c.debuggerLogger
+}
+
+// isConnectionValid 检查数据库连接是否有效
+// 通过执行 Ping 操作验证连接状态
+func (c *Instance) isConnectionValid() bool {
+	if c.Db == nil {
+		return false
+	}
+
+	sqlDB, err := c.Db.DB()
+	if err != nil {
+		log.Printf("Failed to get underlying SQL DB: %v", err)
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), c.reconnectConfig.PingTimeout)
+	defer cancel()
+
+	err = sqlDB.PingContext(ctx)
+	if err != nil {
+		log.Printf("Database connection is invalid: %v", err)
+		return false
+	}
+
+	return true
+}
+
+// reconnect 尝试重新建立数据库连接
+// 根据重连配置进行多次重试
+func (c *Instance) reconnect() error {
+	if !c.reconnectConfig.EnableAutoReconnect {
+		return errors.New("auto reconnect is disabled")
+	}
+
+	var lastErr error
+	for i := 0; i < c.reconnectConfig.MaxRetries; i++ {
+		log.Printf("Attempting to reconnect to database (attempt %d/%d)", i+1, c.reconnectConfig.MaxRetries)
+
+		// 创建新的数据库连接
+		db, err := gorm.Open(mysql.Open(c.Dsn), &gorm.Config{
+			DisableForeignKeyConstraintWhenMigrating: c.Conf.DisableForeignKeyConstraintWhenMigrating,
+			NamingStrategy: schema.NamingStrategy{
+				TablePrefix:   c.Conf.TablePrefix,
+				SingularTable: c.Conf.SingularTable,
+			},
+		})
+		if err != nil {
+			lastErr = err
+			log.Printf("Reconnection attempt %d failed: %v", i+1, err)
+
+			if i < c.reconnectConfig.MaxRetries-1 {
+				time.Sleep(c.reconnectConfig.RetryInterval)
+			}
+			continue
+		}
+
+		// 配置连接池
+		sqlDB, err := db.DB()
+		if err != nil {
+			lastErr = err
+			log.Printf("Failed to configure connection pool: %v", err)
+			continue
+		}
+
+		sqlDB.SetMaxOpenConns(100)
+		sqlDB.SetMaxIdleConns(10)
+		sqlDB.SetConnMaxLifetime(5 * time.Minute)
+		sqlDB.SetConnMaxIdleTime(3 * time.Minute)
+
+		// 验证连接
+		ctx, cancel := context.WithTimeout(context.Background(), c.reconnectConfig.PingTimeout)
+		err = sqlDB.PingContext(ctx)
+		cancel()
+
+		if err != nil {
+			lastErr = err
+			log.Printf("Reconnected but ping failed: %v", err)
+			continue
+		}
+
+		// 恢复调试模式配置
+		if c.debuggerLogger != nil {
+			db = orm.EnableSQLLogging(db, c.debuggerLogger)
+		} else if c.debug {
+			db = db.Debug()
+		}
+
+		c.Db = db
+		log.Printf("Database reconnection successful")
+		return nil
+	}
+
+	return fmt.Errorf("failed to reconnect after %d attempts: %v", c.reconnectConfig.MaxRetries, lastErr)
 }
 
 // EnableSQLLogging 为当前数据库实例启用SQL日志记录
@@ -435,4 +642,55 @@ func (c *Instance) FindForPage(model interface{}, options *FindPageOptions) (jcb
 	}
 
 	return listData, nil
+}
+
+// SetReconnectConfig 设置连接重连配置
+// 参数：
+//   - config: 重连配置参数
+func (c *Instance) SetReconnectConfig(config ReconnectConfig) {
+	c.reconnectConfig = config
+}
+
+// GetReconnectConfig 获取当前的重连配置
+func (c *Instance) GetReconnectConfig() ReconnectConfig {
+	return c.reconnectConfig
+}
+
+// EnableAutoReconnect 启用自动重连功能
+func (c *Instance) EnableAutoReconnect() *Instance {
+	c.reconnectConfig.EnableAutoReconnect = true
+	return c
+}
+
+// DisableAutoReconnect 禁用自动重连功能
+func (c *Instance) DisableAutoReconnect() *Instance {
+	c.reconnectConfig.EnableAutoReconnect = false
+	return c
+}
+
+// SetMaxRetries 设置最大重试次数
+func (c *Instance) SetMaxRetries(maxRetries int) *Instance {
+	if maxRetries < 1 {
+		maxRetries = 1
+	}
+	c.reconnectConfig.MaxRetries = maxRetries
+	return c
+}
+
+// SetRetryInterval 设置重试间隔
+func (c *Instance) SetRetryInterval(interval time.Duration) *Instance {
+	if interval < time.Second {
+		interval = time.Second
+	}
+	c.reconnectConfig.RetryInterval = interval
+	return c
+}
+
+// SetPingTimeout 设置Ping测试超时时间
+func (c *Instance) SetPingTimeout(timeout time.Duration) *Instance {
+	if timeout < time.Second {
+		timeout = time.Second
+	}
+	c.reconnectConfig.PingTimeout = timeout
+	return c
 }
