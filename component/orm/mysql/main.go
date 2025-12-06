@@ -2,11 +2,13 @@
 package mysql
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/jcbowen/jcbaseGo"
@@ -37,16 +39,20 @@ type Instance struct {
 // getDSN 拼接 Data Source Name（数据源）字符串，基于提供的 `DbStruct`。
 func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
 	// 拼接dsn
+	parseTime := strings.ToLower(dbConfig.ParseTime)
+	if parseTime != "false" {
+		parseTime = "true"
+	}
 	dsn = "%s:%s@%s(%s:%s)/%s?charset=%s&parseTime=%s&loc=Local"
-	dsn = fmt.Sprintf(dsn, dbConfig.Username, dbConfig.Password, dbConfig.Protocol, dbConfig.Host, dbConfig.Port, dbConfig.Dbname, dbConfig.Charset, dbConfig.ParseTime)
+	dsn = fmt.Sprintf(dsn, dbConfig.Username, dbConfig.Password, dbConfig.Protocol, dbConfig.Host, dbConfig.Port, dbConfig.Dbname, dbConfig.Charset, parseTime)
 
 	return
 }
 
 // New 创建一个 MySQL 实例并建立数据库连接；
 // 可通过可选参数 `opts[0]` 指定配置别名以存入环境变量。
-func New(dbConfig jcbaseGo.DbStruct, opts ...string) *Instance {
-	context := &Instance{}
+func New(dbConfig jcbaseGo.DbStruct, opts ...string) (*Instance, error) {
+	inst := &Instance{}
 
 	alias := "db"
 	if len(opts) > 0 && opts[0] != "" {
@@ -54,12 +60,14 @@ func New(dbConfig jcbaseGo.DbStruct, opts ...string) *Instance {
 	}
 
 	err := helper.CheckAndSetDefault(&dbConfig)
-	jcbaseGo.PanicIfError(err)
+	if err != nil {
+		return nil, err
+	}
 
 	// 判断dbConfig是否为空
 	if dbConfig.Dbname == "" {
-		context.AddError(errors.New("dbConfig is empty"))
-		return context
+		inst.AddError(errors.New("dbConfig is empty"))
+		return inst, errors.New("dbConfig is empty")
 	}
 
 	dsn := getDSN(dbConfig)
@@ -70,32 +78,54 @@ func New(dbConfig jcbaseGo.DbStruct, opts ...string) *Instance {
 			SingularTable: dbConfig.SingularTable, // 使用单数表名，启用该选项后，`User` 表将是`user`
 		},
 	})
-	jcbaseGo.PanicIfError(err)
+	if err != nil {
+		return nil, err
+	}
 
 	// 配置连接池参数，防止连接泄漏和长时间锁定
 	sqlDB, err := db.DB()
-	if err == nil {
-		// 设置最大连接数
-		sqlDB.SetMaxOpenConns(100)
-		// 设置最大空闲连接数
-		sqlDB.SetMaxIdleConns(10)
-		// 设置连接最大生命周期（5分钟）
-		sqlDB.SetConnMaxLifetime(5 * time.Minute)
-		// 设置空闲连接超时时间（3分钟）
-		sqlDB.SetConnMaxIdleTime(3 * time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	// 设置最大连接数
+	sqlDB.SetMaxOpenConns(100)
+	// 设置最大空闲连接数
+	sqlDB.SetMaxIdleConns(10)
+	// 设置连接最大生命周期（5分钟）
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	// 设置空闲连接超时时间（3分钟）
+	sqlDB.SetConnMaxIdleTime(3 * time.Minute)
+
+	// 建连校验与重试
+	{
+		var lastErr error
+		for i := 0; i < 3; i++ {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			lastErr = sqlDB.PingContext(ctx)
+			cancel()
+			if lastErr == nil {
+				break
+			}
+			time.Sleep(time.Duration(200*(1<<i)) * time.Millisecond)
+		}
+		if lastErr != nil {
+			return nil, lastErr
+		}
 	}
 
-	context.Dsn = dsn
-	context.Conf = dbConfig
-	context.Db = db
+	inst.Dsn = dsn
+	inst.Conf = dbConfig
+	inst.Db = db
 
 	// 将配置信息储存到环境变量
 	envStr := ""
 	helper.Json(dbConfig).ToString(&envStr)
 	err = os.Setenv("jc_mysql_"+alias, envStr)
-	jcbaseGo.PanicIfError(err)
+	if err != nil {
+		return nil, err
+	}
 
-	return context
+	return inst, nil
 }
 
 // NewWithDebugger 创建MySQL实例并集成debugger日志记录
@@ -106,12 +136,15 @@ func New(dbConfig jcbaseGo.DbStruct, opts ...string) *Instance {
 //
 // 返回：
 //   - *Instance: MySQL实例
-func NewWithDebugger(dbConfig jcbaseGo.DbStruct, debuggerLogger debugger.LoggerInterface, opts ...string) *Instance {
-	instance := New(dbConfig, opts...)
+func NewWithDebugger(dbConfig jcbaseGo.DbStruct, debuggerLogger debugger.LoggerInterface, opts ...string) (*Instance, error) {
+	instance, err := New(dbConfig, opts...)
+	if err != nil {
+		return nil, err
+	}
 	if instance.Db != nil && debuggerLogger != nil {
 		instance.SetDebuggerLogger(debuggerLogger)
 	}
-	return instance
+	return instance, nil
 }
 
 // Debug 开启调试模式，后续通过 `GetDb()` 获取的 *gorm.DB 将启用 Debug。

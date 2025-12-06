@@ -103,11 +103,9 @@ func connectDatabase() (*sqlite.Instance, error) {
 	}
 
 	// 连接数据库
-	db := sqlite.New(config)
-
-	// 检查是否有错误
-	if len(db.Error()) > 0 {
-		return nil, fmt.Errorf("连接SQLite数据库失败: %v", db.Error())
+	db, err := sqlite.New(config)
+	if err != nil {
+		return nil, fmt.Errorf("连接SQLite数据库失败: %v", err)
 	}
 
 	fmt.Println("SQLite数据库连接成功")

@@ -91,11 +91,9 @@ func connectDatabase() (*mysql.Instance, error) {
 	}
 
 	// 连接数据库
-	db := mysql.New(config)
-
-	// 检查是否有错误
-	if len(db.Error()) > 0 {
-		return nil, fmt.Errorf("连接数据库失败: %v", db.Error())
+	db, err := mysql.New(config)
+	if err != nil {
+		return nil, fmt.Errorf("连接数据库失败: %v", err)
 	}
 
 	fmt.Println("数据库连接成功")

@@ -2,6 +2,7 @@
 package sqlite
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -31,8 +32,11 @@ type Instance struct {
 
 // New 创建一个 SQLite 实例并建立数据库连接；
 // 可通过可选参数 `opts[0]` 指定配置别名以存入环境变量。
-func New(Conf jcbaseGo.SqlLiteStruct, opts ...string) (i *Instance) {
-	i = &Instance{}
+// 返回：
+//   - *Instance: SQLite实例
+//   - error: 初始化或连接失败时的错误信息
+func New(Conf jcbaseGo.SqlLiteStruct, opts ...string) (*Instance, error) {
+	i := &Instance{}
 
 	alias := "main"
 	if len(opts) > 0 && opts[0] != "" {
@@ -40,20 +44,25 @@ func New(Conf jcbaseGo.SqlLiteStruct, opts ...string) (i *Instance) {
 	}
 
 	err := helper.CheckAndSetDefault(&Conf)
-	jcbaseGo.PanicIfError(err)
+	if err != nil {
+		return nil, err
+	}
 
 	// 获取dbFile的绝对路径
 	fileNameFull, err := filepath.Abs(Conf.DbFile)
-	jcbaseGo.PanicIfError(err)
+	if err != nil {
+		return nil, err
+	}
 
 	// 检查目录是否存在，如果不存在则创建
 	_, err = helper.NewFile(&helper.File{Path: fileNameFull}).DirExists(true)
-	jcbaseGo.PanicIfError(err)
+	if err != nil {
+		return nil, err
+	}
 
 	// 判断dbConfig是否为空
 	if Conf.DbFile == "" {
-		log.Panic(errors.New("dbConfig is empty"))
-		return
+		return i, errors.New("dbConfig is empty")
 	}
 
 	// 创建数据库连接
@@ -64,19 +73,39 @@ func New(Conf jcbaseGo.SqlLiteStruct, opts ...string) (i *Instance) {
 			SingularTable: Conf.SingularTable, // 使用单数表名，启用该选项后，`User` 表将是`user`
 		},
 	})
-	jcbaseGo.PanicIfError(err)
+	if err != nil {
+		return nil, err
+	}
 
 	// 配置连接池参数，防止连接泄漏
 	sqlDB, err := db.DB()
-	if err == nil {
-		// 设置最大连接数（SQLite通常只需要少量连接）
-		sqlDB.SetMaxOpenConns(1)
-		// 设置最大空闲连接数
-		sqlDB.SetMaxIdleConns(1)
-		// 设置连接最大生命周期（10分钟）
-		sqlDB.SetConnMaxLifetime(10 * time.Minute)
-		// 设置空闲连接超时时间（5分钟）
-		sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	// 设置最大连接数（SQLite通常只需要少量连接）
+	sqlDB.SetMaxOpenConns(1)
+	// 设置最大空闲连接数
+	sqlDB.SetMaxIdleConns(1)
+	// 设置连接最大生命周期（10分钟）
+	sqlDB.SetConnMaxLifetime(10 * time.Minute)
+	// 设置空闲连接超时时间（5分钟）
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+
+	// 建连校验与轻量重试（SQLite 本地文件，一般即刻可用）
+	{
+		var lastErr error
+		for i := 0; i < 2; i++ {
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			lastErr = sqlDB.PingContext(ctx)
+			cancel()
+			if lastErr == nil {
+				break
+			}
+			time.Sleep(time.Duration(100*(1<<i)) * time.Millisecond)
+		}
+		if lastErr != nil {
+			return nil, lastErr
+		}
 	}
 
 	i.Conf = Conf
@@ -86,9 +115,11 @@ func New(Conf jcbaseGo.SqlLiteStruct, opts ...string) (i *Instance) {
 	envStr := ""
 	helper.Json(Conf).ToString(&envStr)
 	err = os.Setenv("jc_sql_lite_"+alias, envStr)
-	jcbaseGo.PanicIfError(err)
+	if err != nil {
+		return nil, err
+	}
 
-	return i
+	return i, nil
 }
 
 // NewWithDebugger 创建SQLite实例并集成debugger日志记录
@@ -99,12 +130,15 @@ func New(Conf jcbaseGo.SqlLiteStruct, opts ...string) (i *Instance) {
 //
 // 返回：
 //   - *Instance: SQLite实例
-func NewWithDebugger(conf jcbaseGo.SqlLiteStruct, debuggerLogger debugger.LoggerInterface, opts ...string) *Instance {
-	instance := New(conf, opts...)
+func NewWithDebugger(conf jcbaseGo.SqlLiteStruct, debuggerLogger debugger.LoggerInterface, opts ...string) (*Instance, error) {
+	instance, err := New(conf, opts...)
+	if err != nil {
+		return nil, err
+	}
 	if instance.Db != nil && debuggerLogger != nil {
 		instance.SetDebuggerLogger(debuggerLogger)
 	}
-	return instance
+	return instance, nil
 }
 
 // Debug 开启调试模式，后续通过 `GetDb()` 获取的 *gorm.DB 将启用 Debug。
