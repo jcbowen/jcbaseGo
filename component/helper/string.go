@@ -327,3 +327,33 @@ func (s *Str) ConvertBetweenUnits(value float64, fromUnit, toUnit string, unitTy
 	}
 	return NewStr(strconv.FormatFloat(result, 'f', -1, 64)), nil
 }
+
+// IsNumeric 检查字符串是否为有效的数字
+//
+// 参数:
+//   - strict: 是否启用严格模式。严格模式下只接受整数，宽松模式下接受整数和浮点数（可选，默认为false）
+//
+// 返回值:
+//   - bool: 如果是有效的数字返回true，否则返回false
+//
+// 示例:
+//   - s := NewStr("123"); s.IsNumeric() -> true
+//   - s := NewStr("123.45"); s.IsNumeric() -> true
+//   - s := NewStr("123.45"); s.IsNumeric(true) -> false（严格模式不接受浮点数）
+//   - s := NewStr("abc"); s.IsNumeric() -> false
+func (s *Str) IsNumeric(strict ...bool) bool {
+	strictMode := false
+	if len(strict) > 0 {
+		strictMode = strict[0]
+	}
+
+	if strictMode {
+		// 严格模式：只接受整数
+		_, err := strconv.ParseInt(s.String, 10, 64)
+		return err == nil
+	} else {
+		// 宽松模式：接受整数和浮点数
+		_, err := strconv.ParseFloat(s.String, 64)
+		return err == nil
+	}
+}
