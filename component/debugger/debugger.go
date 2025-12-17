@@ -401,9 +401,8 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 	}
 
 	// 记录请求体
-	if body, err := d.extractRequestBody(c); err == nil {
-		entry.RequestBody = body
-	}
+	body, _ := d.extractRequestBody(c) // 忽略错误，因为extractRequestBody已经处理了错误情况
+	entry.RequestBody = body
 
 	return entry
 }
@@ -663,7 +662,10 @@ func (d *Debugger) extractRequestBody(c *gin.Context) (string, error) {
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		fmt.Printf("[DEBUG] extractRequestBody: Error reading body: %v\n", err)
-		return "", err
+		// 恢复请求体（即使读取失败，也要尝试恢复，确保后续中间件能正常工作）
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(nil))
+		// 返回错误信息，而不是空字符串，这样createLogEntry可以记录错误情况
+		return fmt.Sprintf("[Error reading request body: %v]", err), nil
 	}
 
 	fmt.Printf("[DEBUG] extractRequestBody: Read %d bytes, restoring body\n", len(bodyBytes))
