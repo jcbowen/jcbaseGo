@@ -20,11 +20,12 @@ import (
 
 // Config 调试器配置结构
 type Config struct {
-	Enabled         bool          `json:"enabled" default:"true" preserve:"true"` // 是否启用调试器
-	MaxBodySize     int64         `json:"max_body_size" default:"1024"`           // 最大请求/响应体大小（KB），默认1MB
-	RetentionPeriod time.Duration `json:"retention_period" default:"168h"`        // 日志保留期限，默认7天
-	Level           LogLevel      `json:"level" default:"1"`                      // 日志级别：LevelSilent
-	MaxRecords      int           `json:"max_records" default:"150"`              // 最大记录数量，默认150条
+	Enabled          bool          `json:"enabled" default:"true" preserve:"true"` // 是否启用调试器
+	MaxBodySize      int64         `json:"max_body_size" default:"1024"`           // 最大请求/响应体大小（KB），默认1MB
+	RetentionPeriod  time.Duration `json:"retention_period" default:"168h"`        // 日志保留期限，默认7天
+	Level            LogLevel      `json:"level" default:"3"`                      // 日志级别：LevelWarn
+	MaxRecords       int           `json:"max_records" default:"150"`              // 最大记录数量，默认150条
+	EnableCallerInfo bool          `json:"enable_caller_info" default:"true"`      // 是否启用调用位置信息，默认开启，关闭可提高高并发场景下的性能
 
 	// 过滤配置
 	SkipPaths        []string `json:"skip_paths" default:""`                                                                                                               // 跳过的路径（如静态文件："/static/,/favicon.ico"）

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,10 +16,10 @@ type LogLevel int
 
 // 日志级别常量
 const (
-	LevelSilent LogLevel = iota + 1 // 信息级别：不记录任何日志
+	LevelSilent LogLevel = iota + 1 // 静默级别：不记录任何日志
 	LevelError                      // 错误级别：只记录错误信息
 	LevelWarn                       // 警告级别：记录错误+警告信息
-	LevelInfo                       // 调试级别：记录所有详细信息
+	LevelInfo                       // 信息级别：记录所有详细信息
 )
 
 // String 返回日志级别的字符串表示
@@ -65,6 +66,7 @@ type DefaultLogger struct {
 	level    LogLevel // 当前日志记录器的日志级别
 	fields   map[string]interface{}
 	logs     []LoggerLog // 存储收集的日志
+	mutex    sync.Mutex  // 用于保护并发访问的互斥锁
 }
 
 // NewDefaultLogger 创建默认日志记录器实例
@@ -96,9 +98,16 @@ func (l *DefaultLogger) Error(msg any, fields ...map[string]interface{}) {
 func (l *DefaultLogger) WithFields(fields map[string]interface{}) LoggerInterface {
 	// 合并现有字段和新字段
 	newFields := make(map[string]interface{})
+
+	l.mutex.Lock()
 	for k, v := range l.fields {
 		newFields[k] = v
 	}
+	logsCopy := make([]LoggerLog, len(l.logs))
+	copy(logsCopy, l.logs)
+	level := l.level
+	l.mutex.Unlock()
+
 	for k, v := range fields {
 		newFields[k] = v
 	}
@@ -106,14 +115,14 @@ func (l *DefaultLogger) WithFields(fields map[string]interface{}) LoggerInterfac
 	return &DefaultLogger{
 		debugger: l.debugger,
 		fields:   newFields,
-		logs:     l.logs,  // 继承父logger的日志
-		level:    l.level, // 设置新的日志级别
+		logs:     logsCopy, // 继承父logger的日志
+		level:    level,    // 设置新的日志级别
 	}
 }
 
 // GetLevel 获取当前日志记录器的日志级别
 func (l *DefaultLogger) GetLevel() LogLevel {
-	return l.debugger.config.Level
+	return l.level
 }
 
 // log 内部日志记录方法
@@ -146,19 +155,27 @@ func (l *DefaultLogger) log(level LogLevel, msg any, fields ...map[string]interf
 	allFields["timestamp"] = time.Now().Format(time.RFC3339)
 
 	// 添加实例字段
+	l.mutex.Lock()
 	for k, v := range l.fields {
 		allFields[k] = v
 	}
+	l.mutex.Unlock()
 
 	// 添加调用方传入的字段
-	if len(fields) > 0 {
-		for k, v := range fields[0] {
+	for _, fieldMap := range fields {
+		for k, v := range fieldMap {
 			allFields[k] = v
 		}
 	}
 
-	// 获取调用位置信息
-	fileName, line, function := getCallerInfo()
+	// 根据配置决定是否获取调用位置信息
+	var fileName string
+	var line int
+	var function string
+	if l.debugger.config.EnableCallerInfo {
+		// 获取调用位置信息
+		fileName, line, function = getCallerInfo()
+	}
 
 	// 收集日志信息到logs字段
 	loggerLog := LoggerLog{
@@ -170,12 +187,19 @@ func (l *DefaultLogger) log(level LogLevel, msg any, fields ...map[string]interf
 		Line:      line,
 		Function:  function,
 	}
+
+	l.mutex.Lock()
 	l.logs = append(l.logs, loggerLog)
+	l.mutex.Unlock()
 
 	// 输出包含位置信息的日志（支持IDE可点击链接）
 	// 格式：[级别] 文件名:行号 - 函数名: 消息内容
 	// 注意：文件名:行号 格式是IDEA控制台可点击链接的标准格式
-	fmt.Printf("[%s] %s:%d - %s\n", level.String(), fileName, line, message)
+	if l.debugger.config.EnableCallerInfo {
+		fmt.Printf("[%s] %s:%d - %s\n", level.String(), fileName, line, message)
+	} else {
+		fmt.Printf("[%s] %s\n", level.String(), message)
+	}
 
 	// // 格式化日志输出
 	// logEntry := map[string]interface{}{
@@ -232,13 +256,9 @@ func getCallerInfo() (fileName string, line int, function string) {
 		}
 	}
 
-	// 简化文件名
-	parts := strings.Split(found.File, "/")
-	if len(parts) > 0 {
-		fileName = parts[len(parts)-1]
-	} else {
-		fileName = found.File
-	}
+	// 保留完整的文件名路径，便于精确定位日志位置
+	// 对于多个包中存在相同文件名的情况，可以更准确地区分
+	fileName = found.File
 
 	return fileName, found.Line, found.Function
 }
@@ -248,7 +268,7 @@ func (l *DefaultLogger) shouldLog(level LogLevel) bool {
 	// 根据配置的日志级别决定是否记录
 	switch l.GetLevel() {
 	case LevelInfo:
-		// 调试级别记录所有日志
+		// 信息级别记录所有日志
 		return true
 	case LevelWarn:
 		// 警告级别记录warn、error
@@ -264,12 +284,18 @@ func (l *DefaultLogger) shouldLog(level LogLevel) bool {
 
 // GetLogs 获取收集的日志信息
 func (l *DefaultLogger) GetLogs() []LoggerLog {
-	return l.logs
+	l.mutex.Lock()
+	logsCopy := make([]LoggerLog, len(l.logs))
+	copy(logsCopy, l.logs)
+	l.mutex.Unlock()
+	return logsCopy
 }
 
 // ClearLogs 清空收集的日志信息
 func (l *DefaultLogger) ClearLogs() {
+	l.mutex.Lock()
 	l.logs = []LoggerLog{}
+	l.mutex.Unlock()
 }
 
 // LoggerLog 记录通过logger打印的日志信息
@@ -572,7 +598,7 @@ func (p *ProcessLogger) WithFields(fields map[string]interface{}) LoggerInterfac
 //
 // 返回值:
 //
-//	string: 日志级别（debug/info/warn/error）
+//	LogLevel: 日志级别（LevelInfo/LevelWarn/LevelError/LevelSilent）
 func (p *ProcessLogger) GetLevel() LogLevel {
 	return p.logger.GetLevel()
 }
@@ -620,12 +646,14 @@ func (p *ProcessLogger) GetProcessType() string {
 //
 // 示例:
 //
-//	logger.SetProcessInfo(map[string]interface{}{"progress": "50%", "current_file": "data.csv"})
+// logger.SetProcessInfo(map[string]interface{}{"progress": "50%", "current_file": "data.csv"})
 func (p *ProcessLogger) SetProcessInfo(info map[string]interface{}) {
 	// 更新logger的字段
+	p.logger.mutex.Lock()
 	for k, v := range info {
 		p.logger.fields[k] = v
 	}
+	p.logger.mutex.Unlock()
 }
 
 // 进程状态常量定义
@@ -678,38 +706,45 @@ func (p *ProcessLogger) EndProcess(status string) error {
 	return nil
 }
 
+// noopLogger 空操作日志记录器实现
+// 当上下文中没有Logger实例时返回此实现，避免创建不必要的资源
+// 所有方法都是空操作，不会产生任何日志输出
+
+type noopLogger struct{}
+
+// Info 空操作实现
+func (l noopLogger) Info(msg any, fields ...map[string]interface{}) {}
+
+// Warn 空操作实现
+func (l noopLogger) Warn(msg any, fields ...map[string]interface{}) {}
+
+// Error 空操作实现
+func (l noopLogger) Error(msg any, fields ...map[string]interface{}) {}
+
+// WithFields 空操作实现，返回自身
+func (l noopLogger) WithFields(fields map[string]interface{}) LoggerInterface {
+	return l
+}
+
+// GetLevel 空操作实现，返回LevelSilent
+func (l noopLogger) GetLevel() LogLevel {
+	return LevelSilent
+}
+
 // GetLoggerFromContext 从Gin上下文中获取Logger实例
 // 控制器可以通过此函数获取Logger来记录日志
 func GetLoggerFromContext(c *gin.Context) LoggerInterface {
+	if c == nil {
+		return noopLogger{}
+	}
+
 	if logger, exists := c.Get("debugger_logger"); exists {
 		if l, ok := logger.(LoggerInterface); ok {
 			return l
 		}
 	}
 
-	// 如果上下文中没有Logger，创建一个默认的调试器实例
-	// 这种情况通常发生在调试器未启用或中间件未正确设置时
-	memoryStorage, _ := NewMemoryStorage(150)
-	config := &Config{
-		Enabled: true,
-		Storage: memoryStorage,
-		Level:   LevelInfo,
-	}
-	// 设置默认值
-	if err := helper.CheckAndSetDefault(config); err != nil {
-		fmt.Printf("设置默认值失败: %v\n", err)
-	}
-	debugger, _ := New(config)
-
-	var host string
-	if c != nil && c.Request != nil {
-		host = c.Request.Header.Get("X-Forwarded-Host")
-		if host == "" {
-			host = c.Request.Host
-		}
-	}
-	return debugger.GetLogger().WithFields(map[string]interface{}{
-		"context_error": "logger_not_found_in_context",
-		"host":          host,
-	})
+	// 如果上下文中没有Logger，返回空操作日志记录器
+	// 避免创建不必要的资源和潜在的内存泄漏
+	return noopLogger{}
 }

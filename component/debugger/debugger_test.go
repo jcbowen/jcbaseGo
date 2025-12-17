@@ -273,16 +273,28 @@ func TestLoggerWithoutContext(t *testing.T) {
 	// 创建空的Gin上下文
 	c := &gin.Context{}
 
-	// 从上下文中获取Logger（应该返回默认Logger）
+	// 从上下文中获取Logger（应该返回空操作Logger）
 	logger := GetLoggerFromContext(c)
 
-	output := captureOutput(func() {
-		// 记录日志
-		logger.Warn("在没有Logger的上下文中测试")
-	})
+	// 验证返回的Logger实例不为nil
+	assert.NotNil(t, logger)
 
-	// 验证输出包含日志消息
-	assert.Contains(t, output, "在没有Logger的上下文中测试")
+	// 验证GetLevel方法返回LevelSilent
+	assert.Equal(t, LevelSilent, logger.GetLevel())
+
+	// 验证WithFields方法返回自身或新实例
+	newLogger := logger.WithFields(map[string]interface{}{"test": "value"})
+	assert.NotNil(t, newLogger)
+
+	// 验证调用Logger方法不会导致panic
+	logger.Info("测试Info方法")
+	logger.Warn("测试Warn方法")
+	logger.Error("测试Error方法")
+
+	// 验证从nil上下文中获取Logger不会导致panic
+	nilLogger := GetLoggerFromContext(nil)
+	assert.NotNil(t, nilLogger)
+	assert.Equal(t, LevelSilent, nilLogger.GetLevel())
 }
 
 // TestCustomLogger 测试自定义Logger功能
