@@ -524,7 +524,7 @@ const indexTemplate = `<!DOCTYPE html>
         {{if .Pagination}}
         <div class="pagination">
             {{if .Pagination.HasPrev}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.host}}&host={{.Filters.host}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}{{if .Filters.is_streaming}}&is_streaming={{.Filters.is_streaming}}{{end}}{{if .Filters.streaming_status}}&streaming_status={{.Filters.streaming_status}}{{end}}">上一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{.QueryString}}">上一页</a>
             {{else}}
             <span class="disabled">上一页</span>
             {{end}}
@@ -533,7 +533,7 @@ const indexTemplate = `<!DOCTYPE html>
             {{$totalPages := .Pagination.TotalPages}}
             {{$basePath := .BasePath}}
             {{$pageSize := .Pagination.PageSize}}
-            {{$filters := .Filters}}
+            {{$queryString := .QueryString}}
             {{$keyword := .Keyword}}
             
             {{/* 智能分页显示逻辑 */}}
@@ -543,13 +543,13 @@ const indexTemplate = `<!DOCTYPE html>
                 {{if eq $i $page}}
                 <span class="current">{{$i}}</span>
                 {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.host}}&host={{$filters.host}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}{{if $filters.is_streaming}}&is_streaming={{$filters.is_streaming}}{{end}}{{if $filters.streaming_status}}&streaming_status={{$filters.streaming_status}}{{end}}">{{$i}}</a>
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{$queryString}}">{{$i}}</a>
                 {{end}}
                 {{end}}
             {{else}}
                 {{/* 总页数大于7时，使用智能分页 */}}
                 {{if gt $page 4}}
-                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.host}}&host={{$filters.host}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}{{if $filters.is_streaming}}&is_streaming={{$filters.is_streaming}}{{end}}{{if $filters.streaming_status}}&streaming_status={{$filters.streaming_status}}{{end}}">1</a>
+                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{$queryString}}">1</a>
                     {{if gt $page 5}}
                     <span class="ellipsis">...</span>
                     {{end}}
@@ -570,7 +570,7 @@ const indexTemplate = `<!DOCTYPE html>
                 {{if eq $i $page}}
                 <span class="current">{{$i}}</span>
                 {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.host}}&host={{$filters.host}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}">{{$i}}</a>
+                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{$queryString}}">{{$i}}</a>
                 {{end}}
                 {{end}}
                 
@@ -579,13 +579,13 @@ const indexTemplate = `<!DOCTYPE html>
                         {{if lt $page (sub $totalPages 4)}}
                         <span class="ellipsis">...</span>
                         {{end}}
-                        <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{if $keyword}}&q={{$keyword}}{{end}}{{if $filters.method}}&method={{$filters.method}}{{end}}{{if $filters.status_code}}&status_code={{$filters.status_code}}{{end}}{{if $filters.client_ip}}&client_ip={{$filters.client_ip}}{{end}}{{if $filters.start_time}}&start_time={{$filters.start_time}}{{end}}{{if $filters.end_time}}&end_time={{$filters.end_time}}{{end}}{{if $filters.url}}&url={{$filters.url}}{{end}}{{if $filters.is_streaming}}&is_streaming={{$filters.is_streaming}}{{end}}{{if $filters.streaming_status}}&streaming_status={{$filters.streaming_status}}{{end}}">{{$totalPages}}</a>
+                        <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{$queryString}}">{{$totalPages}}</a>
                     {{end}}
                 {{end}}
             {{end}}
             
             {{if .Pagination.HasNext}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{if .Keyword}}&q={{.Keyword}}{{end}}{{if .Filters.method}}&method={{.Filters.method}}{{end}}{{if .Filters.status_code}}&status_code={{.Filters.status_code}}{{end}}{{if .Filters.client_ip}}&client_ip={{.Filters.client_ip}}{{end}}{{if .Filters.host}}&host={{.Filters.host}}{{end}}{{if .Filters.start_time}}&start_time={{.Filters.start_time}}{{end}}{{if .Filters.end_time}}&end_time={{.Filters.end_time}}{{end}}{{if .Filters.url}}&url={{.Filters.url}}{{end}}{{if .Filters.is_streaming}}&is_streaming={{.Filters.is_streaming}}{{end}}{{if .Filters.streaming_status}}&streaming_status={{.Filters.streaming_status}}{{end}}">下一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{.QueryString}}">下一页</a>
             {{else}}
             <span class="disabled">下一页</span>
             {{end}}

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -219,6 +220,37 @@ func (c *Controller) isIPInCIDR(ip, cidr string) bool {
 	return ipNet.Contains(parsedIP)
 }
 
+// generateQueryString 生成查询字符串
+// 从请求中获取所有查询参数，排除指定的参数，生成完整的查询字符串
+func (c *Controller) generateQueryString(ctx *gin.Context, exclude ...string) string {
+	query := url.Values{}
+
+	// 从请求中获取所有查询参数
+	for key, values := range ctx.Request.URL.Query() {
+		// 排除指定的参数
+		excluded := false
+		for _, ex := range exclude {
+			if key == ex {
+				excluded = true
+				break
+			}
+		}
+		if excluded {
+			continue
+		}
+		// 添加参数到查询字符串
+		for _, value := range values {
+			query.Add(key, value)
+		}
+	}
+
+	result := query.Encode()
+	if result != "" {
+		result = "?" + result
+	}
+	return result
+}
+
 // indexHandler 调试器主页处理器（支持搜索功能）
 func (c *Controller) indexHandler(ctx *gin.Context) {
 	// 获取分页参数
@@ -261,15 +293,19 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 	// 计算每个日志条目的存储大小
 	c.calculateEntriesStorageSize(entries)
 
+	// 生成查询字符串（排除page参数，因为会在分页链接中动态设置）
+	queryString := c.generateQueryString(ctx, "page")
+
 	// 渲染页面
 	c.renderTemplate(ctx, "index.html", gin.H{
-		"Title":      "调试器 - 日志列表",
-		"Entries":    entries,
-		"Pagination": pagination,
-		"Filters":    filters,
-		"Stats":      stats,
-		"Keyword":    keyword,
-		"BasePath":   c.basePath,
+		"Title":       "调试器 - 日志列表",
+		"Entries":     entries,
+		"Pagination":  pagination,
+		"Filters":     filters,
+		"Stats":       stats,
+		"Keyword":     keyword,
+		"BasePath":    c.basePath,
+		"QueryString": queryString,
 	})
 }
 
@@ -493,7 +529,11 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 
 	// 状态码过滤
 	if statusCode := ctx.Query("status_code"); statusCode != "" {
-		filters["status_code"] = statusCode
+		if code, err := strconv.Atoi(statusCode); err == nil {
+			filters["status_code"] = code
+		} else {
+			filters["status_code"] = statusCode
+		}
 	}
 
 	// IP地址过滤
@@ -523,11 +563,15 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 
 	// 时间范围过滤
 	if startTime := ctx.Query("start_time"); startTime != "" {
-		filters["start_time"] = startTime
+		if t, err := time.Parse(time.RFC3339, startTime); err == nil {
+			filters["start_time"] = t
+		}
 	}
 
 	if endTime := ctx.Query("end_time"); endTime != "" {
-		filters["end_time"] = endTime
+		if t, err := time.Parse(time.RFC3339, endTime); err == nil {
+			filters["end_time"] = t
+		}
 	}
 
 	// URL路径过滤
@@ -537,7 +581,7 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 
 	// 流式请求过滤
 	if isStreaming := ctx.Query("is_streaming"); isStreaming != "" {
-		filters["is_streaming"] = isStreaming
+		filters["is_streaming"] = strings.ToLower(isStreaming) == "true"
 	}
 
 	// 流式状态过滤

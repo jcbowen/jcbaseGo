@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -465,7 +466,21 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 				return false
 			}
 		case "status_code":
-			if entry.StatusCode != value {
+			// 处理状态码类型转换，支持字符串和整数类型的比较
+			var statusCodeValue int
+			switch v := value.(type) {
+			case int:
+				statusCodeValue = v
+			case string:
+				if code, err := strconv.Atoi(v); err == nil {
+					statusCodeValue = code
+				} else {
+					return false
+				}
+			default:
+				return false
+			}
+			if entry.StatusCode != statusCodeValue {
 				return false
 			}
 		case "url":
