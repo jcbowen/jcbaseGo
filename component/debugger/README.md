@@ -80,7 +80,7 @@ func main() {
 	}
 
 	// 方式5：生产环境调试器
-	dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs", 1000)
+	dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs")
 	if err != nil {
 		panic(err)
 	}
@@ -122,12 +122,11 @@ dbg, err := debugger.NewWithFileStorage("/var/log/debug_logs", 5000)
 customStorage, _ := debugger.NewMemoryStorage(150)
 dbg, err := debugger.NewWithCustomStorage(customStorage)
 
-// 方式5：生产环境配置
-dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs", 1000)
-
-if err != nil {
-	panic(err)
-}
+// 方式5：生产环境调试器
+	dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs")
+	if err != nil {
+		panic(err)
+	}
 
 router.Use(dbg.Middleware())
 ```
@@ -144,7 +143,7 @@ config := &debugger.Config{
 	Storage:         memoryStorage,           // 必须传入实例化的存储器
 	MaxBodySize:     1024,                    // 最大请求/响应体大小（KB），默认1MB
 	RetentionPeriod: 7 * 24 * time.Hour,      // 日志保留期限，默认7天
-	Level:           debugger.LevelInfo,     // 日志级别：LevelInfo/LevelWarn/LevelError/LevelSilent
+	Level:           debugger.LevelWarn,     // 日志级别：LevelInfo/LevelWarn/LevelError/LevelSilent（默认：LevelWarn）
 	MaxRecords:      150,                     // 最大记录数量，默认150
 
 	// 过滤配置
@@ -428,7 +427,7 @@ func main() {
 		logger := debugger.GetLoggerFromContext(c)
 		
 		// 记录不同级别的日志
-		logger.Debug("开始处理用户请求")
+		logger.Info("开始处理用户请求")
 		logger.Info("用户ID", map[string]interface{}{"user_id": 123})
 		logger.Warn("用户权限检查", map[string]interface{}{"permission": "read"})
 		
@@ -460,9 +459,6 @@ func main() {
 ```go
 // LoggerInterface 日志记录器接口
 type LoggerInterface interface {
-	// Debug 记录调试级别日志
-	Debug(msg any, fields ...map[string]interface{})
-
 	// Info 记录信息级别日志
 	Info(msg any, fields ...map[string]interface{})
 
@@ -476,7 +472,7 @@ type LoggerInterface interface {
 	WithFields(fields map[string]interface{}) LoggerInterface
 
 	// GetLevel 获取当前日志记录器的日志级别
-	GetLevel() string
+	GetLevel() LogLevel
 }
 ```
 
@@ -556,10 +552,10 @@ func TestLoggerLocationInfo(t *testing.T) {
 
 ### 日志级别说明
 
-- **Debug级别**: 记录所有详细信息，包括请求体、响应体等（开发环境）
-- **Info级别**: 记录基本信息，包括请求头、响应头等（生产环境）
-- **Warn级别**: 只记录警告级别的信息
-- **Error级别**: 只记录错误级别的信息
+- **LevelSilent**: 静默模式，不记录任何调试日志（生产环境/关闭调试）
+- **LevelError**: 只记录错误级别的信息
+- **LevelWarn**: 记录错误和警告级别的信息（默认级别）
+- **LevelInfo**: 记录所有详细信息，包括请求体、响应体等（开发环境/最高调试级别）
 
 ### 消息格式支持
 
@@ -607,7 +603,7 @@ func main() {
 
 	// 启动一个进程记录
 	logger := dbg.StartProcess("数据同步任务", "batch")
-	defer logger.EndProcess(debugger.ProcessStatusCompleted) // 确保进程结束时记录结束时间
+	defer dbg.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted) // 确保进程结束时记录结束时间
 
 	// 记录进程执行日志
 	logger.Info("开始执行数据同步任务", map[string]interface{}{
@@ -618,9 +614,9 @@ func main() {
 
 	// 模拟数据处理
 	for i := 0; i < 5; i++ {
-		logger.Debug(fmt.Sprintf("处理第%d批数据", i+1), map[string]interface{}{
-			"current_batch": i + 1,
-			"total_batches": 5,
+		logger.Info("获取数据源信息", map[string]interface{}{
+			"source": "MySQL",
+			"table": "users",
 		})
 		time.Sleep(100 * time.Millisecond)
 
@@ -681,10 +677,10 @@ const (
 
 ```go
 // 推荐使用常量
-logger.EndProcess(debugger.ProcessStatusCompleted)
+dbg.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
 
 // 不推荐使用字符串字面量
-logger.EndProcess("completed")
+dbg.EndProcess(logger.GetProcessID(), "completed")
 ```
 
 #### 获取进程记录列表
@@ -713,7 +709,7 @@ func processWorker(dbg *debugger.Debugger, wg *sync.WaitGroup, workerID int) {
 
 	// 为每个工作进程创建独立的记录
 	logger := dbg.StartProcess(fmt.Sprintf("工作进程-%d", workerID), "worker")
-	defer logger.EndProcess(debugger.ProcessStatusCompleted)
+	defer dbg.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
 
 	logger.Info("工作进程启动", map[string]interface{}{
 		"worker_id": workerID,
@@ -722,7 +718,7 @@ func processWorker(dbg *debugger.Debugger, wg *sync.WaitGroup, workerID int) {
 
 	// 模拟工作负载
 	for i := 0; i < 3; i++ {
-		logger.Debug(fmt.Sprintf("处理任务批次 %d", i+1), map[string]interface{}{
+		logger.Info(fmt.Sprintf("处理任务批次 %d", i+1), map[string]interface{}{
 			"batch": i + 1,
 			"worker": workerID,
 		})
@@ -773,7 +769,7 @@ import (
 func batchProcessor(dbg *debugger.Debugger) {
 	// 创建批处理任务记录
 	logger := dbg.StartProcess("夜间批处理任务", "batch")
-	defer logger.EndProcess(debugger.ProcessStatusCompleted)
+	defer dbg.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
 
 	logger.Info("开始夜间批处理", map[string]interface{}{
 		"scheduled_time": "02:00",
@@ -895,7 +891,7 @@ func main() {
 		logger := debugger.GetLoggerFromContext(c)
 
 		// 记录不同级别的日志
-		logger.Debug("开始处理用户列表请求", map[string]interface{}{
+		logger.Info("开始处理用户列表请求", map[string]interface{}{
 			"query_params": c.Request.URL.Query(),
 			"page":         c.Query("page"),
 			"limit":        c.Query("limit"),
@@ -1225,7 +1221,7 @@ debugger组件现在支持在详情页面中显示业务控制器中记录的log
 
 ```go
 logger := debugger.GetLoggerFromContext(c)
-logger.Debug("开始处理请求", map[string]interface{}{
+logger.Info("开始处理请求", map[string]interface{}{
     "user_id": 123,
     "action": "create_user",
 })
