@@ -44,6 +44,150 @@ func (opt *Option) GetConfigOption() Option {
 	return *opt
 }
 
+// ReplaceConfigNode 替换指定节点的配置信息
+// 参数：
+//   - nodePath: 节点路径，如 "title" 或 "db.host"
+//   - newValue: 新的配置值，类型必须与原节点类型匹配
+//   - condition: 条件值，如果提供则只有当原节点值等于条件值时才替换
+//
+// 返回：
+//   - bool: 是否成功替换
+//
+// 使用示例：
+//
+//	// 替换所有title节点为ok
+//	opt.ReplaceConfigNode("title", "ok", nil)
+//	// 仅当title=test时替换为ok
+//	opt.ReplaceConfigNode("title", "ok", "test")
+func (opt *Option) ReplaceConfigNode(nodePath string, newValue interface{}, condition interface{}) bool {
+	// 检查配置数据是否为空
+	if opt.ConfigData == nil {
+		log.Printf("配置数据为空，无法替换节点: %s", nodePath)
+		return false
+	}
+
+	// 按点号分割节点路径
+	nodeNames := strings.Split(nodePath, ".")
+	if len(nodeNames) == 0 {
+		log.Printf("节点路径为空，无法替换")
+		return false
+	}
+
+	// 获取配置数据的反射值
+	val := reflect.ValueOf(opt.ConfigData)
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+
+	// 遍历节点路径，找到目标节点
+	var currentVal reflect.Value = val
+	for i := 0; i < len(nodeNames); i++ {
+		// 如果当前值不是结构体，则无法继续查找
+		if currentVal.Kind() != reflect.Struct {
+			log.Printf("节点路径 %s 无效，当前值不是结构体: %v", strings.Join(nodeNames[:i+1], "."), currentVal.Kind())
+			return false
+		}
+
+		// 查找字段（先按字段名，再按标签）
+		fieldName := nodeNames[i]
+		_, found := currentVal.Type().FieldByName(fieldName)
+		if !found {
+			// 尝试通过标签查找
+			for j := 0; j < currentVal.NumField(); j++ {
+				f := currentVal.Type().Field(j)
+				jsonTag := parseTagName(f.Tag.Get("json"))
+				iniTag := parseTagName(f.Tag.Get("ini"))
+				if jsonTag == fieldName || iniTag == fieldName {
+					fieldName = f.Name
+					found = true
+					break
+				}
+			}
+		}
+
+		if !found {
+			log.Printf("未找到节点: %s", strings.Join(nodeNames[:i+1], "."))
+			return false
+		}
+
+		// 获取字段值
+		fieldVal := currentVal.FieldByName(fieldName)
+		if fieldVal.Kind() == reflect.Ptr {
+			if fieldVal.IsNil() {
+				// 如果指针为空且不是最后一个节点，则创建新实例
+				if i < len(nodeNames)-1 {
+					newVal := reflect.New(fieldVal.Type().Elem())
+					fieldVal.Set(newVal)
+					fieldVal = fieldVal.Elem()
+				} else {
+					log.Printf("节点 %s 是 nil 指针，无法替换", nodePath)
+					return false
+				}
+			} else {
+				fieldVal = fieldVal.Elem()
+			}
+		}
+
+		// 如果是最后一个节点，执行替换
+		if i == len(nodeNames)-1 {
+			return opt.replaceNodeValue(fieldVal, newValue, condition)
+		}
+
+		// 否则继续遍历下一个节点
+		currentVal = fieldVal
+	}
+
+	return false
+}
+
+// applyConfigReplaceRules 应用配置替换规则
+// 遍历ConfigReplaceRules切片，对每个规则调用ReplaceConfigNode方法执行配置替换
+func (opt *Option) applyConfigReplaceRules() {
+	if len(opt.ConfigReplaceRules) == 0 {
+		return
+	}
+
+	for _, rule := range opt.ConfigReplaceRules {
+		opt.ReplaceConfigNode(rule.NodePath, rule.NewValue, rule.Condition)
+	}
+}
+
+// replaceNodeValue 替换节点值，处理类型检查和条件判断
+func (opt *Option) replaceNodeValue(fieldVal reflect.Value, newValue interface{}, condition interface{}) bool {
+	// 检查字段是否可设置
+	if !fieldVal.CanSet() {
+		log.Printf("字段不可设置，无法替换")
+		return false
+	}
+
+	// 获取字段当前值
+	currentVal := fieldVal.Interface()
+
+	// 检查条件
+	if condition != nil {
+		// 检查条件类型是否匹配
+		if reflect.TypeOf(condition) != reflect.TypeOf(currentVal) {
+			log.Printf("条件类型不匹配，期望 %T，实际 %T", currentVal, condition)
+			return false
+		}
+
+		// 检查当前值是否等于条件值
+		if !reflect.DeepEqual(currentVal, condition) {
+			return false
+		}
+	}
+
+	// 检查新值类型是否匹配
+	if reflect.TypeOf(newValue) != reflect.TypeOf(currentVal) {
+		log.Printf("新值类型不匹配，期望 %T，实际 %T", currentVal, newValue)
+		return false
+	}
+
+	// 替换值
+	fieldVal.Set(reflect.ValueOf(newValue))
+	return true
+}
+
 // checkConfig 将配置信息初始化到 Config 中
 func (opt *Option) checkConfig() {
 	if reflect.TypeOf(opt.ConfigData) == nil {
@@ -75,6 +219,8 @@ func (opt *Option) checkConfig() {
 		opt.createConfigFileIfNotExists(fileNameFull)
 		// 从文件中读取配置
 		opt.readConfigFile(fileNameFull)
+		// 执行配置替换规则
+		opt.applyConfigReplaceRules()
 		// 配置结构体是有可能更新升级的，所以每次运行之后，应当更新一下配置文件
 		opt.updateConfigFile(fileNameFull, true)
 	case ConfigTypeCommand:
@@ -108,6 +254,8 @@ func (opt *Option) checkConfig() {
 			log.Fatalf("JSON解析错误: %v\n原始数据: %s", err, pureJSON)
 			return
 		}
+		// 执行配置替换规则
+		opt.applyConfigReplaceRules()
 	default:
 		log.Panic("错误的配置类型")
 	}

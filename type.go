@@ -14,12 +14,20 @@ const (
 	ConfigTypeFile = "file"
 )
 
+// ConfigReplaceRule 配置替换规则
+type ConfigReplaceRule struct {
+	NodePath  string      `json:"node_path"`           // 节点路径，如 "title" 或 "db.host"
+	NewValue  interface{} `json:"new_value"`           // 新的配置值
+	Condition interface{} `json:"condition,omitempty"` // 条件值，如果提供则只有当原节点值等于条件值时才替换
+}
+
 // Option jcbaseGo配置选项
 type Option struct {
-	ConfigType   string      `json:"config_type" ini:"config_type" default:"file"`                // 配置类型，仅支持：json、ini、command
-	ConfigSource string      `json:"config_source" ini:"config_source" default:"./data/conf.ini"` // 配置源（json文件/ini文件/命令行）
-	ConfigData   interface{} `json:"config_data" ini:"config_data"`                               // 配置信息
-	RuntimePath  string      `json:"runtime_path" ini:"runtime_path" default:"./data/runtime/"`   // 运行缓存目录，默认在data目录下
+	ConfigType         string              `json:"config_type" ini:"config_type" default:"file"`                        // 配置类型，仅支持：json、ini、command
+	ConfigSource       string              `json:"config_source" ini:"config_source" default:"./data/conf.ini"`         // 配置源（json文件/ini文件/命令行）
+	ConfigData         interface{}         `json:"config_data" ini:"config_data"`                                       // 配置信息
+	RuntimePath        string              `json:"runtime_path" ini:"runtime_path" default:"./data/runtime/"`           // 运行缓存目录，默认在data目录下
+	ConfigReplaceRules []ConfigReplaceRule `json:"config_replace_rules,omitempty" ini:"config_replace_rules,omitempty"` // 配置替换规则
 }
 
 // SSLStruct ssl配置
