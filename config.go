@@ -306,7 +306,7 @@ func (opt *Option) getConfigFilePath() string {
 func (opt *Option) createConfigFileIfNotExists(fileNameFull string) {
 	if !helper.NewFile(&helper.File{Path: fileNameFull}).Exists() {
 		opt.updateConfigFile(fileNameFull, false)
-		log.Fatalf("配置文件不存在，已创建默认配置文件，请修改配置文件后重启程序！\n配置文件路径：%s", fileNameFull)
+		log.Printf("配置文件不存在，已创建默认配置文件，请修改配置文件后重启程序！\n配置文件路径：%s", fileNameFull)
 	}
 }
 
