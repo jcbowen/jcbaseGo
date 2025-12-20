@@ -16,6 +16,7 @@
 - ✅ **流式请求支持**: 自动检测和记录流式响应（SSE、分块传输等），支持分块记录、元数据统计和内存管理优化
 - ✅ **进程级调试**: 支持非HTTP进程的调试记录，适用于后台任务、批处理作业等场景
 - ✅ **内置Logger**: 提供多级别日志记录器，支持字段附加和日志收集
+- ✅ **主进程日志**: 支持应用程序主进程日志记录，采用文件存储，支持按日期或大小分割
 
 ### 记录内容
 - 请求方法、URL、查询参数
@@ -662,10 +663,10 @@ err := dbg.EndProcess(processID string, status string)
 
 **进程状态常量**
 
-为了更好的代码可维护性，建议使用预定义的进程状态常量：
+为了更好的代码可维护性，建议使用预定义的进程状态常量。这些常量定义在`debugger`包中：
 
 ```go
-// 进程状态常量定义
+// 进程状态常量定义（位于debugger包中）
 const (
 	ProcessStatusCompleted = "completed" // 进程正常完成
 	ProcessStatusFailed    = "failed"    // 进程执行失败
@@ -981,6 +982,145 @@ r.GET("/api/error", func(c *gin.Context) {
 更多详细的使用示例，请查看：
 - `example/debugger/logger_usage.go` - 完整的Logger使用示例
 - `example/debugger/basic_usage.go` - 基础使用示例
+
+## 主进程日志功能
+
+### 概述
+
+debugger组件提供了主进程日志功能，用于记录应用程序主进程的日志，采用文件存储方式，支持按日期或大小分割日志文件，有效避免日志文件过大。
+
+### 功能特性
+
+- ✅ **文件存储**: 主进程日志采用文件存储，路径可配置
+- ✅ **日志分割**: 支持按日期或大小两种分割模式
+- ✅ **配置简单**: 复用debugger的日志级别和调用位置信息配置
+- ✅ **易于使用**: 提供便捷的API接口
+- ✅ **与现有系统集成**: 与debugger组件无缝集成
+
+### 配置说明
+
+主进程日志功能需要在调试器配置中显式启用，相关配置选项如下：
+
+```go
+config := &debugger.Config{
+    // ... 其他配置
+    
+    // 主进程日志配置
+    EnableMainLogger:   true,                  // 启用主进程日志
+    MainLogPath:        "./runtime/logs/",   // 日志文件路径（默认：./runtime/logs/）
+    MainLogSplitMode:   "size",              // 日志分割模式：size（按大小）、date（按日期）
+    MainLogMaxSize:     100,                  // 日志文件最大大小（MB），按大小分割时有效
+    MainLogMaxBackups:  7,                    // 最大备份文件数量
+    MainLogCompress:    false,                // 是否压缩备份日志
+    
+    // 主进程日志复用以下配置项
+    Level:            debugger.LevelInfo,    // 日志级别（与主进程日志共享）
+    EnableCallerInfo: true,                  // 是否启用调用位置信息（与主进程日志共享）
+}
+```
+
+### 存储方式和日志分割
+
+#### 存储方式
+- **文件存储**: 主进程日志采用文件存储，存储路径可通过`MainLogPath`配置
+- **默认路径**: `./runtime/logs/`
+- **文件名格式**:
+  - 按日期分割: `process.log.2024-01-01`
+  - 按大小分割: `process.log.1`, `process.log.2`
+
+#### 日志分割机制
+
+1. **按日期分割** (`date`):
+   - 每天0点自动创建新的日志文件
+   - 文件名格式: `process.log.YYYY-MM-DD`
+   - 例如: `process.log.2024-01-01`, `process.log.2024-01-02`
+
+2. **按大小分割** (`size`):
+   - 当日志文件大小达到`MainLogMaxSize`指定的大小（MB）时，创建新的日志文件
+   - 文件名格式: `process.log.N`（N从1开始递增）
+   - 例如: `process.log.1`, `process.log.2`, `process.log.3`
+
+3. **日志备份和清理**:
+   - 最多保留`MainLogMaxBackups`个备份文件
+   - 超过最大备份数量时，自动删除最旧的日志文件
+   - 支持配置是否压缩备份日志
+
+### 基本使用示例
+
+#### 1. 启用主进程日志
+
+```go
+package main
+
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/jcbowen/jcbaseGo/component/debugger"
+)
+
+func main() {
+	// 创建调试器配置
+	config := &debugger.Config{
+		Enabled:            true,
+		EnableMainLogger:   true,                  // 启用主进程日志
+		MainLogPath:        "./runtime/logs/",   // 日志文件路径
+		MainLogSplitMode:   "date",              // 按日期分割
+		MainLogMaxSize:     100,                  // 单个文件最大100MB
+		MainLogMaxBackups:  7,                    // 保留7个备份文件
+		Level:             debugger.LevelInfo,   // 日志级别
+		EnableCallerInfo:  true,                  // 启用调用位置信息
+	}
+
+	// 创建调试器实例
+	dbg, err := debugger.New(config)
+	if err != nil {
+		panic(err)
+	}
+
+	// 获取主进程日志记录器
+	mainLogger := dbg.GetMainLogger()
+
+	// 记录主进程日志
+	mainLogger.Info("应用程序启动")
+	mainLogger.Info("初始化配置", map[string]interface{}{"config_path": "./config.yml"})
+	mainLogger.Warn("使用默认配置，建议在生产环境中指定自定义配置")
+
+	router := gin.New()
+	router.Use(dbg.Middleware())
+
+	router.GET("/api/users", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "Hello World"})
+	})
+
+	mainLogger.Info("服务器启动成功", map[string]interface{}{"port": 8080})
+	router.Run(":8080")
+}
+```
+
+#### 2. 记录不同级别的日志
+
+```go
+// 获取主进程日志记录器
+mainLogger := dbg.GetMainLogger()
+
+// 记录信息级别日志
+mainLogger.Info("应用程序启动")
+mainLogger.Info("处理请求", map[string]interface{}{
+    "method": "GET",
+    "url":    "/api/users",
+})
+
+// 记录警告级别日志
+mainLogger.Warn("配置文件不存在，使用默认配置", map[string]interface{}{
+    "config_path": "./config.yml",
+})
+
+// 记录错误级别日志
+mainLogger.Error("数据库连接失败", map[string]interface{}{
+    "error": "connection refused",
+    "host":  "localhost",
+    "port":  3306,
+})
+```
 
 ## 高级功能
 

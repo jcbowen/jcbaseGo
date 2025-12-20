@@ -1,13 +1,17 @@
 package debugger
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -441,6 +445,146 @@ func (c *Controller) searchAPIHandler(ctx *gin.Context) {
 			"pages":    (total + pageSize - 1) / pageSize,
 		},
 	})
+}
+
+// downloadMainLogsHandler 主进程日志下载API处理器
+// 支持压缩下载所有主进程日志文件
+func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
+	// 获取调试器配置
+	config := c.debugger.GetConfig()
+	
+	// 检查主进程日志是否启用
+	if config.MainLogPath == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "主进程日志未启用，无法下载",
+		})
+		return
+	}
+	
+	// 创建临时zip文件
+	tempFile, err := os.CreateTemp("", "main-logs-*.zip")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "创建临时文件失败: " + err.Error(),
+		})
+		return
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+	
+	// 创建zip写入器
+	zipWriter := zip.NewWriter(tempFile)
+	defer zipWriter.Close()
+	
+	// 查找所有主进程日志文件
+	logFiles, err := findMainLogFiles(config.MainLogPath)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "查找日志文件失败: " + err.Error(),
+		})
+		return
+	}
+	
+	if len(logFiles) == 0 {
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"error": "没有找到主进程日志文件",
+		})
+		return
+	}
+	
+	// 将所有日志文件添加到zip中
+	for _, logFile := range logFiles {
+		// 打开日志文件
+		srcFile, err := os.Open(logFile)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error": "打开日志文件失败: " + err.Error(),
+			})
+			return
+		}
+		defer srcFile.Close()
+		
+		// 在zip中创建文件
+		zipFile, err := zipWriter.Create(filepath.Base(logFile))
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error": "在zip中创建文件失败: " + err.Error(),
+			})
+			return
+		}
+		
+		// 将日志文件内容复制到zip中
+		if _, err := io.Copy(zipFile, srcFile); err != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error": "复制日志文件到zip失败: " + err.Error(),
+			})
+			return
+		}
+	}
+	
+	// 关闭zip写入器，确保所有数据写入完成
+	if err := zipWriter.Close(); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "关闭zip写入器失败: " + err.Error(),
+		})
+		return
+	}
+	
+	// 重置临时文件指针到开始位置
+	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "重置文件指针失败: " + err.Error(),
+		})
+		return
+	}
+	
+	// 设置响应头
+	ctx.Header("Content-Type", "application/zip")
+	ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=main-logs-%s.zip", time.Now().Format("20060102150405")))
+	
+	// 将zip文件发送给客户端
+	if _, err := io.Copy(ctx.Writer, tempFile); err != nil {
+		log.Printf("发送zip文件失败: %v", err)
+	}
+}
+
+// findMainLogFiles 查找所有主进程日志文件
+// 支持不同的分割模式（按大小、按日期）
+func findMainLogFiles(logPath string) ([]string, error) {
+	var logFiles []string
+	
+	// 定义日志文件名模式
+	patterns := []string{
+		filepath.Join(logPath, "process.log"),        // 当前日志文件
+		filepath.Join(logPath, "process.log.*"),       // 按大小分割的日志文件
+		filepath.Join(logPath, "process.log.*.gz"),     // 压缩的日志文件
+		filepath.Join(logPath, "process.log.20*"),      // 按日期分割的日志文件
+		filepath.Join(logPath, "process.log.20*.gz"),   // 压缩的按日期分割日志文件
+	}
+	
+	// 遍历所有模式，查找匹配的文件
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("查找日志文件失败: %w", err)
+		}
+		logFiles = append(logFiles, matches...)
+	}
+	
+	// 去重，避免重复添加同一文件
+	uniqueFiles := make(map[string]bool)
+	var result []string
+	for _, file := range logFiles {
+		// 检查文件是否存在
+		if _, err := os.Stat(file); err == nil {
+			if !uniqueFiles[file] {
+				uniqueFiles[file] = true
+				result = append(result, file)
+			}
+		}
+	}
+	
+	return result, nil
 }
 
 // statsAPIHandler 统计信息API处理器

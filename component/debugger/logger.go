@@ -3,7 +3,10 @@ package debugger
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -311,6 +314,27 @@ type LoggerLog struct {
 	Function string `json:"function,omitempty"`  // 函数名
 }
 
+// MainLogger 主进程日志记录器
+// 用于记录应用程序主进程的日志，支持文件输出和日志分割
+// 该记录器适用于需要持久化保存的应用程序级日志
+// 支持按日期或大小分割日志文件
+// 复用debugger的日志级别和调用位置信息配置
+
+type MainLogger struct {
+	debugger    *Debugger
+	level       LogLevel               // 当前日志记录器的日志级别（复用debugger的Level配置）
+	fields      map[string]interface{} // 固定字段
+	mutex       sync.Mutex             // 用于保护并发访问的互斥锁
+	logFile     *os.File               // 当前日志文件句柄
+	logPath     string                 // 日志文件路径
+	splitMode   string                 // 日志分割模式：size（按大小）、date（按日期）
+	maxSize     int64                  // 日志文件最大大小（字节）
+	maxBackups  int                    // 最大备份文件数量
+	compress    bool                   // 是否压缩备份日志
+	currentDate string                 // 当前日志日期，用于按日期分割
+	currentSize int64                  // 当前日志文件大小
+}
+
 // LogEntry 调试日志条目结构
 // 用于记录单个HTTP请求或进程的完整调试信息
 type LogEntry struct {
@@ -530,6 +554,89 @@ func NewProcessLogger(debugger *Debugger, processName, processType string) *Proc
 	return logger
 }
 
+// NewMainLogger 创建新的主进程日志记录器
+// 该方法会创建主进程日志记录器，适用于需要持久化保存的应用程序级日志
+// 支持按日期或大小分割日志文件
+//
+// 参数:
+//
+//	debugger: 调试器实例，用于配置管理
+//
+// 返回值:
+//
+//	LoggerInterface: 主进程日志记录器实例
+//
+// 示例:
+//
+//	mainLogger := NewMainLogger(dbg)
+//	mainLogger.Info("应用程序启动")
+func NewMainLogger(debugger *Debugger) LoggerInterface {
+	mainLogger := &MainLogger{
+		debugger:    debugger,
+		level:       debugger.config.Level, // 复用debugger的日志级别配置
+		fields:      make(map[string]interface{}),
+		logPath:     debugger.config.MainLogPath,
+		splitMode:   debugger.config.MainLogSplitMode,
+		maxSize:     debugger.config.MainLogMaxSize * 1024 * 1024, // 转换为字节
+		maxBackups:  debugger.config.MainLogMaxBackups,
+		compress:    debugger.config.MainLogCompress,
+		currentDate: time.Now().Format("2006-01-02"),
+		currentSize: 0,
+	}
+
+	// 初始化日志文件
+	if err := mainLogger.initLogFile(); err != nil {
+		fmt.Printf("初始化主进程日志文件失败: %v\n", err)
+	}
+
+	return mainLogger
+}
+
+// initLogFile 初始化日志文件
+// 创建日志目录（如果不存在）
+// 打开或创建日志文件
+func (l *MainLogger) initLogFile() error {
+	// 确保日志目录存在
+	if err := os.MkdirAll(l.logPath, 0755); err != nil {
+		return fmt.Errorf("创建日志目录失败: %w", err)
+	}
+
+	// 获取日志文件路径
+	logFilePath := l.getLogFilePath()
+
+	// 打开或创建日志文件
+	file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("打开日志文件失败: %w", err)
+	}
+
+	// 获取文件大小
+	fileInfo, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return fmt.Errorf("获取日志文件信息失败: %w", err)
+	}
+
+	l.logFile = file
+	l.currentSize = fileInfo.Size()
+
+	return nil
+}
+
+// getLogFilePath 获取当前日志文件路径
+// 根据分割模式生成不同的文件名
+func (l *MainLogger) getLogFilePath() string {
+	baseName := "process.log"
+	logFile := path.Join(l.logPath, baseName)
+
+	// 按日期分割时，添加日期后缀
+	if l.splitMode == "date" {
+		logFile = fmt.Sprintf("%s.%s", logFile, l.currentDate)
+	}
+
+	return logFile
+}
+
 // Info 记录信息级别日志
 // 记录进程执行的关键信息，适用于监控和状态跟踪
 //
@@ -704,6 +811,265 @@ func (p *ProcessLogger) EndProcess(status string) error {
 	}
 
 	return nil
+}
+
+// -------------------- MainLogger 方法实现 --------------------
+
+// Info 记录信息级别日志
+func (l *MainLogger) Info(msg any, fields ...map[string]interface{}) {
+	l.log(LevelInfo, msg, fields...)
+}
+
+// Warn 记录警告级别日志
+func (l *MainLogger) Warn(msg any, fields ...map[string]interface{}) {
+	l.log(LevelWarn, msg, fields...)
+}
+
+// Error 记录错误级别日志
+func (l *MainLogger) Error(msg any, fields ...map[string]interface{}) {
+	l.log(LevelError, msg, fields...)
+}
+
+// WithFields 创建带有字段的日志记录器
+func (l *MainLogger) WithFields(fields map[string]interface{}) LoggerInterface {
+	// 合并现有字段和新字段
+	newFields := make(map[string]interface{})
+
+	l.mutex.Lock()
+	for k, v := range l.fields {
+		newFields[k] = v
+	}
+	level := l.level
+	l.mutex.Unlock()
+
+	for k, v := range fields {
+		newFields[k] = v
+	}
+
+	// 创建新的MainLogger实例
+	newLogger := &MainLogger{
+		debugger:    l.debugger,
+		level:       level,
+		fields:      newFields,
+		logPath:     l.logPath,
+		splitMode:   l.splitMode,
+		maxSize:     l.maxSize,
+		maxBackups:  l.maxBackups,
+		compress:    l.compress,
+		currentDate: l.currentDate,
+		currentSize: 0,         // 新实例的当前大小为0
+		logFile:     l.logFile, // 共享同一个日志文件句柄
+	}
+
+	return newLogger
+}
+
+// GetLevel 获取当前日志记录器的日志级别
+func (l *MainLogger) GetLevel() LogLevel {
+	return l.level
+}
+
+// log 内部日志记录方法
+// - level: 日志级别（info/warn/error/silent）
+// - msg: 日志消息（字符串、结构体、map、数组、实现了Stringer接口的类型等）
+// - fields: 可选的附加字段（键值对）
+func (l *MainLogger) log(level LogLevel, msg any, fields ...map[string]interface{}) {
+	// 检查日志级别是否启用
+	if !l.shouldLog(level) {
+		return
+	}
+
+	// 处理msg参数
+	var message string
+	switch v := msg.(type) {
+	case string:
+		message = v
+	case fmt.Stringer:
+		message = v.String()
+	default:
+		helper.Json(msg).ToString(&message)
+	}
+
+	// 检查并执行日志分割
+	l.checkRotate()
+
+	// 根据配置决定是否获取调用位置信息
+	var fileName string
+	var line int
+	var function string
+	if l.debugger.config.EnableCallerInfo {
+		// 获取调用位置信息
+		fileName, line, function = getCallerInfo()
+	}
+
+	// 格式化日志
+	logLine := l.formatLog(level, message, fileName, line, function)
+
+	// 写入日志文件
+	l.writeLog(logLine)
+
+	// 同时输出到控制台
+	if l.debugger.config.EnableCallerInfo {
+		fmt.Printf("[%s] %s:%d - %s: %s\n", level.String(), fileName, line, function, message)
+	} else {
+		fmt.Printf("[%s] %s\n", level.String(), message)
+	}
+}
+
+// formatLog 格式化日志输出
+// 只支持文本格式，简化实现
+func (l *MainLogger) formatLog(level LogLevel, message string, fileName string, line int, function string) string {
+	// 文本格式
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	if l.debugger.config.EnableCallerInfo {
+		return fmt.Sprintf("%s [%s] %s:%d - %s: %s\n", timestamp, level.String(), fileName, line, function, message)
+	} else {
+		return fmt.Sprintf("%s [%s] %s\n", timestamp, level.String(), message)
+	}
+}
+
+// writeLog 写入日志到文件
+func (l *MainLogger) writeLog(logLine string) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if l.logFile == nil {
+		// 如果日志文件未初始化，尝试重新初始化
+		if err := l.initLogFile(); err != nil {
+			fmt.Printf("写入日志时重新初始化日志文件失败: %v\n", err)
+			return
+		}
+	}
+
+	// 写入日志
+	n, err := l.logFile.WriteString(logLine)
+	if err != nil {
+		fmt.Printf("写入日志文件失败: %v\n", err)
+		return
+	}
+
+	// 更新当前文件大小
+	l.currentSize += int64(n)
+}
+
+// checkRotate 检查是否需要进行日志分割
+// 根据分割模式（日期或大小）检查是否需要创建新的日志文件
+func (l *MainLogger) checkRotate() {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	// 检查是否按日期分割
+	if l.splitMode == "date" {
+		currentDate := time.Now().Format("2006-01-02")
+		if currentDate != l.currentDate {
+			// 日期已变更，执行日志分割
+			l.rotateLog()
+			l.currentDate = currentDate
+		}
+		return
+	}
+
+	// 检查是否按大小分割
+	if l.splitMode == "size" {
+		if l.currentSize >= l.maxSize {
+			// 文件大小已超过限制，执行日志分割
+			l.rotateLog()
+		}
+	}
+}
+
+// rotateLog 执行日志分割
+// 关闭当前日志文件，创建新的日志文件，并处理旧日志文件
+func (l *MainLogger) rotateLog() {
+	// 关闭当前日志文件
+	if l.logFile != nil {
+		l.logFile.Close()
+	}
+
+	// 处理旧日志文件（备份、压缩等）
+	l.handleOldLogs()
+
+	// 创建新的日志文件
+	if err := l.initLogFile(); err != nil {
+		fmt.Printf("创建新日志文件失败: %v\n", err)
+	}
+
+	// 重置当前文件大小
+	l.currentSize = 0
+}
+
+// handleOldLogs 处理旧日志文件
+// 根据配置进行备份、压缩等操作
+func (l *MainLogger) handleOldLogs() {
+	// 获取日志文件列表
+	logFiles, err := l.getLogFiles()
+	if err != nil {
+		fmt.Printf("获取日志文件列表失败: %v\n", err)
+		return
+	}
+
+	// 如果日志文件数量不超过最大备份数量，直接返回
+	if len(logFiles) <= l.maxBackups {
+		return
+	}
+
+	// 按修改时间排序，保留最新的l.maxBackups个文件
+	sort.Slice(logFiles, func(i, j int) bool {
+		return logFiles[i].ModTime().Before(logFiles[j].ModTime())
+	})
+
+	// 删除多余的旧日志文件
+	for i := 0; i < len(logFiles)-l.maxBackups; i++ {
+		filePath := path.Join(l.logPath, logFiles[i].Name())
+		if err := os.Remove(filePath); err != nil {
+			fmt.Printf("删除旧日志文件失败: %v\n", err)
+		}
+	}
+}
+
+// getLogFiles 获取日志文件列表
+func (l *MainLogger) getLogFiles() ([]os.FileInfo, error) {
+	// 打开日志目录
+	dir, err := os.Open(l.logPath)
+	if err != nil {
+		return nil, fmt.Errorf("打开日志目录失败: %w", err)
+	}
+	defer dir.Close()
+
+	// 读取目录内容
+	files, err := dir.Readdir(-1)
+	if err != nil {
+		return nil, fmt.Errorf("读取日志目录失败: %w", err)
+	}
+
+	// 过滤出日志文件
+	var logFiles []os.FileInfo
+	for _, file := range files {
+		if !file.IsDir() && strings.HasPrefix(file.Name(), "process.log") {
+			logFiles = append(logFiles, file)
+		}
+	}
+
+	return logFiles, nil
+}
+
+// shouldLog 检查是否应该记录指定级别的日志
+func (l *MainLogger) shouldLog(level LogLevel) bool {
+	// 根据配置的日志级别决定是否记录
+	switch l.GetLevel() {
+	case LevelInfo:
+		// 信息级别记录所有日志
+		return true
+	case LevelWarn:
+		// 警告级别记录warn、error
+		return level == LevelWarn || level == LevelError
+	case LevelError:
+		// 错误级别只记录error
+		return level == LevelError
+	default:
+		// 默认不记录日志
+		return false
+	}
 }
 
 // noopLogger 空操作日志记录器实现

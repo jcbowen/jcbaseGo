@@ -14,7 +14,23 @@ const indexTemplate = `<!DOCTYPE html>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
         .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
         .header { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .header h1 { color: #2c3e50; margin-bottom: 10px; font-size: 24px; word-break: break-word; }
+        .header-content { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .header h1 { color: #2c3e50; margin: 0; font-size: 24px; word-break: break-word; }
+        .header-actions { display: flex; gap: 10px; }
+        .download-btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+        }
+        .download-btn:hover {
+            background-color: #45a049;
+        }
         .header .stats { display: flex; gap: 20px; flex-wrap: wrap; }
         .stat-item { background: #f8f9fa; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #3498db; }
         .stat-item .label { font-size: 12px; color: #666; }
@@ -299,12 +315,25 @@ const indexTemplate = `<!DOCTYPE html>
         @media (min-width: 1600px) {
             .container { max-width: 1800px; padding: 30px; }
             .header { padding: 30px; }
-            .header h1 { font-size: 28px; }
+            .header-content { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+            .header h1 { font-size: 28px; margin: 0; }
+            .header-actions { display: flex; gap: 10px; }
+            .download-btn {
+                display: inline-block;
+                padding: 10px 20px;
+                background-color: #4CAF50;
+                color: white;
+                text-decoration: none;
+                border-radius: 4px;
+                font-size: 16px;
+                transition: background-color 0.3s;
+            }
+            .download-btn:hover { background-color: #45a049; }
             .stat-item .value { font-size: 22px; }
             .table-header, .log-row { 
                 grid-template-columns: minmax(160px, 250px) 180px 120px 140px 160px 120px 120px minmax(300px, 1fr); 
                 gap: 20px; 
-                font-size: 16px;
+                font-size: 16px; 
             }
             .log-row { padding: 20px; }
             .filter-form { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
@@ -322,7 +351,14 @@ const indexTemplate = `<!DOCTYPE html>
 <body>
     <div class="container">
         <div class="header">
-            <h1>{{.Title}}</h1>
+            <div class="header-content">
+                <h1>{{.Title}}</h1>
+                <div class="header-actions">
+                    <a href="{{.BasePath}}/api/download-main-logs" class="download-btn">
+                        下载主进程日志
+                    </a>
+                </div>
+            </div>
             <div class="stats">
                 {{if .Stats}}
                 <div class="stat-item">

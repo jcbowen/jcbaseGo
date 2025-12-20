@@ -58,6 +58,14 @@ type Config struct {
 	// 核心组件配置 - 必须传入实例化的存储器
 	Storage Storage         `json:"-"` // 存储实现（必须传入实例化的存储器）
 	Logger  LoggerInterface `json:"-"` // 日志记录器（推荐直接传入实例化的日志记录器）
+
+	// 主进程日志配置
+	EnableMainLogger  bool   `json:"enable_main_logger" default:"false"`      // 是否启用主进程日志
+	MainLogPath       string `json:"main_log_path" default:"./runtime/logs/"` // 主进程日志文件路径
+	MainLogSplitMode  string `json:"main_log_split_mode" default:"size"`      // 日志分割模式：size（按大小）、date（按日期）
+	MainLogMaxSize    int64  `json:"main_log_max_size" default:"100"`         // 日志文件最大大小（MB），按大小分割时有效
+	MainLogMaxBackups int    `json:"main_log_max_backups" default:"7"`        // 最大备份文件数量
+	MainLogCompress   bool   `json:"main_log_compress" default:"false"`       // 是否压缩备份日志
 }
 
 // Debugger 调试器主结构
@@ -66,6 +74,7 @@ type Debugger struct {
 	storage    Storage
 	controller *Controller
 	logger     LoggerInterface // 日志记录器实例
+	mainLogger LoggerInterface // 主进程日志记录器实例
 }
 
 // New 创建新的调试器实例
@@ -102,6 +111,11 @@ func New(config *Config) (*Debugger, error) {
 	} else {
 		// 创建默认日志记录器
 		d.logger = NewDefaultLogger(d)
+	}
+
+	// 初始化主进程日志记录器
+	if d.config.EnableMainLogger {
+		d.mainLogger = NewMainLogger(d)
 	}
 
 	return d, nil
@@ -1370,6 +1384,34 @@ func (d *Debugger) GetLogger() LoggerInterface {
 // GetLoggerWithFields 获取带有指定字段的日志记录器
 func (d *Debugger) GetLoggerWithFields(fields map[string]interface{}) LoggerInterface {
 	return d.logger.WithFields(fields)
+}
+
+// GetMainLogger 获取主进程日志记录器
+// 可以在应用程序的任何地方通过此方法获取主进程日志记录器实例
+func (d *Debugger) GetMainLogger() LoggerInterface {
+	if d == nil {
+		// 如果Debugger实例为nil，返回空操作日志记录器
+		return noopLogger{}
+	}
+	if d.mainLogger == nil {
+		// 如果主进程日志未启用，返回空操作日志记录器
+		return noopLogger{}
+	}
+	return d.mainLogger
+}
+
+// GetMainLoggerWithFields 获取带有指定字段的主进程日志记录器
+// 可以在应用程序的任何地方通过此方法获取带有指定字段的主进程日志记录器实例
+func (d *Debugger) GetMainLoggerWithFields(fields map[string]interface{}) LoggerInterface {
+	if d == nil {
+		// 如果Debugger实例为nil，返回空操作日志记录器
+		return noopLogger{}
+	}
+	if d.mainLogger == nil {
+		// 如果主进程日志未启用，返回空操作日志记录器
+		return noopLogger{}
+	}
+	return d.mainLogger.WithFields(fields)
 }
 
 // WithController 为调试器添加控制器支持
