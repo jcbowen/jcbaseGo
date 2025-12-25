@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -121,6 +122,9 @@ func (c *Controller) registerRoutes(useCDN bool) {
 
 	// 清理过期日志API
 	routerGroup.POST("/api/cleanup", c.cleanupAPIHandler)
+
+	// 下载主进程日志API
+	routerGroup.GET("/api/download-main-logs", c.downloadMainLogsHandler)
 }
 
 // ipAccessControlMiddleware IP访问控制中间件
@@ -452,7 +456,7 @@ func (c *Controller) searchAPIHandler(ctx *gin.Context) {
 func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
 	// 获取调试器配置
 	config := c.debugger.GetConfig()
-	
+
 	// 检查主进程日志是否启用
 	if config.MainLogPath == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -460,7 +464,34 @@ func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
+	// 检查日志路径是否存在，如果不存在则尝试创建
+	logPathInfo, err := os.Stat(config.MainLogPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// 尝试创建日志目录
+			if err := os.MkdirAll(config.MainLogPath, 0755); err != nil {
+				ctx.JSON(http.StatusInternalServerError, gin.H{
+					"error": "创建日志目录失败: " + err.Error(),
+				})
+				return
+			}
+			// 目录创建成功，继续执行
+		} else {
+			// 其他错误
+			ctx.JSON(http.StatusInternalServerError, gin.H{
+				"error": "检查日志路径失败: " + err.Error(),
+			})
+			return
+		}
+	} else if !logPathInfo.IsDir() {
+		// 路径存在但不是目录
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "主进程日志路径不是目录: " + config.MainLogPath,
+		})
+		return
+	}
+
 	// 创建临时zip文件
 	tempFile, err := os.CreateTemp("", "main-logs-*.zip")
 	if err != nil {
@@ -471,11 +502,11 @@ func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
 	}
 	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
-	
+
 	// 创建zip写入器
 	zipWriter := zip.NewWriter(tempFile)
 	defer zipWriter.Close()
-	
+
 	// 查找所有主进程日志文件
 	logFiles, err := findMainLogFiles(config.MainLogPath)
 	if err != nil {
@@ -484,14 +515,14 @@ func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	if len(logFiles) == 0 {
 		ctx.JSON(http.StatusNotFound, gin.H{
 			"error": "没有找到主进程日志文件",
 		})
 		return
 	}
-	
+
 	// 将所有日志文件添加到zip中
 	for _, logFile := range logFiles {
 		// 打开日志文件
@@ -503,7 +534,7 @@ func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
 			return
 		}
 		defer srcFile.Close()
-		
+
 		// 在zip中创建文件
 		zipFile, err := zipWriter.Create(filepath.Base(logFile))
 		if err != nil {
@@ -512,7 +543,7 @@ func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
 			})
 			return
 		}
-		
+
 		// 将日志文件内容复制到zip中
 		if _, err := io.Copy(zipFile, srcFile); err != nil {
 			ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -521,7 +552,7 @@ func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
 			return
 		}
 	}
-	
+
 	// 关闭zip写入器，确保所有数据写入完成
 	if err := zipWriter.Close(); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -529,7 +560,7 @@ func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	// 重置临时文件指针到开始位置
 	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -537,14 +568,18 @@ func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
 		})
 		return
 	}
-	
+
 	// 设置响应头
 	ctx.Header("Content-Type", "application/zip")
 	ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=main-logs-%s.zip", time.Now().Format("20060102150405")))
-	
+
 	// 将zip文件发送给客户端
 	if _, err := io.Copy(ctx.Writer, tempFile); err != nil {
 		log.Printf("发送zip文件失败: %v", err)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "发送日志文件失败: " + err.Error(),
+		})
+		return
 	}
 }
 
@@ -552,16 +587,16 @@ func (c *Controller) downloadMainLogsHandler(ctx *gin.Context) {
 // 支持不同的分割模式（按大小、按日期）
 func findMainLogFiles(logPath string) ([]string, error) {
 	var logFiles []string
-	
+
 	// 定义日志文件名模式
 	patterns := []string{
-		filepath.Join(logPath, "process.log"),        // 当前日志文件
-		filepath.Join(logPath, "process.log.*"),       // 按大小分割的日志文件
-		filepath.Join(logPath, "process.log.*.gz"),     // 压缩的日志文件
-		filepath.Join(logPath, "process.log.20*"),      // 按日期分割的日志文件
-		filepath.Join(logPath, "process.log.20*.gz"),   // 压缩的按日期分割日志文件
+		filepath.Join(logPath, "process.log"),                                               // 当前日志文件
+		filepath.Join(logPath, "process.log.[0-9]*"),                                        // 按大小分割的日志文件（仅数字后缀）
+		filepath.Join(logPath, "process.log.[0-9]*.gz"),                                     // 压缩的按大小分割日志文件
+		filepath.Join(logPath, "process.log.[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"),    // 按日期分割的日志文件（YYYY-MM-DD格式）
+		filepath.Join(logPath, "process.log.[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].gz"), // 压缩的按日期分割日志文件
 	}
-	
+
 	// 遍历所有模式，查找匹配的文件
 	for _, pattern := range patterns {
 		matches, err := filepath.Glob(pattern)
@@ -570,21 +605,45 @@ func findMainLogFiles(logPath string) ([]string, error) {
 		}
 		logFiles = append(logFiles, matches...)
 	}
-	
+
 	// 去重，避免重复添加同一文件
 	uniqueFiles := make(map[string]bool)
-	var result []string
+	var uniqueLogFiles []string
 	for _, file := range logFiles {
 		// 检查文件是否存在
 		if _, err := os.Stat(file); err == nil {
 			if !uniqueFiles[file] {
 				uniqueFiles[file] = true
-				result = append(result, file)
+				uniqueLogFiles = append(uniqueLogFiles, file)
 			}
 		}
 	}
-	
-	return result, nil
+
+	// 按修改时间排序，最新的日志文件在前
+	sort.Slice(uniqueLogFiles, func(i, j int) bool {
+		// 获取文件i的信息
+		infoI, errI := os.Stat(uniqueLogFiles[i])
+		// 获取文件j的信息
+		infoJ, errJ := os.Stat(uniqueLogFiles[j])
+
+		// 如果有错误，将错误的文件放在后面
+		if errI != nil {
+			return false
+		}
+		if errJ != nil {
+			return true
+		}
+
+		// 按修改时间降序排序
+		if !infoI.ModTime().Equal(infoJ.ModTime()) {
+			return infoI.ModTime().After(infoJ.ModTime())
+		}
+
+		// 如果修改时间相同，按文件名降序排序
+		return uniqueLogFiles[i] > uniqueLogFiles[j]
+	})
+
+	return uniqueLogFiles, nil
 }
 
 // statsAPIHandler 统计信息API处理器
