@@ -18,7 +18,7 @@ type Context struct {
 	Debug      bool         // 调试模式
 	GinContext *gin.Context // 请求上下文
 
-	SafeMapGPCAll map[string]any // GPC数据映射
+	SafeMapGPCAll map[string]any // GPC 数据映射
 }
 
 // NewContextOpt 目前由于配置项没有分离，所以直接用相等，后续有可能会分离
@@ -43,55 +43,65 @@ func NewContext(opt *NewContextOpt) *Context {
 
 // Success 返回成功的响应
 // 这个方法用于简化成功响应的构建，接收可变参数，
-// 并根据参数数量确定响应的data、additionalParams和message字段的值。
+// 并根据参数类型自动识别并分配到对应的字段（code、message、data、additionalParams）。
 // 参数：
-//   - ginContext *gin.Context: Gin框架的上下文对象
-//   - message string: 返回的消息内容
-//   - data any: 返回的数据
-//   - additionalParams any: 附加数据
+//   - args ...any: 可变参数，支持任意顺序传递以下类型：
+//   - int: 状态码（通常使用errcode.Success）
+//   - string: 返回的消息内容
+//   - any: 返回的数据（除int、string、map[string]any外的其他类型）
+//   - map[string]any: 附加参数
 //
-// 仅1个参数时，如果是字符串则作为message输出，否则作为data输出；
-// 更多参数时，第一个参数为data，第二个参数为message，第三个参数为additionalParams；
+// 示例：
+//
+//	ctx.Success("操作成功")                    // 只传递消息
+//	ctx.Success(data)                         // 只传递数据
+//	ctx.Success("操作成功", data)             // 消息和数据
+//	ctx.Success(data, "操作成功")             // 数据在前，消息在后
+//	ctx.Success("操作成功", data, params)     // 消息、数据和附加参数
 func (ctx *Context) Success(args ...any) {
 	var (
+		code             = errcode.Success
 		message          = "success"
 		data             any
 		additionalParams map[string]any
 	)
-	switch len(args) {
-	case 1:
-		// 如果是字符串，则作为message输出
-		if msg, ok := args[0].(string); ok {
-			message = msg
-		} else {
-			data = args[0]
-		}
-	case 2:
-		data = args[0]
-		message = args[1].(string)
-	case 3:
-		data = args[0]
-		additionalParams = args[2].(map[string]any)
-		var ok bool
-		message, ok = args[1].(string)
-		if !ok {
-			message = "ok"
+
+	// 根据类型自动识别参数
+	for _, arg := range args {
+		switch val := arg.(type) {
+		case int:
+			code = val
+		case string:
+			message = val
+		case map[string]any:
+			additionalParams = val
+		default:
+			// 其他类型都视为 data
+			data = arg
 		}
 	}
-	ctx.Result(errcode.Success, message, data, additionalParams)
+
+	ctx.Result(code, message, data, additionalParams)
 }
 
 // Failure 返回失败的响应
 // 这个方法用于简化失败响应的构建，接收可变参数
-// 并根据参数数量确定响应的data、message、code字段的值。
+// 并根据参数类型自动识别并分配到对应的字段（code、message、data、additionalParams）。
 // 参数：
-//   - ginContext *gin.Context: Gin框架的上下文对象
-//   - message string: 返回的消息内容
-//   - data any: 返回的数据
-//   - code int: 错误码
+//   - args ...any: 可变参数，支持任意顺序传递以下类型：
+//   - int: 错误码（默认使用errcode.BadRequest）
+//   - string: 返回的消息内容
+//   - any: 返回的数据（除int、string、map[string]any外的其他类型）
+//   - map[string]any: 附加参数
 //
-// 仅1个参数时，如果是字符串则作为message输出，否则作为data输出；
-// 更多参数时，第一个参数为message，第二个参数为data，第三个参数为code；
+// 示例：
+//
+//	ctx.Failure("操作失败")                    // 只传递消息
+//	ctx.Failure(data)                         // 只传递数据
+//	ctx.Failure("操作失败", data)             // 消息和数据
+//	ctx.Failure(data, "操作失败")             // 数据在前，消息在后
+//	ctx.Failure(500, "操作失败", data)        // 错误码、消息和数据
+//	ctx.Failure("操作失败", data, params)     // 消息、数据和附加参数
 func (ctx *Context) Failure(args ...any) {
 	var (
 		code             = errcode.BadRequest
@@ -99,22 +109,22 @@ func (ctx *Context) Failure(args ...any) {
 		data             any
 		additionalParams map[string]any
 	)
-	switch len(args) {
-	case 1:
-		// 如果是字符串，则作为message输出
-		if msg, ok := args[0].(string); ok {
-			message = msg
-		} else {
-			data = args[0]
+
+	// 根据类型自动识别参数
+	for _, arg := range args {
+		switch val := arg.(type) {
+		case int:
+			code = val
+		case string:
+			message = val
+		case map[string]any:
+			additionalParams = val
+		default:
+			// 其他类型都视为 data
+			data = arg
 		}
-	case 2:
-		message = args[0].(string)
-		data = args[1]
-	case 3:
-		message = args[0].(string)
-		data = args[1]
-		code = args[2].(int)
 	}
+
 	ctx.Result(code, message, data, additionalParams)
 }
 
@@ -143,7 +153,7 @@ func (ctx *Context) Result(code int, msg string, args ...any) {
 		}
 
 		if val.Kind() == reflect.Struct {
-			// 将data转换为map
+			// 将 data 转换为 map
 			jsonData, err := json.Marshal(data)
 			if err != nil {
 				log.Panic(err)
@@ -172,13 +182,13 @@ func (ctx *Context) Result(code int, msg string, args ...any) {
 		resultData = make(map[string]any)
 	}
 
-	// 获取resultData的类型
+	// 获取 resultData 的类型
 	resultDataType := reflect.TypeOf(resultData)
 	if resultDataType == nil {
 		resultData = nil
 	}
 
-	// 构建结果map
+	// 构建结果 map
 	result := map[string]any{
 		"code":    code,
 		"message": msg,
