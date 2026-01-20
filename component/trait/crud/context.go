@@ -73,11 +73,12 @@ func (ctx *Context) Success(args ...any) {
 			code = val
 		case string:
 			message = val
-		case map[string]any:
-			additionalParams = val
 		default:
-			// 其他类型都视为 data
-			data = arg
+			if data == nil {
+				data = arg
+			} else if additionalParams == nil && reflect.TypeOf(arg).Kind() == reflect.Map {
+				additionalParams, _ = arg.(map[string]any)
+			}
 		}
 	}
 
@@ -117,11 +118,12 @@ func (ctx *Context) Failure(args ...any) {
 			code = val
 		case string:
 			message = val
-		case map[string]any:
-			additionalParams = val
 		default:
-			// 其他类型都视为 data
-			data = arg
+			if data == nil {
+				data = arg
+			} else if additionalParams == nil && reflect.TypeOf(arg).Kind() == reflect.Map {
+				additionalParams, _ = arg.(map[string]any)
+			}
 		}
 	}
 
