@@ -252,11 +252,7 @@ func (c *Controller) generateQueryString(ctx *gin.Context, exclude ...string) st
 		}
 	}
 
-	result := query.Encode()
-	if result != "" {
-		result = "?" + result
-	}
-	return result
+	return query.Encode()
 }
 
 // indexHandler 调试器主页处理器（支持搜索功能）
@@ -277,8 +273,8 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 
 	// 根据是否有搜索关键词选择不同的查询方式
 	if keyword != "" {
-		// 执行搜索
-		entries, total, err = c.debugger.GetStorage().Search(keyword, page, pageSize)
+		// 执行搜索，同时应用筛选条件
+		entries, total, err = c.debugger.GetStorage().Search(keyword, page, pageSize, filters)
 	} else {
 		// 获取所有日志列表
 		entries, total, err = c.debugger.GetStorage().FindAll(page, pageSize, filters)
@@ -301,8 +297,8 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 	// 计算每个日志条目的存储大小
 	c.calculateEntriesStorageSize(entries)
 
-	// 生成查询字符串（排除page参数，因为会在分页链接中动态设置）
-	queryString := c.generateQueryString(ctx, "page")
+	// 生成查询字符串（排除page和pageSize参数，因为会在分页链接中动态设置）
+	queryString := c.generateQueryString(ctx, "page", "pageSize")
 
 	// 渲染页面
 	c.renderTemplate(ctx, "index.html", gin.H{
@@ -432,7 +428,10 @@ func (c *Controller) searchAPIHandler(ctx *gin.Context) {
 		return
 	}
 
-	entries, total, err := c.debugger.GetStorage().Search(keyword, page, pageSize)
+	// 获取过滤参数
+	filters := c.parseFilters(ctx)
+
+	entries, total, err := c.debugger.GetStorage().Search(keyword, page, pageSize, filters)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"error": "搜索日志失败: " + err.Error(),
@@ -730,13 +729,9 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 		filters["method"] = method
 	}
 
-	// 状态码过滤
+	// 状态码过滤（保持字符串类型，便于模板回显）
 	if statusCode := ctx.Query("status_code"); statusCode != "" {
-		if code, err := strconv.Atoi(statusCode); err == nil {
-			filters["status_code"] = code
-		} else {
-			filters["status_code"] = statusCode
-		}
+		filters["status_code"] = statusCode
 	}
 
 	// IP地址过滤
@@ -782,9 +777,9 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 		filters["url"] = url
 	}
 
-	// 流式请求过滤
+	// 流式请求过滤（保持字符串类型，便于模板回显）
 	if isStreaming := ctx.Query("is_streaming"); isStreaming != "" {
-		filters["is_streaming"] = strings.ToLower(isStreaming) == "true"
+		filters["is_streaming"] = strings.ToLower(isStreaming)
 	}
 
 	// 流式状态过滤

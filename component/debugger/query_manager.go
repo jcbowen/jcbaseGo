@@ -80,8 +80,8 @@ func (qm *QueryManager) Query(options QueryOptions) (*QueryResult, error) {
 }
 
 // Search 执行搜索
-// 根据关键词搜索日志内容
-func (qm *QueryManager) Search(keyword string, page, pageSize int) (*QueryResult, error) {
+// 根据关键词搜索日志内容，支持筛选条件
+func (qm *QueryManager) Search(keyword string, page, pageSize int, filters map[string]interface{}) (*QueryResult, error) {
 	// 设置默认值
 	if page <= 0 {
 		page = 1
@@ -93,8 +93,8 @@ func (qm *QueryManager) Search(keyword string, page, pageSize int) (*QueryResult
 		pageSize = 100 // 限制最大页大小
 	}
 
-	// 执行搜索
-	entries, total, err := qm.storage.Search(keyword, page, pageSize)
+	// 执行搜索，同时应用筛选条件
+	entries, total, err := qm.storage.Search(keyword, page, pageSize, filters)
 	if err != nil {
 		return nil, fmt.Errorf("搜索日志失败: %v", err)
 	}

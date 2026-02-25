@@ -213,15 +213,33 @@ func (ds *DatabaseStorage) FindAll(page, pageSize int, filters map[string]interf
 	return entries, int(total), nil
 }
 
-// Search 搜索日志内容
-func (ds *DatabaseStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, int, error) {
+// Search 搜索日志内容，支持分页和过滤
+// 在日志条目的多个字段中进行全文搜索，同时支持额外的筛选条件
+// 该方法提供不区分大小写的搜索功能，适用于快速查找特定内容的日志记录
+//
+// 参数:
+//
+//	keyword: 搜索关键词，支持在URL、请求体、响应体、错误信息、用户代理等字段中搜索
+//	page: 页码（从1开始）
+//	pageSize: 每页显示数量
+//	filters: 过滤条件映射，支持record_type、method、status_code、url、process_name、process_id等字段
+//
+// 返回值:
+//
+//	[]*LogEntry: 包含关键词且符合过滤条件的日志条目列表（按时间倒序排列）
+//	int: 包含关键词且符合过滤条件的总条目数
+//	error: 如果搜索过程中发生错误返回错误信息，否则返回nil
+func (ds *DatabaseStorage) Search(keyword string, page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error) {
 	// 构建搜索查询
 	db := ds.db.Table(ds.tableName)
 
 	// 使用LIKE进行模糊搜索
-	keyword = "%" + strings.ToLower(keyword) + "%"
+	searchKeyword := "%" + strings.ToLower(keyword) + "%"
 	db = db.Where("LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ? OR LOWER(error) LIKE ? OR LOWER(user_agent) LIKE ?",
-		keyword, keyword, keyword, keyword, keyword)
+		searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword)
+
+	// 应用额外的过滤条件
+	db = ds.applyFilters(db, filters)
 
 	// 计算总数
 	var total int64

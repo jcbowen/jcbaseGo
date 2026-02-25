@@ -559,8 +559,13 @@ const indexTemplate = `<!DOCTYPE html>
         
         {{if .Pagination}}
         <div class="pagination">
+            {{$queryString := .QueryString}}
+            {{if $queryString}}
+                {{$queryString = printf "&%s" $queryString}}
+            {{end}}
+            
             {{if .Pagination.HasPrev}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{.QueryString}}">上一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{$queryString}}">上一页</a>
             {{else}}
             <span class="disabled">上一页</span>
             {{end}}
@@ -569,8 +574,6 @@ const indexTemplate = `<!DOCTYPE html>
             {{$totalPages := .Pagination.TotalPages}}
             {{$basePath := .BasePath}}
             {{$pageSize := .Pagination.PageSize}}
-            {{$queryString := .QueryString}}
-            {{$keyword := .Keyword}}
             
             {{/* 智能分页显示逻辑 */}}
             {{if le $totalPages 7}}
@@ -621,7 +624,7 @@ const indexTemplate = `<!DOCTYPE html>
             {{end}}
             
             {{if .Pagination.HasNext}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{.QueryString}}">下一页</a>
+            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{$queryString}}">下一页</a>
             {{else}}
             <span class="disabled">下一页</span>
             {{end}}

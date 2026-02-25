@@ -175,7 +175,7 @@ func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interfac
 	return filteredEntries[start:end], total, nil
 }
 
-// Search 搜索日志内容
+// Search 搜索日志内容，支持分页和过滤
 // 优化性能：实现真正的分页搜索，避免全量数据遍历
 // 优化并发：减少锁持有时间，提高并发性能
 // 在日志条目的多个字段中进行全文搜索，支持HTTP记录和进程记录的关键词检索
@@ -186,16 +186,18 @@ func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interfac
 //	keyword: 搜索关键词，支持在进程名称、URL、请求体、响应体、错误信息等字段中搜索
 //	page: 页码（从1开始）
 //	pageSize: 每页显示数量
+//	filters: 过滤条件映射，支持record_type、method、status_code、url、process_name、process_id等字段
 //
 // 返回值:
 //
-//	[]*LogEntry: 包含关键词的日志条目列表（按时间倒序排列）
-//	int: 包含关键词的总条目数
+//	[]*LogEntry: 包含关键词且符合过滤条件的日志条目列表（按时间倒序排列）
+//	int: 包含关键词且符合过滤条件的总条目数
 //	error: 如果搜索过程中发生错误返回错误信息，否则返回nil
 //
 // 优化逻辑:
 //   - 首先收集所有有效的日志条目（非nil）
 //   - 搜索符合条件的条目
+//   - 应用额外的过滤条件
 //   - 按时间倒序排序后，只返回当前页需要的数据
 //   - 减少锁持有时间，提高并发性能
 //
@@ -207,7 +209,7 @@ func (ms *MemoryStorage) FindAll(page, pageSize int, filters map[string]interfac
 //   - 错误信息（error）
 //   - 请求头（request_headers）的所有值
 //   - 响应头（response_headers）的所有值
-func (ms *MemoryStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, int, error) {
+func (ms *MemoryStorage) Search(keyword string, page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error) {
 	// 收集所有有效的日志条目
 	ms.mutex.RLock()
 	var allEntries []*LogEntry
@@ -218,10 +220,10 @@ func (ms *MemoryStorage) Search(keyword string, page, pageSize int) ([]*LogEntry
 	}
 	ms.mutex.RUnlock()
 
-	// 搜索符合条件的条目
+	// 搜索符合条件的条目，并应用过滤条件
 	var matchedEntries []*LogEntry
 	for _, entry := range allEntries {
-		if ms.containsKeyword(entry, keyword) {
+		if ms.containsKeyword(entry, keyword) && ms.filterEntry(entry, filters) {
 			matchedEntries = append(matchedEntries, entry)
 		}
 	}

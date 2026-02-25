@@ -195,8 +195,7 @@ func (fs *FileStorage) FindAll(page, pageSize int, filters map[string]interface{
 	return result, total, nil
 }
 
-// Search 搜索日志内容
-// Search 搜索日志内容
+// Search 搜索日志内容，支持分页和过滤
 // 优化性能：实现真正的分页搜索，避免全量文件读取
 // 在日志条目的多个字段中进行全文搜索，支持HTTP记录和进程记录的关键词检索
 // 该方法提供不区分大小写的搜索功能，适用于快速查找特定内容的日志记录
@@ -206,18 +205,20 @@ func (fs *FileStorage) FindAll(page, pageSize int, filters map[string]interface{
 //	keyword: 搜索关键词，支持在进程名称、URL、请求体、响应体、错误信息等字段中搜索
 //	page: 页码（从1开始）
 //	pageSize: 每页显示数量
+//	filters: 过滤条件映射，支持record_type、method、status_code、url、process_name、process_id等字段
 //
 // 返回值:
 //
-//	[]*LogEntry: 包含关键词的日志条目列表（按时间倒序排列）
-//	int: 包含关键词的总条目数
+//	[]*LogEntry: 包含关键词且符合过滤条件的日志条目列表（按时间倒序排列）
+//	int: 包含关键词且符合过滤条件的总条目数
 //	error: 如果搜索过程中发生错误返回错误信息，否则返回nil
 //
 // 优化逻辑:
 //   - 首先统计符合条件的文件总数（使用快速文件头读取）
 //   - 按文件名时间戳排序，只读取当前页需要的文件
+//   - 应用额外的过滤条件
 //   - 避免全量文件读取，减少I/O操作和内存占用
-func (fs *FileStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, int, error) {
+func (fs *FileStorage) Search(keyword string, page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error) {
 	// 获取所有日志文件
 	files, err := fs.listLogFiles()
 	if err != nil {
@@ -231,7 +232,7 @@ func (fs *FileStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, 
 		return timeI.After(timeJ)
 	})
 
-	// 计算符合条件的文件总数（使用快速文件头读取）
+	// 计算符合条件的文件总数（使用快速文件头读取），同时应用过滤条件
 	total := 0
 	for _, file := range files {
 		// 使用快速文件头读取进行关键词匹配
@@ -239,7 +240,7 @@ func (fs *FileStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, 
 		if err != nil {
 			continue
 		}
-		if fs.containsKeyword(entry, keyword) {
+		if fs.containsKeyword(entry, keyword) && fs.filterEntry(entry, filters) {
 			total++
 		}
 	}
@@ -266,8 +267,8 @@ func (fs *FileStorage) Search(keyword string, page, pageSize int) ([]*LogEntry, 
 			continue // 跳过读取失败的文件
 		}
 
-		// 检查是否包含关键词
-		if fs.containsKeyword(entry, keyword) {
+		// 检查是否包含关键词，并应用过滤条件
+		if fs.containsKeyword(entry, keyword) && fs.filterEntry(entry, filters) {
 			if currentIndex >= start && currentIndex < end {
 				result = append(result, entry)
 			}

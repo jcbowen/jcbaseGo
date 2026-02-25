@@ -14,8 +14,8 @@ type Storage interface {
 	// FindAll 查找所有日志条目，支持分页和过滤
 	FindAll(page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error)
 
-	// Search 搜索日志内容
-	Search(keyword string, page, pageSize int) ([]*LogEntry, int, error)
+	// Search 搜索日志内容，支持分页和过滤
+	Search(keyword string, page, pageSize int, filters map[string]interface{}) ([]*LogEntry, int, error)
 
 	// Cleanup 清理过期日志
 	Cleanup(before time.Time) error
