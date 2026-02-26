@@ -230,29 +230,30 @@ func (c *Controller) isIPInCIDR(ip, cidr string) bool {
 
 // generateQueryString 生成查询字符串
 // 从请求中获取所有查询参数，排除指定的参数，生成完整的查询字符串
+// 使用 RawQuery 避免重复解码和编码导致的双重编码问题
 func (c *Controller) generateQueryString(ctx *gin.Context, exclude ...string) string {
-	query := url.Values{}
-
-	// 从请求中获取所有查询参数
-	for key, values := range ctx.Request.URL.Query() {
-		// 排除指定的参数
-		excluded := false
-		for _, ex := range exclude {
-			if key == ex {
-				excluded = true
-				break
-			}
-		}
-		if excluded {
-			continue
-		}
-		// 添加参数到查询字符串
-		for _, value := range values {
-			query.Add(key, value)
-		}
+	rawQuery := ctx.Request.URL.RawQuery
+	if rawQuery == "" {
+		return ""
 	}
 
-	return query.Encode()
+	// 解析原始查询字符串，保持编码状态
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return ""
+	}
+
+	// 排除指定的参数
+	for _, ex := range exclude {
+		values.Del(ex)
+	}
+
+	encoded := values.Encode()
+	if encoded == "" {
+		return ""
+	}
+
+	return encoded
 }
 
 // indexHandler 调试器主页处理器（支持搜索功能）
