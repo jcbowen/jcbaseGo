@@ -301,16 +301,20 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 	// 生成查询字符串（排除page和pageSize参数，因为会在分页链接中动态设置）
 	queryString := c.generateQueryString(ctx, "page", "pageSize")
 
+	// 获取调试器配置，用于判断是否启用主进程日志
+	config := c.debugger.GetConfig()
+
 	// 渲染页面
 	c.renderTemplate(ctx, "index.html", gin.H{
-		"Title":       "调试器 - 日志列表",
-		"Entries":     entries,
-		"Pagination":  pagination,
-		"Filters":     filters,
-		"Stats":       stats,
-		"Keyword":     keyword,
-		"BasePath":    c.basePath,
-		"QueryString": queryString,
+		"Title":            "调试器 - 日志列表",
+		"Entries":          entries,
+		"Pagination":       pagination,
+		"Filters":          filters,
+		"Stats":            stats,
+		"Keyword":          keyword,
+		"BasePath":         c.basePath,
+		"QueryString":      queryString,
+		"EnableMainLogger": config.EnableMainLogger,
 	})
 }
 
@@ -604,6 +608,20 @@ func findMainLogFiles(logPath string) ([]string, error) {
 			return nil, fmt.Errorf("查找日志文件失败: %w", err)
 		}
 		logFiles = append(logFiles, matches...)
+	}
+
+	// 如果Glob模式没有匹配到文件，尝试遍历目录作为备选方案
+	// 这样能确保发现所有以process.log开头的文件
+	if len(logFiles) == 0 {
+		entries, err := os.ReadDir(logPath)
+		if err != nil {
+			return nil, fmt.Errorf("读取日志目录失败: %w", err)
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasPrefix(entry.Name(), "process.log") {
+				logFiles = append(logFiles, filepath.Join(logPath, entry.Name()))
+			}
+		}
 	}
 
 	// 去重，避免重复添加同一文件

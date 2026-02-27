@@ -354,9 +354,11 @@ const indexTemplate = `<!DOCTYPE html>
             <div class="header-content">
                 <h1>{{.Title}}</h1>
                 <div class="header-actions">
+                    {{if .EnableMainLogger}}
                     <a href="{{.BasePath}}/api/download-main-logs" class="download-btn">
                         下载主进程日志
                     </a>
+                    {{end}}
                 </div>
             </div>
             <div class="stats">
