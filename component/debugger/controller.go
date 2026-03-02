@@ -298,9 +298,6 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 	// 计算每个日志条目的存储大小
 	c.calculateEntriesStorageSize(entries)
 
-	// 生成查询字符串（排除page和pageSize参数，因为会在分页链接中动态设置）
-	queryString := c.generateQueryString(ctx, "page", "pageSize")
-
 	// 获取调试器配置，用于判断是否启用主进程日志
 	config := c.debugger.GetConfig()
 
@@ -313,8 +310,9 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 		"Stats":            stats,
 		"Keyword":          keyword,
 		"BasePath":         c.basePath,
-		"QueryString":      queryString,
 		"EnableMainLogger": config.EnableMainLogger,
+		"Page":             page,
+		"PageSize":         pageSize,
 	})
 }
 
@@ -869,6 +867,9 @@ func (c *Controller) renderTemplate(ctx *gin.Context, templateName string, data 
 		"add": func(a, b int) int {
 			return a + b
 		},
+		"safeURL": func(s string) template.URL {
+			return template.URL(s)
+		},
 		"isJSON": func(s string) bool {
 			// 检查字符串是否为空
 			if s == "" {
@@ -888,6 +889,23 @@ func (c *Controller) renderTemplate(ctx *gin.Context, templateName string, data 
 			}
 
 			return false
+		},
+		"json": func(v interface{}) string {
+			// 将值转换为JSON字符串，用于前端JS初始化
+			if v == nil {
+				return "null"
+			}
+			switch val := v.(type) {
+			case string:
+				// 对字符串进行JSON转义
+				b, _ := json.Marshal(val)
+				return string(b)
+			case int, int64, float64:
+				return fmt.Sprintf("%v", val)
+			default:
+				b, _ := json.Marshal(val)
+				return string(b)
+			}
 		},
 	}
 

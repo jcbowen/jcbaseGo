@@ -406,22 +406,22 @@ const indexTemplate = `<!DOCTYPE html>
                 <h3>筛选条件</h3>
                 <div class="filter-actions">
                     <button type="submit" form="filter-form">筛选</button>
-                    <a href="{{.BasePath}}/list">重置</a>
+                    <a href="javascript:void(0)" onclick="resetFilters()">重置</a>
                 </div>
             </div>
-            <form class="filter-form" method="get" id="filter-form">
+            <form class="filter-form" method="get" id="filter-form" onsubmit="handleFilterSubmit(event)">
                     <!-- 基础筛选组 -->
                     <div class="filter-group">
                         <h4>基础筛选</h4>
                         <div class="filter-row">
-                            <select name="record_type" onchange="this.form.submit()">
+                            <select name="record_type" id="filter-record_type" onchange="handleFilterChange(this)">
                                 <option value="">所有记录类型</option>
-                                <option value="http" {{if eq .Filters.record_type "http"}}selected{{end}}>HTTP记录</option>
-                                <option value="process" {{if eq .Filters.record_type "process"}}selected{{end}}>进程记录</option>
+                                <option value="http">HTTP记录</option>
+                                <option value="process">进程记录</option>
                             </select>
                         </div>
                         <div class="filter-row">
-                            <input type="text" name="q" placeholder="搜索日志内容..." value="{{.Keyword}}">
+                            <input type="text" name="q" id="filter-q" placeholder="搜索日志内容...">
                         </div>
                     </div>
                     
@@ -429,44 +429,44 @@ const indexTemplate = `<!DOCTYPE html>
                     <div class="filter-group">
                         <h4>HTTP记录筛选</h4>
                         <div class="filter-row">
-                            <select name="method" onchange="this.form.submit()">
+                            <select name="method" id="filter-method" onchange="handleFilterChange(this)">
                                 <option value="">所有方法</option>
-                                <option value="GET" {{if eq .Filters.method "GET"}}selected{{end}}>GET</option>
-                                <option value="POST" {{if eq .Filters.method "POST"}}selected{{end}}>POST</option>
-                                <option value="PUT" {{if eq .Filters.method "PUT"}}selected{{end}}>PUT</option>
-                                <option value="DELETE" {{if eq .Filters.method "DELETE"}}selected{{end}}>DELETE</option>
+                                <option value="GET">GET</option>
+                                <option value="POST">POST</option>
+                                <option value="PUT">PUT</option>
+                                <option value="DELETE">DELETE</option>
                             </select>
-                            <select name="status_code" onchange="this.form.submit()">
+                            <select name="status_code" id="filter-status_code" onchange="handleFilterChange(this)">
                                 <option value="">所有状态码</option>
-                                <option value="200" {{if eq .Filters.status_code "200"}}selected{{end}}>200 - 成功</option>
-                                <option value="201" {{if eq .Filters.status_code "201"}}selected{{end}}>201 - 已创建</option>
-                                <option value="204" {{if eq .Filters.status_code "204"}}selected{{end}}>204 - 无内容</option>
-                                <option value="301" {{if eq .Filters.status_code "301"}}selected{{end}}>301 - 永久重定向</option>
-                                <option value="302" {{if eq .Filters.status_code "302"}}selected{{end}}>302 - 临时重定向</option>
-                                <option value="400" {{if eq .Filters.status_code "400"}}selected{{end}}>400 - 错误请求</option>
-                                <option value="401" {{if eq .Filters.status_code "401"}}selected{{end}}>401 - 未授权</option>
-                                <option value="403" {{if eq .Filters.status_code "403"}}selected{{end}}>403 - 禁止访问</option>
-                                <option value="404" {{if eq .Filters.status_code "404"}}selected{{end}}>404 - 未找到</option>
-                                <option value="500" {{if eq .Filters.status_code "500"}}selected{{end}}>500 - 服务器错误</option>
-                                <option value="502" {{if eq .Filters.status_code "502"}}selected{{end}}>502 - 网关错误</option>
-                                <option value="503" {{if eq .Filters.status_code "503"}}selected{{end}}>503 - 服务不可用</option>
+                                <option value="200">200 - 成功</option>
+                                <option value="201">201 - 已创建</option>
+                                <option value="204">204 - 无内容</option>
+                                <option value="301">301 - 永久重定向</option>
+                                <option value="302">302 - 临时重定向</option>
+                                <option value="400">400 - 错误请求</option>
+                                <option value="401">401 - 未授权</option>
+                                <option value="403">403 - 禁止访问</option>
+                                <option value="404">404 - 未找到</option>
+                                <option value="500">500 - 服务器错误</option>
+                                <option value="502">502 - 网关错误</option>
+                                <option value="503">503 - 服务不可用</option>
                             </select>
                         </div>
                         <div class="filter-row">
-                            <input type="text" name="client_ip" placeholder="客户端IP地址" value="{{.Filters.client_ip}}">
-                            <input type="text" name="host" placeholder="域名包含" value="{{.Filters.host}}">
-                            <input type="text" name="url" placeholder="URL路径包含" value="{{.Filters.url}}">
+                            <input type="text" name="client_ip" id="filter-client_ip" placeholder="客户端IP地址">
+                            <input type="text" name="host" id="filter-host" placeholder="域名包含">
+                            <input type="text" name="url" id="filter-url" placeholder="URL路径包含">
                         </div>
                         <div class="filter-row">
-                            <select name="is_streaming" onchange="this.form.submit()">
+                            <select name="is_streaming" id="filter-is_streaming" onchange="handleFilterChange(this)">
                                 <option value="">所有流式状态</option>
-                                <option value="true" {{if eq .Filters.is_streaming "true"}}selected{{end}}>流式请求</option>
-                                <option value="false" {{if eq .Filters.is_streaming "false"}}selected{{end}}>非流式请求</option>
+                                <option value="true">流式请求</option>
+                                <option value="false">非流式请求</option>
                             </select>
-                            <select name="streaming_status" onchange="this.form.submit()">
+                            <select name="streaming_status" id="filter-streaming_status" onchange="handleFilterChange(this)">
                                 <option value="">流式请求状态</option>
-                                <option value="active" {{if eq .Filters.streaming_status "active"}}selected{{end}}>活跃流式请求</option>
-                                <option value="inactive" {{if eq .Filters.streaming_status "inactive"}}selected{{end}}>非流式请求</option>
+                                <option value="active">活跃流式请求</option>
+                                <option value="inactive">非流式请求</option>
                             </select>
                         </div>
                     </div>
@@ -475,18 +475,60 @@ const indexTemplate = `<!DOCTYPE html>
                     <div class="filter-group">
                         <h4>进程记录筛选</h4>
                         <div class="filter-row">
-                            <input type="text" name="process_name" placeholder="进程名称" value="{{.Filters.process_name}}">
-                            <input type="text" name="process_id" placeholder="进程ID" value="{{.Filters.process_id}}">
-                            <select name="process_status" onchange="this.form.submit()">
+                            <input type="text" name="process_name" id="filter-process_name" placeholder="进程名称">
+                            <input type="text" name="process_id" id="filter-process_id" placeholder="进程ID">
+                            <select name="process_status" id="filter-process_status" onchange="handleFilterChange(this)">
                                 <option value="">所有进程状态</option>
-                                <option value="running" {{if eq .Filters.process_status "running"}}selected{{end}}>运行中</option>
-                                <option value="completed" {{if eq .Filters.process_status "completed"}}selected{{end}}>已完成</option>
-                                <option value="failed" {{if eq .Filters.process_status "failed"}}selected{{end}}>失败</option>
-                                <option value="cancelled" {{if eq .Filters.process_status "cancelled"}}selected{{end}}>已取消</option>
+                                <option value="running">运行中</option>
+                                <option value="completed">已完成</option>
+                                <option value="failed">失败</option>
+                                <option value="cancelled">已取消</option>
                             </select>
                         </div>
                     </div>
                 </form>
+                
+                <script>
+                    // 初始化筛选表单值
+                    function initFilterForm() {
+                        // 确保 pageParams 和 filters 存在
+                        if (!window.pageParams || !window.pageParams.filters) {
+                            return;
+                        }
+                        
+                        const filters = window.pageParams.filters;
+                        const keyword = window.pageParams.keyword;
+                        
+                        // 设置搜索关键词（排除null和空字符串）
+                        if (keyword && keyword !== 'null' && keyword !== '') {
+                            const qInput = document.getElementById('filter-q');
+                            if (qInput) qInput.value = keyword;
+                        }
+                        
+                        // 设置筛选条件（排除null和空字符串）
+                        function setFilterValue(elementId, value) {
+                            if (value && value !== 'null' && value !== '') {
+                                const element = document.getElementById(elementId);
+                                if (element) element.value = value;
+                            }
+                        }
+                        
+                        setFilterValue('filter-record_type', filters.record_type);
+                        setFilterValue('filter-method', filters.method);
+                        setFilterValue('filter-status_code', filters.status_code);
+                        setFilterValue('filter-client_ip', filters.client_ip);
+                        setFilterValue('filter-host', filters.host);
+                        setFilterValue('filter-url', filters.url);
+                        setFilterValue('filter-is_streaming', filters.is_streaming);
+                        setFilterValue('filter-streaming_status', filters.streaming_status);
+                        setFilterValue('filter-process_name', filters.process_name);
+                        setFilterValue('filter-process_id', filters.process_id);
+                        setFilterValue('filter-process_status', filters.process_status);
+                    }
+                    
+                    // 页面加载时初始化表单
+                    initFilterForm();
+                </script>
         </div>
         
         <div class="logs-table">
@@ -560,85 +602,152 @@ const indexTemplate = `<!DOCTYPE html>
         </div>
         
         {{if .Pagination}}
-        <div class="pagination">
-            {{$queryString := .QueryString}}
-            {{if $queryString}}
-                {{$queryString = printf "&%s" $queryString}}
-            {{end}}
-            
-            {{if .Pagination.HasPrev}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}{{$queryString}}">上一页</a>
-            {{else}}
-            <span class="disabled">上一页</span>
-            {{end}}
-            
-            {{$page := .Pagination.Page}}
-            {{$totalPages := .Pagination.TotalPages}}
-            {{$basePath := .BasePath}}
-            {{$pageSize := .Pagination.PageSize}}
-            
-            {{/* 智能分页显示逻辑 */}}
-            {{if le $totalPages 7}}
-                {{/* 总页数小于等于7时，显示所有页码 */}}
-                {{range $i := seq 1 $totalPages}}
-                {{if eq $i $page}}
-                <span class="current">{{$i}}</span>
-                {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{$queryString}}">{{$i}}</a>
-                {{end}}
-                {{end}}
-            {{else}}
-                {{/* 总页数大于7时，使用智能分页 */}}
-                {{if gt $page 4}}
-                    <a href="{{$basePath}}/list?page=1&pageSize={{$pageSize}}{{$queryString}}">1</a>
-                    {{if gt $page 5}}
-                    <span class="ellipsis">...</span>
-                    {{end}}
-                {{end}}
-                
-                {{/* 显示当前页附近的页码 */}}
-                {{$start := 1}}
-                {{if gt $page 2}}
-                    {{$start = sub $page 2}}
-                {{end}}
-                {{$end := $totalPages}}
-                {{if lt $page $totalPages}}
-                    {{if lt $page (sub $totalPages 2)}}
-                        {{$end = add $page 2}}
-                    {{end}}
-                {{end}}
-                {{range $i := seq $start $end}}
-                {{if eq $i $page}}
-                <span class="current">{{$i}}</span>
-                {{else}}
-                <a href="{{$basePath}}/list?page={{$i}}&pageSize={{$pageSize}}{{$queryString}}">{{$i}}</a>
-                {{end}}
-                {{end}}
-                
-                {{if lt $page $totalPages}}
-                    {{if lt $page (sub $totalPages 3)}}
-                        {{if lt $page (sub $totalPages 4)}}
-                        <span class="ellipsis">...</span>
-                        {{end}}
-                        <a href="{{$basePath}}/list?page={{$totalPages}}&pageSize={{$pageSize}}{{$queryString}}">{{$totalPages}}</a>
-                    {{end}}
-                {{end}}
-            {{end}}
-            
-            {{if .Pagination.HasNext}}
-            <a href="{{.BasePath}}/list?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}{{$queryString}}">下一页</a>
-            {{else}}
-            <span class="disabled">下一页</span>
-            {{end}}
+        <div class="pagination" id="pagination">
+            {{/* 分页内容将由JavaScript动态生成 */}}
         </div>
+        
+        {{/* 分页数据将在页面底部脚本中定义 */}}
+        <script>
+            window.paginationData = {
+                page: {{.Pagination.Page}},
+                pageSize: {{.Pagination.PageSize}},
+                totalPages: {{.Pagination.TotalPages}},
+                hasPrev: {{.Pagination.HasPrev}},
+                hasNext: {{.Pagination.HasNext}},
+                prevPage: {{.Pagination.PrevPage}},
+                nextPage: {{.Pagination.NextPage}}
+            };
+        </script>
         {{end}}
     </div>
     
     <script>
+        // 页面参数初始化 - 页面加载时从模板获取参数值
+        window.pageParams = {
+            basePath: '{{.BasePath}}',
+            page: {{.Page}},
+            pageSize: {{.PageSize}},
+            keyword: {{if .Keyword}}'{{.Keyword}}'{{else}}null{{end}},
+            filters: {
+                record_type: {{if .Filters.record_type}}'{{.Filters.record_type}}'{{else}}null{{end}},
+                method: {{if .Filters.method}}'{{.Filters.method}}'{{else}}null{{end}},
+                status_code: {{if .Filters.status_code}}'{{.Filters.status_code}}'{{else}}null{{end}},
+                client_ip: {{if .Filters.client_ip}}'{{.Filters.client_ip}}'{{else}}null{{end}},
+                host: {{if .Filters.host}}'{{.Filters.host}}'{{else}}null{{end}},
+                url: {{if .Filters.url}}'{{.Filters.url}}'{{else}}null{{end}},
+                process_name: {{if .Filters.process_name}}'{{.Filters.process_name}}'{{else}}null{{end}},
+                process_id: {{if .Filters.process_id}}'{{.Filters.process_id}}'{{else}}null{{end}},
+                process_status: {{if .Filters.process_status}}'{{.Filters.process_status}}'{{else}}null{{end}},
+                is_streaming: {{if .Filters.is_streaming}}'{{.Filters.is_streaming}}'{{else}}null{{end}},
+                streaming_status: {{if .Filters.streaming_status}}'{{.Filters.streaming_status}}'{{else}}null{{end}}
+            }
+        };
+
+        // 构建列表页URL - 只包含有值的参数
+        function buildListURL(targetPage) {
+            const params = new URLSearchParams();
+            
+            // 将targetPage转换为数字
+            const pageNum = parseInt(targetPage, 10);
+            
+            // 添加分页参数（只要有有效的页码就添加）
+            if (!isNaN(pageNum) && pageNum > 0) {
+                params.set('page', pageNum);
+            }
+            if (window.pageParams.pageSize && window.pageParams.pageSize !== 20) {
+                params.set('pageSize', window.pageParams.pageSize);
+            }
+            
+            // 添加搜索关键词（排除空字符串和null）
+            const keyword = window.pageParams.keyword;
+            if (keyword && keyword !== 'null' && keyword !== '') {
+                params.set('q', keyword);
+            }
+            
+            // 添加过滤参数（只添加有值的，排除null和空字符串）
+            const filters = window.pageParams.filters;
+            for (const [key, value] of Object.entries(filters)) {
+                if (value && value !== 'null' && value !== '' && value.trim && value.trim() !== '') {
+                    params.set(key, value);
+                }
+            }
+            
+            const queryString = params.toString();
+            return window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+        }
+
+        // 跳转到指定页面
+        function goToPage(page) {
+            window.location.href = buildListURL(page);
+        }
+
+        // 处理筛选条件变化（下拉框onchange事件）
+        function handleFilterChange(selectElement) {
+            const params = new URLSearchParams();
+            
+            // 1. 先添加当前已存在的参数（从pageParams中）
+            // 添加搜索关键词
+            const keyword = window.pageParams.keyword;
+            if (keyword && keyword !== 'null' && keyword !== '') {
+                params.set('q', keyword);
+            }
+            
+            // 添加已有的过滤参数
+            const filters = window.pageParams.filters;
+            for (const [key, value] of Object.entries(filters)) {
+                if (value && value !== 'null' && value !== '') {
+                    params.set(key, value);
+                }
+            }
+            
+            // 2. 添加/更新当前变化的参数
+            const newValue = selectElement.value;
+            if (newValue && newValue.trim() !== '') {
+                params.set(selectElement.name, newValue);
+            } else {
+                // 如果新值为空，移除该参数
+                params.delete(selectElement.name);
+            }
+            
+            const queryString = params.toString();
+            window.location.href = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+        }
+
+        // 处理筛选表单提交 - 排除空值参数
+        function handleFilterSubmit(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const params = new URLSearchParams();
+            
+            // 只添加有值的参数
+            for (const [key, value] of formData.entries()) {
+                if (value && value.trim() !== '') {
+                    params.set(key, value);
+                }
+            }
+            
+            const queryString = params.toString();
+            window.location.href = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+        }
+
+        // 重置筛选条件
+        function resetFilters() {
+            window.location.href = window.pageParams.basePath + '/list';
+        }
+
+        // 辅助函数：将Go字符串转换为JS字符串
+        function json(str) {
+            if (str === undefined || str === null) return 'null';
+            return JSON.stringify(str);
+        }
+
+        // 辅助函数：字符串转小写
         function lower(str) {
             return str ? str.toLowerCase() : '';
         }
         
+        // 辅助函数：生成数字序列
         function seq(start, end) {
             const result = [];
             for (let i = start; i <= end; i++) {
@@ -647,21 +756,88 @@ const indexTemplate = `<!DOCTYPE html>
             return result;
         }
         
-        function max(a, b) {
-            return a > b ? a : b;
-        }
-        
-        function min(a, b) {
-            return a < b ? a : b;
-        }
-        
+        // 辅助函数：减法
         function sub(a, b) {
             return a - b;
         }
         
+        // 辅助函数：加法
         function add(a, b) {
             return a + b;
         }
+        
+        // 渲染分页
+        function renderPagination() {
+            if (!window.paginationData) return;
+            
+            const container = document.getElementById('pagination');
+            if (!container) return;
+            
+            const data = window.paginationData;
+            let html = '';
+            
+            // 上一页
+            if (data.hasPrev) {
+                html += '<a href="' + buildListURL(data.prevPage) + '">上一页</a>';
+            } else {
+                html += '<span class="disabled">上一页</span>';
+            }
+            
+            // 页码
+            if (data.totalPages <= 7) {
+                // 显示所有页码
+                for (let i = 1; i <= data.totalPages; i++) {
+                    if (i === data.page) {
+                        html += '<span class="current">' + i + '</span>';
+                    } else {
+                        html += '<a href="' + buildListURL(i) + '">' + i + '</a>';
+                    }
+                }
+            } else {
+                // 智能分页
+                if (data.page > 4) {
+                    html += '<a href="' + buildListURL(1) + '">1</a>';
+                    if (data.page > 5) {
+                        html += '<span class="ellipsis">...</span>';
+                    }
+                }
+                
+                // 当前页附近的页码
+                let start = 1;
+                if (data.page > 2) start = data.page - 2;
+                let end = data.totalPages;
+                if (data.page < data.totalPages - 2) end = data.page + 2;
+                
+                for (let i = start; i <= end; i++) {
+                    if (i === data.page) {
+                        html += '<span class="current">' + i + '</span>';
+                    } else {
+                        html += '<a href="' + buildListURL(i) + '">' + i + '</a>';
+                    }
+                }
+                
+                if (data.page < data.totalPages) {
+                    if (data.page < data.totalPages - 3) {
+                        if (data.page < data.totalPages - 4) {
+                            html += '<span class="ellipsis">...</span>';
+                        }
+                        html += '<a href="' + buildListURL(data.totalPages) + '">' + data.totalPages + '</a>';
+                    }
+                }
+            }
+            
+            // 下一页
+            if (data.hasNext) {
+                html += '<a href="' + buildListURL(data.nextPage) + '">下一页</a>';
+            } else {
+                html += '<span class="disabled">下一页</span>';
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        // 页面加载时渲染分页
+        renderPagination();
     </script>
 </body>
 </html>`
