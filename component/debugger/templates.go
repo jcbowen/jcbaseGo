@@ -489,41 +489,51 @@ const indexTemplate = `<!DOCTYPE html>
                 </form>
                 
                 <script>
-                    // 初始化筛选表单值
+                    // 初始化筛选表单值 - 优先从pageParams获取，后备从URL参数获取
                     function initFilterForm() {
-                        // 确保 pageParams 和 filters 存在
-                        if (!window.pageParams || !window.pageParams.filters) {
-                            return;
+                        // 从URL参数获取值（作为后备）
+                        const urlParams = new URLSearchParams(window.location.search);
+                        
+                        // 获取参数值的辅助函数（优先从pageParams，后备从URL）
+                        function getParamValue(key, pageParamsValue) {
+                            if (pageParamsValue && pageParamsValue !== 'null' && pageParamsValue !== '') {
+                                return pageParamsValue;
+                            }
+                            const urlValue = urlParams.get(key);
+                            return urlValue || null;
                         }
                         
-                        const filters = window.pageParams.filters;
-                        const keyword = window.pageParams.keyword;
+                        // 确保 pageParams 存在
+                        const filters = window.pageParams && window.pageParams.filters ? window.pageParams.filters : {};
+                        const keyword = window.pageParams ? window.pageParams.keyword : null;
                         
-                        // 设置搜索关键词（排除null和空字符串）
-                        if (keyword && keyword !== 'null' && keyword !== '') {
+                        // 设置搜索关键词（优先pageParams，后备URL参数q）
+                        const qValue = getParamValue('q', keyword);
+                        if (qValue) {
                             const qInput = document.getElementById('filter-q');
-                            if (qInput) qInput.value = keyword;
+                            if (qInput) qInput.value = qValue;
                         }
                         
-                        // 设置筛选条件（排除null和空字符串）
-                        function setFilterValue(elementId, value) {
-                            if (value && value !== 'null' && value !== '') {
+                        // 设置筛选条件（优先pageParams，后备URL参数）
+                        function setFilterValue(elementId, key, pageParamsValue) {
+                            const value = getParamValue(key, pageParamsValue);
+                            if (value) {
                                 const element = document.getElementById(elementId);
                                 if (element) element.value = value;
                             }
                         }
                         
-                        setFilterValue('filter-record_type', filters.record_type);
-                        setFilterValue('filter-method', filters.method);
-                        setFilterValue('filter-status_code', filters.status_code);
-                        setFilterValue('filter-client_ip', filters.client_ip);
-                        setFilterValue('filter-host', filters.host);
-                        setFilterValue('filter-url', filters.url);
-                        setFilterValue('filter-is_streaming', filters.is_streaming);
-                        setFilterValue('filter-streaming_status', filters.streaming_status);
-                        setFilterValue('filter-process_name', filters.process_name);
-                        setFilterValue('filter-process_id', filters.process_id);
-                        setFilterValue('filter-process_status', filters.process_status);
+                        setFilterValue('filter-record_type', 'record_type', filters.record_type);
+                        setFilterValue('filter-method', 'method', filters.method);
+                        setFilterValue('filter-status_code', 'status_code', filters.status_code);
+                        setFilterValue('filter-client_ip', 'client_ip', filters.client_ip);
+                        setFilterValue('filter-host', 'host', filters.host);
+                        setFilterValue('filter-url', 'url', filters.url);
+                        setFilterValue('filter-is_streaming', 'is_streaming', filters.is_streaming);
+                        setFilterValue('filter-streaming_status', 'streaming_status', filters.streaming_status);
+                        setFilterValue('filter-process_name', 'process_name', filters.process_name);
+                        setFilterValue('filter-process_id', 'process_id', filters.process_id);
+                        setFilterValue('filter-process_status', 'process_status', filters.process_status);
                     }
                     
                     // 页面加载时初始化表单
@@ -643,33 +653,29 @@ const indexTemplate = `<!DOCTYPE html>
             }
         };
 
-        // 构建列表页URL - 只包含有值的参数
+        // 构建列表页URL - 从当前URL获取参数，确保包含用户最新的筛选条件
         function buildListURL(targetPage) {
             const params = new URLSearchParams();
             
-            // 将targetPage转换为数字
-            const pageNum = parseInt(targetPage, 10);
-            
-            // 添加分页参数（只要有有效的页码就添加）
-            if (!isNaN(pageNum) && pageNum > 0) {
-                params.set('page', pageNum);
-            }
-            if (window.pageParams.pageSize && window.pageParams.pageSize !== 20) {
-                params.set('pageSize', window.pageParams.pageSize);
-            }
-            
-            // 添加搜索关键词（排除空字符串和null）
-            const keyword = window.pageParams.keyword;
-            if (keyword && keyword !== 'null' && keyword !== '') {
-                params.set('q', keyword);
-            }
-            
-            // 添加过滤参数（只添加有值的，排除null和空字符串）
-            const filters = window.pageParams.filters;
-            for (const [key, value] of Object.entries(filters)) {
-                if (value && value !== 'null' && value !== '' && value.trim && value.trim() !== '') {
+            // 1. 从当前URL复制所有参数（获取最新的筛选条件）
+            const currentParams = new URLSearchParams(window.location.search);
+            for (const [key, value] of currentParams.entries()) {
+                if (value && value !== 'null' && value !== '') {
                     params.set(key, value);
                 }
+            }
+            
+            // 2. 更新分页参数
+            const pageNum = parseInt(targetPage, 10);
+            if (!isNaN(pageNum) && pageNum > 0) {
+                params.set('page', pageNum);
+            } else {
+                params.delete('page');
+            }
+            
+            // 3. 更新pageSize（如果与默认值不同）
+            if (window.pageParams.pageSize && window.pageParams.pageSize !== 20) {
+                params.set('pageSize', window.pageParams.pageSize);
             }
             
             const queryString = params.toString();
@@ -685,16 +691,11 @@ const indexTemplate = `<!DOCTYPE html>
         function handleFilterChange(selectElement) {
             const params = new URLSearchParams();
             
-            // 1. 先添加当前已存在的参数（从pageParams中）
-            // 添加搜索关键词
-            const keyword = window.pageParams.keyword;
-            if (keyword && keyword !== 'null' && keyword !== '') {
-                params.set('q', keyword);
-            }
+            // 1. 从当前URL中获取最新参数（确保获取用户之前的筛选操作）
+            const currentParams = new URLSearchParams(window.location.search);
             
-            // 添加已有的过滤参数
-            const filters = window.pageParams.filters;
-            for (const [key, value] of Object.entries(filters)) {
+            // 复制当前URL中的所有参数
+            for (const [key, value] of currentParams.entries()) {
                 if (value && value !== 'null' && value !== '') {
                     params.set(key, value);
                 }
@@ -713,17 +714,28 @@ const indexTemplate = `<!DOCTYPE html>
             window.location.href = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
         }
 
-        // 处理筛选表单提交 - 排除空值参数
+        // 处理筛选表单提交 - 排除空值参数，保留URL中已有的其他参数
         function handleFilterSubmit(event) {
             event.preventDefault();
             const form = event.target;
             const formData = new FormData(form);
             const params = new URLSearchParams();
             
-            // 只添加有值的参数
+            // 1. 先复制当前URL中的所有参数（保留已有筛选条件）
+            const currentParams = new URLSearchParams(window.location.search);
+            for (const [key, value] of currentParams.entries()) {
+                if (value && value !== 'null' && value !== '') {
+                    params.set(key, value);
+                }
+            }
+            
+            // 2. 更新表单中的参数（表单值覆盖URL中的值）
             for (const [key, value] of formData.entries()) {
                 if (value && value.trim() !== '') {
                     params.set(key, value);
+                } else {
+                    // 如果表单值为空，移除该参数
+                    params.delete(key);
                 }
             }
             
