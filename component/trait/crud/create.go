@@ -18,7 +18,7 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	var err error
 
 	// 获取表单数据
-	callResults := t.callCustomMethod("CreateFormData", c)
+	callResults := t.callCustomMethod("CreateFormData", ctx)
 	modelValue := callResults[0]
 	mapData := callResults[1].(map[string]any)
 	if callResults[2] != nil {
@@ -30,7 +30,7 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	}
 
 	// 调用自定义的CreateBefore方法进行前置处理
-	callResults = t.callCustomMethod("CreateBefore", modelValue, mapData)
+	callResults = t.callCustomMethod("CreateBefore", ctx, modelValue, mapData)
 	modelValue = callResults[0]
 	mapData = callResults[1].(map[string]any)
 	if callResults[2] != nil {
@@ -49,7 +49,7 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 		}
 
 		// 调用自定义的CreateAfter方法进行后置处理
-		callErr := t.callCustomMethod("CreateAfter", tx, modelValue)[0]
+		callErr := t.callCustomMethod("CreateAfter", ctx, tx, modelValue)[0]
 		if callErr != nil {
 			err = callErr.(error)
 			if err != nil {
@@ -67,7 +67,7 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	}
 
 	// 返回结果
-	t.callCustomMethod("CreateReturn", c, modelValue)
+	t.callCustomMethod("CreateReturn", ctx, modelValue)
 }
 
 // CreateFormData 获取创建操作的表单数据

@@ -60,7 +60,7 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 		}
 
 		// 调用自定义的UpdateBefore方法进行前置处理
-		callResults = t.callCustomMethod("UpdateBefore", modelValue, mapData, result)
+		callResults = t.callCustomMethod("UpdateBefore", ctx, modelValue, mapData, result)
 		modelValue = callResults[0]
 		mapData = callResults[1].(map[string]any)
 		if callResults[2] != nil {
@@ -89,7 +89,7 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 		}
 
 		// 调用自定义的UpdateAfter方法进行后置处理
-		callErr := t.callCustomMethod("UpdateAfter", tx, modelValue, result)[0]
+		callErr := t.callCustomMethod("UpdateAfter", ctx, tx, modelValue, result)[0]
 		if callErr != nil {
 			err = callErr.(error)
 			if err != nil {
@@ -111,7 +111,7 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 	}
 
 	// 返回结果
-	t.callCustomMethod("UpdateReturn", c, modelValue)
+	t.callCustomMethod("UpdateReturn", ctx, modelValue)
 }
 
 // UpdateFormData 获取更新操作的表单数据
