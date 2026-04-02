@@ -1039,6 +1039,20 @@ func CheckAndSetDefault(i interface{}) error {
 				field.SetInt(int64(duration))
 			}
 		}
+
+		// 切片：为空切片时设置默认值
+		if fieldKind == reflect.Slice && field.Len() == 0 {
+			if err := setDefaultValue(field, tag); err != nil {
+				// 静默处理错误，保持与原有逻辑兼容
+			}
+		}
+
+		// 映射：为空映射时设置默认值
+		if fieldKind == reflect.Map && field.Len() == 0 {
+			if err := setDefaultValue(field, tag); err != nil {
+				// 静默处理错误，保持与原有逻辑兼容
+			}
+		}
 	}
 
 	return nil
@@ -1095,6 +1109,7 @@ func CheckAndSetDefaultWithPreserveTag(i interface{}) error {
 			if !ok {
 				continue
 			}
+
 			if !equalToDefault(f, defVal) {
 				snapshots[idx] = f.Interface()
 			}

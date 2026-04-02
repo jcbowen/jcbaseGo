@@ -30,7 +30,7 @@ type Config struct {
 	// 过滤配置
 	SkipPaths        []string `json:"skip_paths" default:""`                                                                                                               // 跳过的路径（如静态文件："/static/,/favicon.ico"）
 	SkipMethods      []string `json:"skip_methods" default:"OPTIONS"`                                                                                                      // 跳过的HTTP方法
-	AutoSkipStatic   bool     `json:"auto_skip_static" default:"true" preserve:"true"`                                                                                     // 是否自动跳过静态资源请求
+	AutoSkipStatic   bool     `json:"auto_skip_static" default:"true"`                                                                                                     // 是否自动跳过静态资源请求
 	StaticExtensions []string `json:"static_extensions" default:".css,.js,.map,.png,.jpg,.jpeg,.gif,.svg,.ico,.woff,.woff2,.ttf,.eot,.otf,.webp,.txt,.xml,.pdf,.mp4,.mp3"` // 静态资源扩展名列表
 
 	// 采样配置
