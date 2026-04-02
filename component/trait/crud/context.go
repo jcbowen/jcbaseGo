@@ -35,6 +35,7 @@ type NewContextOpt = Context
 //   - *Context: 新创建的上下文对象
 func NewContext(opt *NewContextOpt) *Context {
 	ctx := &Context{
+		ActionName: opt.ActionName,
 		Debug:      opt.Debug,
 		GinContext: opt.GinContext,
 	}
