@@ -1,7 +1,7 @@
 # Helper 工具包使用指南
 
 ## 组件概述
-Helper 工具包提供了大量常用的工具函数，包括类型转换、文件操作、字符串处理、JSON 操作、SSH 连接、金额处理等功能。
+Helper 工具包提供了大量常用的工具函数，包括类型转换、文件操作、字符串处理、JSON 操作、SSH 密钥管理、金额处理等功能。
 
 ## 核心文件
 - [component/helper/convert.go](mdc:component/helper/convert.go) - 类型转换工具
@@ -9,7 +9,7 @@ Helper 工具包提供了大量常用的工具函数，包括类型转换、文�
 - [component/helper/string.go](mdc:component/helper/string.go) - 字符串处理工具
 - [component/helper/json.go](mdc:component/helper/json.go) - JSON 处理工具
 - [component/helper/money.go](mdc:component/helper/money.go) - 金额处理工具
-- [component/helper/ssh.go](mdc:component/helper/ssh.go) - SSH 工具
+- [component/helper/ssh.go](mdc:component/helper/ssh.go) - SSH 密钥管理工具
 - [component/helper/util.go](mdc:component/helper/util.go) - 通用工具函数
 
 ## 类型转换工具 (convert.go)
@@ -68,12 +68,13 @@ if fileHelper.Exists() {
     fmt.Println("文件存在")
 }
 
-// 读取文件内容
-content, err := fileHelper.ReadFile()
+// 读取JSON文件内容到变量
+var data interface{}
+err := fileHelper.JsonToData(&data)
 if err != nil {
-    log.Printf("读取文件失败: %v", err)
+    log.Printf("读取JSON文件失败: %v", err)
 } else {
-    fmt.Printf("文件内容: %s", content)
+    fmt.Printf("文件内容: %v", data)
 }
 
 // 创建文件
@@ -87,7 +88,7 @@ if err != nil {
 ### 目录操作
 ```go
 // 检查目录是否存在，如果不存在则创建
-dirHelper := helper.NewFile(&helper.File{Path: "/path/to/directory"})
+dirHelper := helper.NewFile(&helper.File{Path: "/path/to/directory/"})
 exists, err := dirHelper.DirExists(true) // true 表示不存在时自动创建
 if err != nil {
     log.Printf("目录操作失败: %v", err)
@@ -98,7 +99,7 @@ dirName := dirHelper.DirName()
 fmt.Printf("目录名: %s", dirName)
 
 // 获取文件名（不含路径）
-fileName := dirHelper.BaseName()
+fileName := dirHelper.Basename("")
 fmt.Printf("文件名: %s", fileName)
 ```
 
@@ -108,11 +109,16 @@ fmt.Printf("文件名: %s", fileName)
 srcFile := helper.NewFile(&helper.File{Path: "source.txt"})
 destFile := helper.NewFile(&helper.File{Path: "destination.txt"})
 
-// 读取源文件
-srcContent, err := srcFile.ReadFile()
-if err == nil {
-    // 写入目标文件
-    err = destFile.CreateFile(srcContent, true)
+// 复制文件内容
+err := srcFile.CopyFile(destFile.Path, true, true)
+if err != nil {
+    log.Printf("复制文件失败: %v", err)
+}
+
+// 删除文件
+err = srcFile.Remove()
+if err != nil {
+    log.Printf("删除文件失败: %v", err)
 }
 
 // 文件大小获取
@@ -130,40 +136,44 @@ if fileInfo.Exists() {
 
 ### 字符串截取和处理
 ```go
-// 字符串截取（按字符数）
+// 创建字符串处理实例
 text := "Hello, 世界！这是一个测试"
-substr := helper.SubString(text, 0, 10)
+str := helper.NewStr(text)
+
+// 字符串截取（按字符数）
+substr := str.ByteSubstr(0, 10)
 fmt.Printf("截取结果: %s", substr) // "Hello, 世界！"
 
-// 字符串截取（按字节数，适用于英文）
-byteSubstr := helper.SubStringBytes(text, 0, 5)
-fmt.Printf("字节截取: %s", byteSubstr) // "Hello"
+// 字符串截断（带后缀）
+truncated := str.Truncate(8, "...")
+fmt.Printf("截断结果: %s", truncated)
 
-// 生成随机字符串
-randomStr := helper.Random(16) // 生成16位随机字符串
-fmt.Printf("随机字符串: %s", randomStr)
+// 检查字符串开头/结尾
+startsWith := str.StartsWith("Hello", true)
+endsWith := str.EndsWith("测试", true)
 
-// 字符串替换
-original := "Hello World"
-replaced := helper.StrReplace(original, "World", "Go")
-fmt.Printf("替换结果: %s", replaced) // "Hello Go"
+// 分割字符串
+parts := str.Explode("，", true, true)
+fmt.Printf("分割结果: %v", parts)
 ```
 
-### 字符串验证和检查
+### 字符串转换和验证
 ```go
-// 检查字符串是否在数组中
-fruits := []string{"apple", "banana", "orange"}
-exists := helper.InArray("banana", fruits)
-fmt.Printf("banana 是否存在: %t", exists) // true
+// 驼峰转下划线
+str := helper.NewStr("UserProfile")
+snake := str.ConvertCamelToSnake()
+fmt.Printf("snake_case: %s", snake) // "user_profile"
 
-// 字符串长度计算（Unicode 字符）
-text := "Hello 世界"
-length := helper.StringLength(text)
-fmt.Printf("字符串长度: %d", length) // 8
+// Base64 URL 编码/解码
+encoded := str.Base64UrlEncode()
+decoded, err := helper.NewStr(encoded).Base64UrlDecode()
 
-// 检查是否为空字符串
-isEmpty := helper.IsEmpty("")
-fmt.Printf("是否为空: %t", isEmpty) // true
+// 检查是否为数字
+isNum := helper.NewStr("123.45").IsNumeric()
+isInt := helper.NewStr("123").IsNumeric(true) // 严格模式
+
+// HTML 转义
+escaped := helper.NewStr("<script>alert('xss')</script>").EscapeHTML()
 ```
 
 ## JSON 处理工具 (json.go)
@@ -219,65 +229,35 @@ if err == nil {
 
 // JSON 字符串转 Map
 var resultMap map[string]interface{}
-err = helper.Json(mapJsonStr).ToStruct(&resultMap)
+err = helper.Json(mapJsonStr).ToMap(&resultMap)
 if err == nil {
     fmt.Printf("解析结果: %+v", resultMap)
 }
+
+// 从文件读取 JSON
+jsonFile := helper.JsonFile("./config.json")
+var config map[string]interface{}
+jsonFile.ToStruct(&config)
 ```
 
-## SSH 工具 (ssh.go)
+## SSH 密钥管理 (ssh.go)
 
-### SSH 连接和命令执行
+### 获取和生成 SSH 密钥
 ```go
-// SSH 连接配置
-sshConfig := helper.SSHConfig{
-    Host:     "192.168.1.100",
-    Port:     22,
-    Username: "root",
-    Password: "password",
-    // 或使用密钥认证
-    // PrivateKey: privateKeyBytes,
-}
-
-// 创建 SSH 客户端
-sshClient := helper.NewSSH(sshConfig)
-
-// 连接到远程服务器
-err := sshClient.Connect()
+// 获取 SSH 公钥（如果不存在则自动生成）
+publicKey, err := helper.GetSSHKey()
 if err != nil {
-    log.Printf("SSH 连接失败: %v", err)
-    return
-}
-defer sshClient.Close()
-
-// 执行远程命令
-output, err := sshClient.Run("ls -la /home")
-if err != nil {
-    log.Printf("命令执行失败: %v", err)
+    log.Printf("获取SSH公钥失败: %v", err)
 } else {
-    fmt.Printf("命令输出:\n%s", output)
-}
-```
-
-### 文件传输
-```go
-// 上传文件到远程服务器
-localFile := "/local/path/file.txt"
-remoteFile := "/remote/path/file.txt"
-
-err = sshClient.UploadFile(localFile, remoteFile)
-if err != nil {
-    log.Printf("文件上传失败: %v", err)
-} else {
-    fmt.Println("文件上传成功")
+    fmt.Printf("SSH公钥: %s", publicKey)
 }
 
-// 从远程服务器下载文件
-err = sshClient.DownloadFile(remoteFile, "/local/download/file.txt")
+// 生成 SSH 密钥对
+err = helper.GenerateSSHKey()
 if err != nil {
-    log.Printf("文件下载失败: %v", err)
+    log.Printf("生成SSH密钥对失败: %v", err)
 } else {
-    fmt.Println("文件下载成功")
+    fmt.Println("SSH密钥对生成成功")
 }
 ```
 
@@ -285,31 +265,41 @@ if err != nil {
 
 ### 金额计算和格式化
 ```go
-// 金额加法（避免浮点数精度问题）
-amount1 := 12.34
-amount2 := 56.78
-sum := helper.MoneyAdd(amount1, amount2)
-fmt.Printf("%.2f + %.2f = %.2f", amount1, amount2, sum)
+// 创建金额实例（以厘为单位，1000厘=1元）
+money1 := helper.Money("12.34")
+money2 := helper.Money("56.78")
+
+// 金额加法
+sum := helper.Money("0").SetAmount("12.34").Add(money2)
+fmt.Printf("和: %s", sum.FloatString())
 
 // 金额减法
-difference := helper.MoneySubtract(sum, amount1)
-fmt.Printf("%.2f - %.2f = %.2f", sum, amount1, difference)
+difference := helper.Money("100").Subtract(helper.Money("50"))
+fmt.Printf("差: %s", difference.FloatString())
 
 // 金额乘法
-product := helper.MoneyMultiply(amount1, 2.5)
-fmt.Printf("%.2f * 2.5 = %.2f", amount1, product)
+product := helper.Money("10").Multiply(2.5)
+fmt.Printf("积: %s", product.FloatString())
 
 // 金额除法
-quotient := helper.MoneyDivide(amount1, 2.0)
-fmt.Printf("%.2f / 2.0 = %.2f", amount1, quotient)
+quotient := helper.Money("100").Divide(4.0)
+fmt.Printf("商: %s", quotient.FloatString())
 
-// 金额格式化
-formatted := helper.MoneyFormat(12345.67)
-fmt.Printf("格式化金额: %s", formatted) // "12,345.67"
+// 金额格式化（带前缀和后缀）
+formatted := helper.Money("12345.67").FloatString("¥", "元")
+fmt.Printf("格式化金额: %s", formatted) // "¥12345.67元"
 
-// 中文大写金额
-chineseAmount := helper.MoneyToChinese(12345.67)
-fmt.Printf("中文大写: %s", chineseAmount) // "壹万贰仟叁佰肆拾伍元陆角柒分"
+// 金额比较
+m1 := helper.Money("100")
+m2 := helper.Money("200")
+fmt.Printf("大于: %t", m1.GreaterThan(m2)) // false
+fmt.Printf("小于: %t", m1.LessThan(m2))    // true
+fmt.Printf("等于: %t", m1.Equals(m1))      // true
+
+// 检查错误
+if err := m1.GetError(); err != nil {
+    log.Printf("金额计算错误: %v", err)
+}
 ```
 
 ## 通用工具函数 (util.go)
@@ -375,7 +365,8 @@ fmt.Printf("SHA256 哈希: %s", sha256Hash)
 ```go
 // 始终检查错误返回值
 fileHelper := helper.NewFile(&helper.File{Path: "config.json"})
-content, err := fileHelper.ReadFile()
+var data interface{}
+err := fileHelper.JsonToData(&data)
 if err != nil {
     log.Printf("读取配置文件失败: %v", err)
     // 使用默认配置或退出程序
@@ -400,12 +391,13 @@ for _, filename := range files {
     wg.Add(1)
     go func(file string) {
         defer wg.Done()
-        
+
         fileHelper := helper.NewFile(&helper.File{Path: file})
         if fileHelper.Exists() {
-            content, _ := fileHelper.ReadFile()
+            var data interface{}
+            _ = fileHelper.JsonToData(&data)
             // 处理文件内容
-            fmt.Printf("处理文件: %s, 大小: %d\n", file, len(content))
+            fmt.Printf("处理文件: %s\n", file)
         }
     }(filename)
 }
@@ -442,12 +434,7 @@ type EnhancedFile struct {
 }
 
 func (ef *EnhancedFile) ReadJSON(v interface{}) error {
-    content, err := ef.ReadFile()
-    if err != nil {
-        return err
-    }
-    
-    return helper.Json(string(content)).ToStruct(v)
+    return helper.JsonFile(ef.Path).ToStruct(v)
 }
 
 func (ef *EnhancedFile) WriteJSON(v interface{}) error {
@@ -456,7 +443,7 @@ func (ef *EnhancedFile) WriteJSON(v interface{}) error {
     if err != nil {
         return err
     }
-    
+
     return ef.CreateFile([]byte(jsonStr), true)
 }
 ```

@@ -121,10 +121,9 @@ jcbaseGo/
 │   │   ├── password.go         # 密码哈希处理
 │   │   ├── safe.go             # 安全验证工具
 │   │   └── sm4.go              # SM4 国密算法
-│   ├── tlsconfig.go            # 🔒 TLS 配置管理读取
+│   ├── tlsconfig/              # 🔒 TLS 配置管理读取
+│   │   └── tlsconfig.go        # TLS 配置实现
 │   ├── trait/                  # 🎭 Trait 模式实现
-│   │   ├── controller/         # 控制器基础功能
-│   │   │   └── controller.go   # 控制器基类
 │   │   └── crud/               # CRUD 操作模板
 │   │       ├── all.go          # 获取所有数据
 │   │       ├── base.go         # CRUD 基础功能
@@ -366,22 +365,29 @@ func main() {
 package main
 
 import (
+    "fmt"
+    "github.com/jcbowen/jcbaseGo"
     "github.com/jcbowen/jcbaseGo/component/mailer"
 )
 
 func main() {
     // 配置邮件服务
-    mailConfig := mailer.Mailer{
+    mailConfig := jcbaseGo.MailerStruct{
         Host:     "smtp.qq.com",
-        Port:     587,
+        Port:     "587",
         Username: "your-email@qq.com",
         Password: "your-smtp-password", // QQ邮箱需要使用授权码
         From:     "your-email@qq.com",
-        FromName: "系统通知",
     }
 
+    // 创建邮件实例
+    email := mailer.New(mailConfig)
+
     // 发送文本邮件
-    err := mailConfig.Send("recipient@example.com", "测试邮件", "这是一封测试邮件")
+    email.AddRecipient("recipient@example.com")
+    email.SetSubject("测试邮件")
+    email.SetBody("这是一封测试邮件", false)
+    err := email.Send()
     if err != nil {
         panic(err)
     }
@@ -392,8 +398,12 @@ func main() {
     <p>感谢您的注册，请点击下面的链接激活账户：</p>
     <a href="https://example.com/activate?token=abc123">激活账户</a>
     `
-    
-    err = mailConfig.SendHTML("recipient@example.com", "账户激活", htmlContent)
+
+    emailHTML := mailer.New(mailConfig)
+    emailHTML.AddRecipient("recipient@example.com")
+    emailHTML.SetSubject("账户激活")
+    emailHTML.SetBody(htmlContent, true)
+    err = emailHTML.Send()
     if err != nil {
         panic(err)
     }
@@ -404,9 +414,13 @@ func main() {
         "user2@example.com",
         "user3@example.com",
     }
-    
+
     for _, recipient := range recipients {
-        err := mailConfig.Send(recipient, "批量通知", "这是一封批量发送的邮件")
+        emailBatch := mailer.New(mailConfig)
+        emailBatch.AddRecipient(recipient)
+        emailBatch.SetSubject("批量通知")
+        emailBatch.SetBody("这是一封批量发送的邮件", false)
+        err := emailBatch.Send()
         if err != nil {
             fmt.Printf("发送到 %s 失败: %v\n", recipient, err)
         }
@@ -420,61 +434,51 @@ func main() {
 package main
 
 import (
+    "fmt"
+    "github.com/gin-gonic/gin"
+    "github.com/jcbowen/jcbaseGo"
     "github.com/jcbowen/jcbaseGo/component/attachment"
-    "github.com/jcbowen/jcbaseGo/component/attachment/remote"
 )
 
 func main() {
-    // 本地文件存储
-    localAttachment := attachment.Attachment{
-        StorageType: "local",
-        LocalPath:   "./uploads",
-    }
+    // 创建 gin 上下文（实际使用时应从请求中获取）
+    r := gin.Default()
+    r.POST("/upload", func(c *gin.Context) {
+        // 本地文件存储配置
+        baseConfig := &jcbaseGo.AttachmentStruct{
+            StorageType: "local",
+            LocalDir:    "./uploads",
+        }
 
-    // 上传文件
-    fileInfo, err := localAttachment.Upload("avatar.jpg", fileBytes)
-    if err != nil {
-        panic(err)
-    }
-    fmt.Printf("文件上传成功: %+v\n", fileInfo)
+        // 创建附件实例
+        attach := attachment.New(c, baseConfig)
 
-    // 阿里云 OSS 存储
-    ossConfig := remote.OSSConfig{
-        AccessKeyID:     "your-access-key-id",
-        AccessKeySecret: "your-access-key-secret",
-        Endpoint:        "oss-cn-hangzhou.aliyuncs.com",
-        BucketName:      "your-bucket-name",
-    }
+        // 获取上传的文件
+        fileHeader, err := c.FormFile("file")
+        if err != nil {
+            c.JSON(400, gin.H{"error": err.Error()})
+            return
+        }
 
-    ossAttachment := attachment.Attachment{
-        StorageType:   "oss",
-        RemoteConfig:  ossConfig,
-    }
+        // 上传文件
+        attach.Upload(&attachment.Options{
+            FileData: fileHeader,
+            FileType: "image",
+        })
+        attach.Save()
 
-    fileInfo, err = ossAttachment.Upload("documents/report.pdf", fileBytes)
-    if err != nil {
-        panic(err)
-    }
+        if attach.HasError() {
+            c.JSON(400, gin.H{"error": attach.Error().Error()})
+            return
+        }
 
-    // 腾讯云 COS 存储
-    cosConfig := remote.COSConfig{
-        SecretID:  "your-secret-id",
-        SecretKey: "your-secret-key",
-        Region:    "ap-guangzhou",
-        Bucket:    "your-bucket-name",
-    }
+        c.JSON(200, gin.H{
+            "message": "文件上传成功",
+            "file":    attach.FileAttachment,
+        })
+    })
 
-    cosAttachment := attachment.Attachment{
-        StorageType:  "cos",
-        RemoteConfig: cosConfig,
-    }
-
-    // 支持的文件类型检查
-    allowedTypes := []string{"jpg", "jpeg", "png", "gif", "pdf", "doc", "docx"}
-    if !attachment.IsAllowedFileType("image.jpg", allowedTypes) {
-        fmt.Println("不支持的文件类型")
-        return
-    }
+    r.Run(":8080")
 }
 ```
 
@@ -484,63 +488,67 @@ func main() {
 package main
 
 import (
-    "context"
+    "fmt"
     "time"
+
+    "github.com/jcbowen/jcbaseGo"
     "github.com/jcbowen/jcbaseGo/component/redis"
 )
 
 func main() {
     // 配置 Redis 连接
-    redisConfig := redis.Config{
+    redisConfig := jcbaseGo.RedisStruct{
         Host:     "localhost",
         Port:     "6379",
         Password: "", // Redis 密码
-        DB:       0,  // 数据库编号
-        PoolSize: 10, // 连接池大小
+        Db:       "0", // 数据库编号
     }
 
-    // 创建 Redis 客户端
-    redisClient := redis.NewClient(redisConfig)
-    ctx := context.Background()
+    // 创建 Redis 实例
+    rdb := redis.New(redisConfig)
 
     // 设置缓存
-    err := redisClient.Set(ctx, "user:1001", "用户数据", 30*time.Minute).Err()
+    err := rdb.Set("user:1001", "用户数据", 30*time.Minute)
     if err != nil {
         panic(err)
     }
 
     // 获取缓存
-    value, err := redisClient.Get(ctx, "user:1001").Result()
+    value, err := rdb.GetString("user:1001")
     if err != nil {
         panic(err)
     }
     fmt.Printf("缓存值: %s\n", value)
 
     // 设置哈希缓存
-    err = redisClient.HSet(ctx, "user:profile:1001", map[string]interface{}{
-        "name":  "张三",
-        "email": "zhangsan@example.com",
-        "age":   25,
-    }).Err()
+    err = rdb.HSet("user:profile:1001", "name", "张三")
+    if err != nil {
+        panic(err)
+    }
+    err = rdb.HSet("user:profile:1001", "email", "zhangsan@example.com")
+    if err != nil {
+        panic(err)
+    }
+    err = rdb.HSet("user:profile:1001", "age", 25)
     if err != nil {
         panic(err)
     }
 
     // 获取哈希缓存
-    profile, err := redisClient.HGetAll(ctx, "user:profile:1001").Result()
+    profile, err := rdb.HGetAll("user:profile:1001")
     if err != nil {
         panic(err)
     }
     fmt.Printf("用户资料: %+v\n", profile)
 
     // 列表操作
-    err = redisClient.LPush(ctx, "message_queue", "消息1", "消息2", "消息3").Err()
+    err = rdb.LPush("message_queue", "消息1", "消息2", "消息3")
     if err != nil {
         panic(err)
     }
 
     // 消费队列消息
-    message, err := redisClient.RPop(ctx, "message_queue").Result()
+    message, err := rdb.RPop("message_queue")
     if err != nil {
         panic(err)
     }
@@ -573,45 +581,30 @@ func main() {
 
     // 身份证号验证
     idCard := "110101199001011234"
-    if validator.IsIDCard(idCard) {
+    if validator.IsChineseIDCard(idCard) {
         fmt.Printf("%s 是有效的身份证号\n", idCard)
     }
 
     // URL 验证
-    url := "https://www.example.com"
-    if validator.IsURL(url) {
-        fmt.Printf("%s 是有效的URL\n", url)
+    urlStr := "https://www.example.com"
+    if validator.IsURL(urlStr) {
+        fmt.Printf("%s 是有效的URL\n", urlStr)
     }
 
     // IP 地址验证
-    ipv4 := "192.168.1.1"
-    if validator.IsIPv4(ipv4) {
-        fmt.Printf("%s 是有效的IPv4地址\n", ipv4)
+    ip := "192.168.1.1"
+    if valid, ipType := validator.IsIP(ip); valid {
+        if ipType == validator.IPv4 {
+            fmt.Printf("%s 是有效的IPv4地址\n", ip)
+        } else if ipType == validator.IPv6 {
+            fmt.Printf("%s 是有效的IPv6地址\n", ip)
+        }
     }
 
-    ipv6 := "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
-    if validator.IsIPv6(ipv6) {
-        fmt.Printf("%s 是有效的IPv6地址\n", ipv6)
-    }
-
-    // 批量验证
-    data := map[string]interface{}{
-        "email":  "test@example.com",
-        "mobile": "13800138000",
-        "age":    25,
-    }
-
-    rules := map[string][]string{
-        "email":  {"required", "email"},
-        "mobile": {"required", "mobile"},
-        "age":    {"required", "integer", "min:18", "max:100"},
-    }
-
-    errors := validator.Validate(data, rules)
-    if len(errors) > 0 {
-        fmt.Printf("验证失败: %+v\n", errors)
-    } else {
-        fmt.Println("所有数据验证通过")
+    // 端口验证
+    port := "8080"
+    if validator.IsPort(port) {
+        fmt.Printf("%s 是有效的端口号\n", port)
     }
 }
 ```
@@ -632,16 +625,16 @@ func main() {
     intValue := converter.ToInt()
     floatValue := converter.ToFloat64()
     boolValue := helper.Convert{Value: "true"}.ToBool()
-    
+
     fmt.Printf("转换结果: int=%d, float=%.2f, bool=%v\n", intValue, floatValue, boolValue)
 
     // 字符串处理
     str := helper.NewStr("Hello World")
     snakeCase := str.ConvertCamelToSnake()    // hello_world
-    camelCase := str.ConvertSnakeToCamel()    // HelloWorld
-    substr := str.Substr(0, 5)               // Hello
-    
-    fmt.Printf("字符串处理: snake=%s, camel=%s, substr=%s\n", snakeCase, camelCase, substr)
+    substr := str.ByteSubstr(0, 5)           // Hello
+    trimmed := str.TrimSpace()               // "Hello World"
+
+    fmt.Printf("字符串处理: snake=%s, substr=%s, trimmed=%s\n", snakeCase, substr, trimmed)
 
     // JSON 处理
     data := map[string]interface{}{
@@ -649,8 +642,9 @@ func main() {
         "age":  25,
         "city": "北京",
     }
-    
-    jsonStr := helper.Json(data).ToString()
+
+    var jsonStr string
+    helper.Json(data).ToString(&jsonStr)
     fmt.Printf("JSON字符串: %s\n", jsonStr)
 
     // 从JSON字符串解析
@@ -658,39 +652,36 @@ func main() {
     helper.Json(jsonStr).ToStruct(&parsedData)
     fmt.Printf("解析后的数据: %+v\n", parsedData)
 
-    // 金额处理 (以分为单位)
-    amount := int64(12345) // 123.45 元
-    money := helper.Money{Amount: amount}
-    yuanStr := money.ToYuan()        // "123.45"
-    formattedStr := money.Format()   // "¥123.45"
-    
+    // 金额处理 (以厘为单位，1000厘=1元)
+    money := helper.Money("123.45")
+    yuanStr := money.FloatString()           // "123.45"
+    formattedStr := money.FloatString("¥")   // "¥123.45"
+
     fmt.Printf("金额处理: 元=%s, 格式化=%s\n", yuanStr, formattedStr)
 
     // 文件操作
-    file := &helper.File{Path: "./test.txt"}
-    
-    // 写入文件
-    err := file.Write("Hello, jcbaseGo!")
+    file := helper.NewFile(&helper.File{Path: "./test.txt"})
+
+    // 创建文件
+    err := file.CreateFile([]byte("Hello, jcbaseGo!"), true)
     if err != nil {
-        fmt.Printf("写入文件失败: %v\n", err)
-    }
-    
-    // 读取文件
-    content, err := file.Read()
-    if err != nil {
-        fmt.Printf("读取文件失败: %v\n", err)
-    } else {
-        fmt.Printf("文件内容: %s\n", content)
+        fmt.Printf("创建文件失败: %v\n", err)
     }
 
     // 检查文件是否存在
-    exists, err := file.Exists()
-    if err == nil && exists {
+    if file.Exists() {
         fmt.Println("文件存在")
-        
-        // 获取文件信息
-        size, _ := file.Size()
-        fmt.Printf("文件大小: %d 字节\n", size)
+
+        // 获取文件名
+        basename := file.Basename("")
+        fmt.Printf("文件名: %s\n", basename)
+    }
+
+    // 读取JSON文件
+    var jsonData interface{}
+    err = file.JsonToData(&jsonData)
+    if err != nil {
+        fmt.Printf("读取JSON文件失败: %v\n", err)
     }
 }
 ```
@@ -702,69 +693,26 @@ package main
 
 import (
     "fmt"
+    "github.com/jcbowen/jcbaseGo"
     "github.com/jcbowen/jcbaseGo/component/php"
 )
 
 func main() {
     // 初始化 PHP 解释器
-    phpEngine := php.NewPHP()
-    defer phpEngine.Close()
-
-    // 执行 PHP 代码
-    code := `
-    <?php
-    $name = "jcbaseGo";
-    $version = "1.0.0";
-    echo "欢迎使用 " . $name . " 版本 " . $version;
-    return ["name" => $name, "version" => $version];
-    `
-    
-    result, err := phpEngine.Exec(code)
-    if err != nil {
-        panic(err)
+    opt := jcbaseGo.Option{
+        ConfigSource: "./config.json", // 配置文件路径
     }
-    fmt.Printf("PHP 执行结果: %s\n", result)
+    phpEngine := php.New(opt)
 
     // 调用 PHP 函数
-    mathCode := `
-    <?php
-    function calculate($a, $b, $operation) {
-        switch($operation) {
-            case 'add': return $a + $b;
-            case 'subtract': return $a - $b;
-            case 'multiply': return $a * $b;
-            case 'divide': return $b != 0 ? $a / $b : 0;
-            default: return 0;
-        }
-    }
-    
-    return calculate(10, 5, 'add');
-    `
-    
-    result, err = phpEngine.Exec(mathCode)
+    result, err := phpEngine.RunFunc("calculate", "10", "5", "add")
     if err != nil {
         panic(err)
     }
     fmt.Printf("PHP 计算结果: %s\n", result)
 
-    // 使用 PHP 处理数组和对象
-    arrayCode := `
-    <?php
-    $users = [
-        ["id" => 1, "name" => "张三", "email" => "zhangsan@example.com"],
-        ["id" => 2, "name" => "李四", "email" => "lisi@example.com"],
-        ["id" => 3, "name" => "王五", "email" => "wangwu@example.com"]
-    ];
-    
-    // 过滤和转换数据
-    $activeUsers = array_filter($users, function($user) {
-        return $user['id'] > 1;
-    });
-    
-    return json_encode($activeUsers);
-    `
-    
-    result, err = phpEngine.Exec(arrayCode)
+    // 调用自定义 PHP 函数处理数据
+    result, err = phpEngine.RunFunc("processUsers")
     if err != nil {
         panic(err)
     }
@@ -790,8 +738,9 @@ func main() {
     }
     fmt.Printf("目录列表:\n%s\n", output)
 
-    // 执行带路径切换的命令
-    output, err = command.Run("cd /tmp && pwd")
+    // 切换工作目录后执行命令
+    command.CmdPath = "/tmp"
+    output, err = command.Run("pwd")
     if err != nil {
         panic(err)
     }
@@ -812,19 +761,23 @@ func main() {
     fmt.Printf("命令输出: %s\n", output)
 
     // 批量执行命令
-    commands := []string{
-        "pwd",
-        "whoami",
-        "date",
+    commands := [][]string{
+        {"pwd"},
+        {"whoami"},
+        {"date"},
     }
 
     for _, cmd := range commands {
-        output, err := command.Run(cmd)
+        args := []string{}
+        if len(cmd) > 1 {
+            args = cmd[1:]
+        }
+        output, err := command.Run(cmd[0], args...)
         if err != nil {
-            fmt.Printf("命令 %s 执行失败: %v\n", cmd, err)
+            fmt.Printf("命令 %s 执行失败: %v\n", cmd[0], err)
             continue
         }
-        fmt.Printf("%s 输出: %s\n", cmd, output)
+        fmt.Printf("%s 输出: %s\n", cmd[0], output)
     }
 }
 ```
@@ -842,19 +795,25 @@ import (
 func main() {
     r := gin.Default()
 
-    // 使用默认配置启用调试器
-    debugMiddleware := debugger.New()
-    r.Use(debugMiddleware)
+    // 使用简单调试器（内存存储，默认配置）
+    dbg, err := debugger.NewSimpleDebugger()
+    if err != nil {
+        panic(err)
+    }
+    r.Use(dbg.Middleware())
 
     // 或者使用自定义配置
-    config := debugger.Config{
-        Enable:      true,
-        StorageType: "memory", // 支持 memory, file, redis
-        LogLevel:    "info",   // debug, info, warn, error
+    config := &debugger.Config{
+        Enabled: true,
     }
-    
-    customDebugMiddleware := debugger.NewWithConfig(config)
-    r.Use(customDebugMiddleware)
+
+    customDbg, err := debugger.New(config)
+    if err != nil {
+        panic(err)
+    }
+    // 注册调试器路由（可选，用于查看调试日志）
+    customDbg.WithController(r, nil)
+    r.Use(customDbg.Middleware())
 
     // 添加测试路由
     r.GET("/api/users", func(c *gin.Context) {
@@ -871,12 +830,12 @@ func main() {
             Name  string `json:"name"`
             Email string `json:"email"`
         }
-        
+
         if err := c.ShouldBindJSON(&user); err != nil {
             c.JSON(400, gin.H{"error": err.Error()})
             return
         }
-        
+
         c.JSON(201, gin.H{
             "message": "用户创建成功",
             "user": user,
@@ -901,9 +860,6 @@ import (
 func main() {
     r := gin.Default()
 
-    // 设置消息模板路径
-    message.SetTemplatePath("./templates/message.html")
-
     r.GET("/success", func(c *gin.Context) {
         // 成功消息
         message.Success(c, "操作成功", "您的请求已成功处理")
@@ -925,24 +881,17 @@ func main() {
     })
 
     r.GET("/custom", func(c *gin.Context) {
-        // 自定义消息
-        msg := message.Data{
-            Title:   "自定义标题",
-            Content: "自定义内容",
-            Type:    "custom",
-            Options: map[string]interface{}{
-                "autoRedirect": true,
-                "redirectUrl":  "/home",
-                "waitTime":     3,
-            },
-        }
-        message.Render(c, msg)
+        // 自定义消息（带跳转）
+        message.Render(c, "自定义标题", "自定义内容", "custom",
+            message.WithRedirect("/home"),
+            message.WithAutoRedirect(true),
+        )
     })
 
     // API 响应格式
-    r.GET("/api/success", func(c *gin.Context) {
-        // JSON 格式的成功响应
-        message.ApiSuccess(c, "操作成功", map[string]interface{}{
+    r.GET("/api/response", func(c *gin.Context) {
+        // JSON 格式的响应
+        message.APIResponseWithMessage(c, "200", "操作成功", map[string]interface{}{
             "user": map[string]string{
                 "name":  "张三",
                 "email": "zhangsan@example.com",
@@ -950,9 +899,9 @@ func main() {
         })
     })
 
-    r.GET("/api/error", func(c *gin.Context) {
-        // JSON 格式的错误响应
-        message.ApiError(c, "参数错误", 400)
+    // 简化版消息
+    r.GET("/simple", func(c *gin.Context) {
+        message.Simple(c, "操作已完成", true)
     })
 
     // 启动服务器
