@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"io"
 	"log"
@@ -188,7 +189,17 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 		switch c.ContentType() {
 		case "application/json":
 			if c.Request.ContentLength > 0 {
-				err = c.ShouldBindJSON(&formDataMap)
+				// 读取原始数据，避免消耗body
+				bodyData, err := c.GetRawData()
+				if err != nil {
+					log.Println("GetRawData error:", err)
+					break
+				}
+
+				// 重置body，确保后续处理可以读取
+				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyData))
+
+				err = json.Unmarshal(bodyData, &formDataMap)
 			}
 		case "application/x-www-form-urlencoded":
 			err = c.Request.ParseForm()
