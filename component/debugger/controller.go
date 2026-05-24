@@ -91,8 +91,12 @@ func NewController(debugger *Debugger, router *gin.Engine, config *ControllerCon
 
 // registerRoutes 注册调试器页面的路由
 func (c *Controller) registerRoutes(useCDN bool) {
-	// 创建路由组
-	routerGroup := c.router.Group("/" + c.basePath)
+	// 创建路由组，确保基础路径以 / 开头且不含重复斜杠
+	basePath := c.basePath
+	if !strings.HasPrefix(basePath, "/") {
+		basePath = "/" + basePath
+	}
+	routerGroup := c.router.Group(basePath)
 
 	// 添加IP访问控制中间件
 	routerGroup.Use(c.ipAccessControlMiddleware(useCDN))
@@ -152,8 +156,6 @@ func (c *Controller) ipAccessControlMiddleware(useCDN bool) gin.HandlerFunc {
 		log.Println("debugger禁止访问")
 		headerJson, _ := json.Marshal(ctx.Request.Header)
 		log.Println("Request Header:", string(headerJson))
-		bodyJson, _ := json.Marshal(ctx.Request.Body)
-		log.Println("Request Body:", string(bodyJson))
 
 		// IP不在白名单中，返回403禁止访问
 		ctx.JSON(http.StatusForbidden, gin.H{
@@ -162,26 +164,6 @@ func (c *Controller) ipAccessControlMiddleware(useCDN bool) gin.HandlerFunc {
 		})
 		ctx.Abort()
 	}
-}
-
-// getClientIP 获取客户端真实IP地址
-// 支持从X-Forwarded-For等代理头中获取真实IP
-func (c *Controller) getClientIP(ctx *gin.Context) string {
-	// 尝试从X-Forwarded-For获取
-	if forwardedFor := ctx.GetHeader("X-Forwarded-For"); forwardedFor != "" {
-		ips := strings.Split(forwardedFor, ",")
-		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
-		}
-	}
-
-	// 尝试从X-Real-IP获取
-	if realIP := ctx.GetHeader("X-Real-IP"); realIP != "" {
-		return realIP
-	}
-
-	// 使用远程地址
-	return ctx.ClientIP()
 }
 
 // isIPAllowed 检查IP是否在允许的白名单中
@@ -866,6 +848,15 @@ func (c *Controller) renderTemplate(ctx *gin.Context, templateName string, data 
 		},
 		"add": func(a, b int) int {
 			return a + b
+		},
+		"div": func(a, b int64) float64 {
+			if b == 0 {
+				return 0
+			}
+			return float64(a) / float64(b)
+		},
+		"mul": func(a float64, b float64) float64 {
+			return a * b
 		},
 		"safeURL": func(s string) template.URL {
 			return template.URL(s)

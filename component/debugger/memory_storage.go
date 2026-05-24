@@ -563,8 +563,10 @@ func (ms *MemoryStorage) GetStats() (map[string]interface{}, error) {
 
 	// 计算平均响应时间
 	if validEntryCount > 0 {
-		stats["avg_duration"] = totalDuration / time.Duration(validEntryCount)
+		avgDuration := totalDuration / time.Duration(validEntryCount)
+		stats["avg_duration_ms"] = float64(avgDuration.Nanoseconds()) / 1000000.0
 		stats["error_rate"] = float64(errorCount) / float64(validEntryCount)
+		stats["error_rate_percent"] = float64(errorCount) / float64(validEntryCount) * 100
 		stats["error_count"] = errorCount
 	}
 

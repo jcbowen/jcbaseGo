@@ -540,12 +540,11 @@ func (ds *DatabaseStorage) GetStats() (map[string]interface{}, error) {
 
 	// 添加错误统计信息
 	if total > 0 {
+		stats["avg_duration_ms"] = float64(avgDuration) / 1000000.0
 		stats["error_rate"] = float64(errorCount) / float64(total)
+		stats["error_rate_percent"] = float64(errorCount) / float64(total) * 100
 		stats["error_count"] = errorCount
 	}
-
-	// 添加平均响应时间
-	stats["avg_duration"] = time.Duration(avgDuration)
 
 	// 添加流式请求统计信息
 	stats["streaming_request_count"] = streamingRequestCount

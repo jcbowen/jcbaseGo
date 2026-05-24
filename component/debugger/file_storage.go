@@ -627,7 +627,6 @@ func (fs *FileStorage) containsKeyword(entry *LogEntry, keyword string) bool {
 //	  - max_size: 最大存储条目数
 //	  - storage_type: 存储类型（固定为"file"）
 //	  - storage_path: 存储路径
-//	  - avg_duration: 平均响应时间（仅当有记录时计算）
 //	  - error_rate: 错误率（仅当有记录时计算）
 //	  - error_count: 错误数量（仅当有记录时计算）
 //	error: 如果获取统计信息失败返回错误
@@ -720,7 +719,8 @@ func (fs *FileStorage) GetStats() (map[string]interface{}, error) {
 
 	// 计算平均响应时间和错误率
 	if len(files) > 0 {
-		stats["avg_duration"] = totalDuration / time.Duration(len(files))
+		avgDuration := totalDuration / time.Duration(len(files))
+		stats["avg_duration_ms"] = float64(avgDuration.Nanoseconds()) / 1000000.0
 		stats["error_rate"] = float64(errorCount) / float64(len(files))
 		stats["error_count"] = errorCount
 	}

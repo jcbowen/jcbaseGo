@@ -31,6 +31,8 @@ const indexTemplate = `<!DOCTYPE html>
         .download-btn:hover {
             background-color: #45a049;
         }
+        .time-range-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
+        .time-range-row input { width: 100%; }
         .header .stats { display: flex; gap: 20px; flex-wrap: wrap; }
         .stat-item { background: #f8f9fa; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #3498db; }
         .stat-item .label { font-size: 12px; color: #666; }
@@ -193,11 +195,11 @@ const indexTemplate = `<!DOCTYPE html>
         .request-id a { color: #3498db; text-decoration: none; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; display: block; }
         .request-id a:hover { text-decoration: underline; }
         .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-        .method { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
-        .method-get { background: #d4edda; color: #155724; }
-        .method-post { background: #d1ecf1; color: #0c5460; }
-        .method-put { background: #fff3cd; color: #856404; }
-        .method-delete { background: #f8d7da; color: #721c24; }
+        .http-method { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
+        .http-method.method-get { background: #d4edda; color: #155724; }
+        .http-method.method-post { background: #d1ecf1; color: #0c5460; }
+        .http-method.method-put { background: #fff3cd; color: #856404; }
+        .http-method.method-delete { background: #f8d7da; color: #721c24; }
         .status-code { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
         .status-2xx { background: #d4edda; color: #155724; }
         .status-3xx { background: #fff3cd; color: #856404; }
@@ -223,7 +225,7 @@ const indexTemplate = `<!DOCTYPE html>
         .process-type { color: #666; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; }
         
         .http-details { display: flex; flex-direction: column; gap: 4px; }
-        .method { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; display: inline-block; width: fit-content; }
+        .http-method-detail { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; display: inline-block; width: fit-content; }
         .url { color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .client-ip { color: #666; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; }
         
@@ -369,11 +371,11 @@ const indexTemplate = `<!DOCTYPE html>
                 </div>
                 <div class="stat-item">
                     <div class="label">平均响应时间</div>
-                    <div class="value">{{.Stats.avg_duration}}ms</div>
+                    <div class="value">{{if .Stats.avg_duration_ms}}{{printf "%.2f" .Stats.avg_duration_ms}}ms{{else}}-{{end}}</div>
                 </div>
                 <div class="stat-item">
                     <div class="label">错误率</div>
-                    <div class="value">{{.Stats.error_rate}}%</div>
+                    <div class="value">{{if .Stats.error_rate_percent}}{{printf "%.2f" .Stats.error_rate_percent}}%{{else}}-{{end}}</div>
                 </div>
                 <div class="stat-item">
                     <div class="label">存储大小</div>
@@ -457,16 +459,15 @@ const indexTemplate = `<!DOCTYPE html>
                             <input type="text" name="host" id="filter-host" placeholder="域名包含">
                             <input type="text" name="url" id="filter-url" placeholder="URL路径包含">
                         </div>
+                        <div class="filter-row time-range-row">
+                            <input type="datetime-local" name="start_time" id="filter-start_time" placeholder="开始时间">
+                            <input type="datetime-local" name="end_time" id="filter-end_time" placeholder="结束时间">
+                        </div>
                         <div class="filter-row">
                             <select name="is_streaming" id="filter-is_streaming" onchange="handleFilterChange(this)">
                                 <option value="">所有流式状态</option>
                                 <option value="true">流式请求</option>
                                 <option value="false">非流式请求</option>
-                            </select>
-                            <select name="streaming_status" id="filter-streaming_status" onchange="handleFilterChange(this)">
-                                <option value="">流式请求状态</option>
-                                <option value="active">活跃流式请求</option>
-                                <option value="inactive">非流式请求</option>
                             </select>
                         </div>
                     </div>
@@ -529,8 +530,9 @@ const indexTemplate = `<!DOCTYPE html>
                         setFilterValue('filter-client_ip', 'client_ip', filters.client_ip);
                         setFilterValue('filter-host', 'host', filters.host);
                         setFilterValue('filter-url', 'url', filters.url);
+                        setFilterValue('filter-start_time', 'start_time', filters.start_time);
+                        setFilterValue('filter-end_time', 'end_time', filters.end_time);
                         setFilterValue('filter-is_streaming', 'is_streaming', filters.is_streaming);
-                        setFilterValue('filter-streaming_status', 'streaming_status', filters.streaming_status);
                         setFilterValue('filter-process_name', 'process_name', filters.process_name);
                         setFilterValue('filter-process_id', 'process_id', filters.process_id);
                         setFilterValue('filter-process_status', 'process_status', filters.process_status);
@@ -566,14 +568,14 @@ const indexTemplate = `<!DOCTYPE html>
                             <span class="process-badge" title="进程记录">进程</span>
                             {{else}}
                             <span class="http-badge" title="HTTP记录">HTTP</span>
+                            <div class="http-method method-{{lower .Method}}">{{.Method}}</div>
                             {{end}}
-							<div class="method method-{{lower .Method}}">{{.Method}}</div>
                         </div>
                         <div class="status-info">
                             {{if eq .RecordType "process"}}
                             <span class="process-status process-status-{{lower .Status}}" title="进程状态: {{.Status}}">{{.Status}}</span>
                             {{else}}
-                            <span class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{end}}">{{.StatusCode}}</span>
+                            <span class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{else}}1xx{{end}}">{{.StatusCode}}</span>
                             {{end}}
                         </div>
                         <div class="details">
@@ -649,14 +651,15 @@ const indexTemplate = `<!DOCTYPE html>
                 process_id: {{if .Filters.process_id}}'{{.Filters.process_id}}'{{else}}null{{end}},
                 process_status: {{if .Filters.process_status}}'{{.Filters.process_status}}'{{else}}null{{end}},
                 is_streaming: {{if .Filters.is_streaming}}'{{.Filters.is_streaming}}'{{else}}null{{end}},
-                streaming_status: {{if .Filters.streaming_status}}'{{.Filters.streaming_status}}'{{else}}null{{end}}
+                start_time: {{if .Filters.start_time}}'{{.Filters.start_time}}'{{else}}null{{end}},
+                end_time: {{if .Filters.end_time}}'{{.Filters.end_time}}'{{else}}null{{end}}
             }
         };
 
         // 构建列表页URL - 从当前URL获取参数，确保包含用户最新的筛选条件
         function buildListURL(targetPage) {
             const params = new URLSearchParams();
-            
+
             // 1. 从当前URL复制所有参数（获取最新的筛选条件）
             const currentParams = new URLSearchParams(window.location.search);
             for (const [key, value] of currentParams.entries()) {
@@ -664,7 +667,7 @@ const indexTemplate = `<!DOCTYPE html>
                     params.set(key, value);
                 }
             }
-            
+
             // 2. 更新分页参数
             const pageNum = parseInt(targetPage, 10);
             if (!isNaN(pageNum) && pageNum > 0) {
@@ -672,12 +675,12 @@ const indexTemplate = `<!DOCTYPE html>
             } else {
                 params.delete('page');
             }
-            
+
             // 3. 更新pageSize（如果与默认值不同）
             if (window.pageParams.pageSize && window.pageParams.pageSize !== 20) {
                 params.set('pageSize', window.pageParams.pageSize);
             }
-            
+
             const queryString = params.toString();
             return window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
         }
@@ -690,17 +693,17 @@ const indexTemplate = `<!DOCTYPE html>
         // 处理筛选条件变化（下拉框onchange事件）
         function handleFilterChange(selectElement) {
             const params = new URLSearchParams();
-            
+
             // 1. 从当前URL中获取最新参数（确保获取用户之前的筛选操作）
             const currentParams = new URLSearchParams(window.location.search);
-            
+
             // 复制当前URL中的所有参数
             for (const [key, value] of currentParams.entries()) {
                 if (value && value !== 'null' && value !== '') {
                     params.set(key, value);
                 }
             }
-            
+
             // 2. 添加/更新当前变化的参数
             const newValue = selectElement.value;
             if (newValue && newValue.trim() !== '') {
@@ -709,7 +712,10 @@ const indexTemplate = `<!DOCTYPE html>
                 // 如果新值为空，移除该参数
                 params.delete(selectElement.name);
             }
-            
+
+            // 筛选条件变化时重置到第1页
+            params.delete('page');
+
             const queryString = params.toString();
             window.location.href = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
         }
@@ -720,7 +726,7 @@ const indexTemplate = `<!DOCTYPE html>
             const form = event.target;
             const formData = new FormData(form);
             const params = new URLSearchParams();
-            
+
             // 1. 先复制当前URL中的所有参数（保留已有筛选条件）
             const currentParams = new URLSearchParams(window.location.search);
             for (const [key, value] of currentParams.entries()) {
@@ -728,7 +734,7 @@ const indexTemplate = `<!DOCTYPE html>
                     params.set(key, value);
                 }
             }
-            
+
             // 2. 更新表单中的参数（表单值覆盖URL中的值）
             for (const [key, value] of formData.entries()) {
                 if (value && value.trim() !== '') {
@@ -738,7 +744,10 @@ const indexTemplate = `<!DOCTYPE html>
                     params.delete(key);
                 }
             }
-            
+
+            // 筛选条件变化时重置到第1页
+            params.delete('page');
+
             const queryString = params.toString();
             window.location.href = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
         }
@@ -748,53 +757,36 @@ const indexTemplate = `<!DOCTYPE html>
             window.location.href = window.pageParams.basePath + '/list';
         }
 
-        // 辅助函数：将Go字符串转换为JS字符串
-        function json(str) {
-            if (str === undefined || str === null) return 'null';
-            return JSON.stringify(str);
-        }
-
         // 辅助函数：字符串转小写
         function lower(str) {
             return str ? str.toLowerCase() : '';
         }
         
-        // 辅助函数：生成数字序列
-        function seq(start, end) {
-            const result = [];
-            for (let i = start; i <= end; i++) {
-                result.push(i);
-            }
-            return result;
-        }
-        
-        // 辅助函数：减法
-        function sub(a, b) {
-            return a - b;
-        }
-        
-        // 辅助函数：加法
-        function add(a, b) {
-            return a + b;
-        }
-        
         // 渲染分页
         function renderPagination() {
             if (!window.paginationData) return;
-            
+
+            const data = window.paginationData;
+
+            // 只有一页时不显示分页
+            if (data.totalPages <= 1) {
+                const container = document.getElementById('pagination');
+                if (container) container.innerHTML = '';
+                return;
+            }
+
             const container = document.getElementById('pagination');
             if (!container) return;
-            
-            const data = window.paginationData;
+
             let html = '';
-            
+
             // 上一页
             if (data.hasPrev) {
                 html += '<a href="' + buildListURL(data.prevPage) + '">上一页</a>';
             } else {
                 html += '<span class="disabled">上一页</span>';
             }
-            
+
             // 页码
             if (data.totalPages <= 7) {
                 // 显示所有页码
@@ -807,19 +799,24 @@ const indexTemplate = `<!DOCTYPE html>
                 }
             } else {
                 // 智能分页
-                if (data.page > 4) {
+                if (data.page > 3) {
                     html += '<a href="' + buildListURL(1) + '">1</a>';
-                    if (data.page > 5) {
+                    if (data.page > 4) {
                         html += '<span class="ellipsis">...</span>';
                     }
                 }
-                
+
                 // 当前页附近的页码
-                let start = 1;
-                if (data.page > 2) start = data.page - 2;
-                let end = data.totalPages;
-                if (data.page < data.totalPages - 2) end = data.page + 2;
-                
+                let start = Math.max(1, data.page - 2);
+                let end = Math.min(data.totalPages, data.page + 2);
+
+                // 调整范围确保显示5个页码
+                if (data.page <= 3) {
+                    end = Math.min(data.totalPages, 5);
+                } else if (data.page >= data.totalPages - 2) {
+                    start = Math.max(1, data.totalPages - 4);
+                }
+
                 for (let i = start; i <= end; i++) {
                     if (i === data.page) {
                         html += '<span class="current">' + i + '</span>';
@@ -827,24 +824,22 @@ const indexTemplate = `<!DOCTYPE html>
                         html += '<a href="' + buildListURL(i) + '">' + i + '</a>';
                     }
                 }
-                
-                if (data.page < data.totalPages) {
+
+                if (data.page < data.totalPages - 2) {
                     if (data.page < data.totalPages - 3) {
-                        if (data.page < data.totalPages - 4) {
-                            html += '<span class="ellipsis">...</span>';
-                        }
-                        html += '<a href="' + buildListURL(data.totalPages) + '">' + data.totalPages + '</a>';
+                        html += '<span class="ellipsis">...</span>';
                     }
+                    html += '<a href="' + buildListURL(data.totalPages) + '">' + data.totalPages + '</a>';
                 }
             }
-            
+
             // 下一页
             if (data.hasNext) {
                 html += '<a href="' + buildListURL(data.nextPage) + '">下一页</a>';
             } else {
                 html += '<span class="disabled">下一页</span>';
             }
-            
+
             container.innerHTML = html;
         }
         
@@ -1037,13 +1032,13 @@ const detailTemplate = `<!DOCTYPE html>
         .tab-content.active { display: block; }
         
         .method-badge, .status-badge { padding: 8px 8px; border-radius: 4px; font-weight: bold; display: inline-block; min-width: 50px; }
-        .method-get { background: #d4edda; color: #155724; }
-        .method-post { background: #d1ecf1; color: #0c5460; }
-        .method-put { background: #fff3cd; color: #856404; }
-        .method-delete { background: #f8d7da; color: #721c24; }
-        .method-patch { background: #e2e3e5; color: #383d41; }
-        .method-head { background: #d1ecf1; color: #0c5460; }
-        .method-options { background: #e2e3e5; color: #383d41; }
+        .method-badge.method-get { background: #d4edda; color: #155724; }
+        .method-badge.method-post { background: #d1ecf1; color: #0c5460; }
+        .method-badge.method-put { background: #fff3cd; color: #856404; }
+        .method-badge.method-delete { background: #f8d7da; color: #721c24; }
+        .method-badge.method-patch { background: #e2e3e5; color: #383d41; }
+        .method-badge.method-head { background: #d1ecf1; color: #0c5460; }
+        .method-badge.method-options { background: #e2e3e5; color: #383d41; }
         .status-2xx { background: #d4edda; color: #155724; }
         .status-3xx { background: #d1ecf1; color: #0c5460; }
         .status-4xx { background: #f8d7da; color: #721c24; }
@@ -1249,9 +1244,8 @@ const detailTemplate = `<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <a href="javascript:history.back()" class="back-link" id="back-link">← 返回上一页</a>
-        <a href="{{.BasePath}}/list" class="back-link" id="fallback-link" style="display: none;">← 返回日志列表</a>
-        
+        <a href="{{.BasePath}}/list" class="back-link" id="back-link">← 返回日志列表</a>
+
         <div class="header">
             <h1>{{.Title}} <a href="{{.BasePath}}/api/logs/{{.Entry.ID}}" target="_blank" class="json-view-link" title="查看JSON数据">[JSON]</a></h1>
         </div>
@@ -1300,7 +1294,7 @@ const detailTemplate = `<!DOCTYPE html>
                     </div>
                     <div class="info-item">
                         <div class="info-label">状态码</div>
-                        <div class="info-value status-badge status-{{if ge .Entry.StatusCode 200}}{{if lt .Entry.StatusCode 300}}2xx{{else if lt .Entry.StatusCode 400}}3xx{{else if lt .Entry.StatusCode 500}}4xx{{else}}5xx{{end}}{{else}}4xx{{end}}">{{.Entry.StatusCode}}</div>
+                        <div class="info-value status-badge status-{{if ge .Entry.StatusCode 200}}{{if lt .Entry.StatusCode 300}}2xx{{else if lt .Entry.StatusCode 400}}3xx{{else if lt .Entry.StatusCode 500}}4xx{{else}}5xx{{end}}{{else}}1xx{{end}}">{{.Entry.StatusCode}}</div>
                     </div>
                     {{end}}
                     <div class="info-item">
@@ -1427,28 +1421,28 @@ const detailTemplate = `<!DOCTYPE html>
                 <h2>进程输出</h2>
                 
                 {{if .Entry.ResponseHeaders}}
-                <div style="margin-top: 15px;">
-                    <h3>进程参数</h3>
-                    <div class="table-container">
-                        <table class="headers-table">
-                            <thead>
-                                <tr>
-                                    <th>参数名</th>
-                                    <th>值</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {{range $key, $value := .Entry.ResponseHeaders}}
-                                <tr>
-                                    <td>{{$key}}</td>
-                                    <td>{{$value}}</td>
-                                </tr>
-                                {{end}}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                {{end}}
+                        <div style="margin-top: 15px;">
+                            <h3>响应头</h3>
+                            <div class="table-container">
+                                <table class="headers-table">
+                                    <thead>
+                                        <tr>
+                                            <th>名称</th>
+                                            <th>值</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {{range $key, $value := .Entry.ResponseHeaders}}
+                                        <tr>
+                                            <td>{{$key}}</td>
+                                            <td>{{$value}}</td>
+                                        </tr>
+                                        {{end}}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {{end}}
                 
                 {{if .Entry.ResponseBody}}
                 <div style="margin-top: 15px;">
@@ -1505,7 +1499,7 @@ const detailTemplate = `<!DOCTYPE html>
                     <div class="log-item">
                         <div class="log-header">
                         <span class="log-level level-{{.Level}}">{{.Level}}</span>
-                        <span class="log-timestamp">{{.Timestamp.Format "2006-01-02 15:04:05.000"}}</span>
+                        <span class="log-timestamp">{{.Timestamp.Format "2006-01-02 15:04:05"}}</span>
                     </div>
                         <div class="log-message">
                             {{if isJSON .Message}}
@@ -1541,32 +1535,8 @@ const detailTemplate = `<!DOCTYPE html>
     </div>
     
     <script>
-        // 页面加载时检查历史记录
+        // 页面加载时美化JSON内容
         document.addEventListener('DOMContentLoaded', function() {
-            const backLink = document.getElementById('back-link');
-            const fallbackLink = document.getElementById('fallback-link');
-            
-            // 检查是否有历史记录可以返回
-            if (history.length <= 1) {
-                // 没有历史记录，显示备用链接
-                backLink.style.display = 'none';
-                fallbackLink.style.display = 'inline-block';
-            }
-            
-            // 为返回链接添加点击事件处理
-            backLink.addEventListener('click', function(e) {
-                e.preventDefault();
-                
-                // 尝试返回上一页
-                if (history.length > 1) {
-                    history.back();
-                } else {
-                    // 如果没有历史记录，跳转到列表页
-                    window.location.href = '{{.BasePath}}/list';
-                }
-            });
-            
-            // 美化JSON内容
             beautifyJSONContent();
         });
         
