@@ -485,64 +485,76 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 				return false
 			}
 		case "url":
-			if !strings.Contains(entry.URL, value.(string)) {
+			if v, ok := value.(string); !ok || !strings.Contains(entry.URL, v) {
 				return false
 			}
 		case "start_time":
-			if entry.Timestamp.Before(value.(time.Time)) {
+			if v, ok := value.(time.Time); !ok || entry.Timestamp.Before(v) {
 				return false
 			}
 		case "end_time":
-			if entry.Timestamp.After(value.(time.Time)) {
+			if v, ok := value.(time.Time); !ok || entry.Timestamp.After(v) {
 				return false
 			}
 		case "client_ip":
-			if entry.ClientIP != value && !strings.Contains(entry.ClientIP, value.(string)) && !strings.HasPrefix(entry.ClientIP, value.(string)) {
+			if v, ok := value.(string); !ok || (entry.ClientIP != v && !strings.Contains(entry.ClientIP, v) && !strings.HasPrefix(entry.ClientIP, v)) {
 				return false
 			}
 		case "host":
-			if entry.Host != value && !strings.Contains(entry.Host, value.(string)) && !strings.HasPrefix(entry.Host, value.(string)) {
+			if v, ok := value.(string); !ok || (entry.Host != value && !strings.Contains(entry.Host, v) && !strings.HasPrefix(entry.Host, v)) {
 				return false
 			}
 		case "process_name":
-			if !strings.Contains(entry.ProcessName, value.(string)) {
+			if v, ok := value.(string); !ok || !strings.Contains(entry.ProcessName, v) {
 				return false
 			}
 		case "process_id":
-			if entry.ProcessID != value {
+			if v, ok := value.(string); !ok || entry.ProcessID != v {
 				return false
 			}
 		case "process_status":
-			if entry.Status != value {
+			if v, ok := value.(string); !ok || entry.Status != v {
 				return false
 			}
 		case "has_error":
-			if value.(bool) && entry.Error == "" {
+			v, ok := value.(bool)
+			if !ok {
 				return false
 			}
-			if !value.(bool) && entry.Error != "" {
+			if v && entry.Error == "" {
+				return false
+			}
+			if !v && entry.Error != "" {
 				return false
 			}
 		case "min_duration":
-			if entry.Duration < value.(time.Duration) {
+			if v, ok := value.(time.Duration); !ok || entry.Duration < v {
 				return false
 			}
 		case "max_duration":
-			if entry.Duration > value.(time.Duration) {
+			if v, ok := value.(time.Duration); !ok || entry.Duration > v {
 				return false
 			}
 		case "is_streaming":
 			// 流式请求过滤：true/false 字符串转换为布尔值
-			filterIsStreaming := strings.ToLower(value.(string)) == "true"
+			v, ok := value.(string)
+			if !ok {
+				return false
+			}
+			filterIsStreaming := strings.ToLower(v) == "true"
 			if entry.IsStreamingResponse != filterIsStreaming {
 				return false
 			}
 		case "streaming_status":
 			// 流式状态过滤：active/inactive 字符串匹配
-			filterStatus := value.(string)
-			if filterStatus == "active" && !entry.IsStreamingResponse {
+			v, ok := value.(string)
+			if !ok {
 				return false
-			} else if filterStatus == "inactive" && entry.IsStreamingResponse {
+			}
+			if v == "active" && !entry.IsStreamingResponse {
+				return false
+			}
+			if v == "inactive" && entry.IsStreamingResponse {
 				return false
 			}
 		}
@@ -853,6 +865,9 @@ func (fs *FileStorage) GetMethods() (map[string]int, error) {
 		if err != nil {
 			continue // 跳过读取失败的文件
 		}
+		if entry == nil {
+			continue // 跳过nil条目
+		}
 
 		methods[entry.Method]++
 	}
@@ -874,6 +889,9 @@ func (fs *FileStorage) GetStatusCodes() (map[int]int, error) {
 		entry, err := fs.readLogFile(file)
 		if err != nil {
 			continue // 跳过读取失败的文件
+		}
+		if entry == nil {
+			continue // 跳过nil条目
 		}
 
 		statusCodes[entry.StatusCode]++

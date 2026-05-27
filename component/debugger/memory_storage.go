@@ -352,65 +352,76 @@ func (ms *MemoryStorage) filterEntry(entry *LogEntry, filters map[string]interfa
 				return false
 			}
 		case "url":
-			if !strings.Contains(entry.URL, value.(string)) {
+			if v, ok := value.(string); !ok || !strings.Contains(entry.URL, v) {
 				return false
 			}
 		case "start_time":
-			if entry.Timestamp.Before(value.(time.Time)) {
+			if v, ok := value.(time.Time); !ok || entry.Timestamp.Before(v) {
 				return false
 			}
 		case "end_time":
-			if entry.Timestamp.After(value.(time.Time)) {
+			if v, ok := value.(time.Time); !ok || entry.Timestamp.After(v) {
 				return false
 			}
 		case "client_ip":
-			if !strings.Contains(entry.ClientIP, value.(string)) {
+			if v, ok := value.(string); !ok || (entry.ClientIP != v && !strings.Contains(entry.ClientIP, v) && !strings.HasPrefix(entry.ClientIP, v)) {
 				return false
 			}
 		case "host":
-			if !strings.Contains(entry.Host, value.(string)) {
+			if v, ok := value.(string); !ok || (entry.Host != v && !strings.Contains(entry.Host, v) && !strings.HasPrefix(entry.Host, v)) {
 				return false
 			}
 		case "process_name":
-			if !strings.Contains(entry.ProcessName, value.(string)) {
+			if v, ok := value.(string); !ok || !strings.Contains(entry.ProcessName, v) {
 				return false
 			}
 		case "process_id":
-			if entry.ProcessID != value {
+			if v, ok := value.(string); !ok || entry.ProcessID != v {
 				return false
 			}
 		case "process_status":
-			if entry.Status != value {
+			if v, ok := value.(string); !ok || entry.Status != v {
 				return false
 			}
 		case "has_error":
-			if value.(bool) && entry.Error == "" {
+			v, ok := value.(bool)
+			if !ok {
 				return false
 			}
-			if !value.(bool) && entry.Error != "" {
+			if v && entry.Error == "" {
+				return false
+			}
+			if !v && entry.Error != "" {
 				return false
 			}
 		case "min_duration":
-			if entry.Duration < value.(time.Duration) {
+			if v, ok := value.(time.Duration); !ok || entry.Duration < v {
 				return false
 			}
 		case "max_duration":
-			if entry.Duration > value.(time.Duration) {
+			if v, ok := value.(time.Duration); !ok || entry.Duration > v {
 				return false
 			}
 		case "is_streaming":
 			// 流式请求过滤：true/false 字符串转换为布尔值
-			filterIsStreaming := strings.ToLower(value.(string)) == "true"
+			v, ok := value.(string)
+			if !ok {
+				return false
+			}
+			filterIsStreaming := strings.ToLower(v) == "true"
 			if entry.IsStreamingResponse != filterIsStreaming {
 				return false
 			}
 		case "streaming_status":
 			// 流式状态过滤：active/inactive 字符串匹配
-			filterStatus := value.(string)
-			if filterStatus == "active" && !entry.IsStreamingResponse {
+			v, ok := value.(string)
+			if !ok {
 				return false
 			}
-			if filterStatus == "inactive" && entry.IsStreamingResponse {
+			if v == "active" && !entry.IsStreamingResponse {
+				return false
+			}
+			if v == "inactive" && entry.IsStreamingResponse {
 				return false
 			}
 		}
@@ -662,6 +673,9 @@ func (ms *MemoryStorage) GetMethods() (map[string]int, error) {
 
 	methods := make(map[string]int)
 	for _, entry := range ms.entries {
+		if entry == nil {
+			continue
+		}
 		methods[entry.Method]++
 	}
 
@@ -675,6 +689,9 @@ func (ms *MemoryStorage) GetStatusCodes() (map[int]int, error) {
 
 	statusCodes := make(map[int]int)
 	for _, entry := range ms.entries {
+		if entry == nil {
+			continue
+		}
 		statusCodes[entry.StatusCode]++
 	}
 

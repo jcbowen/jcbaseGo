@@ -544,6 +544,11 @@ func TestControllerPagination(t *testing.T) {
 		config.Storage = storage
 		dbg, _ := New(config)
 
+		// 注册路由以初始化控制器
+		gin.SetMode(gin.TestMode)
+		router := gin.New()
+		dbg.RegisterRoutes(router)
+
 		// 获取控制器
 		controller := dbg.GetController()
 
@@ -558,9 +563,9 @@ func TestControllerPagination(t *testing.T) {
 		assert.Equal(t, 20, pagination["PageSize"])
 		assert.Equal(t, 100, pagination["Total"])
 
-		// 测试默认值 - 当pageSize为0时，方法会设置默认值20避免除零错误
+		// 测试默认值 - 当pageSize为0时，方法会设置默认值20避免除零错误；page<=0时设置为1
 		pagination = controller.calculatePagination(0, 0, 0)
-		assert.Equal(t, 0, pagination["Page"])
+		assert.Equal(t, 1, pagination["Page"])      // page<=0时默认为1
 		assert.Equal(t, 20, pagination["PageSize"]) // 默认分页大小
 		assert.Equal(t, 0, pagination["Total"])
 	})

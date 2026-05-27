@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -174,6 +173,9 @@ func (c *Controller) isIPAllowed(clientIP string, allowedIPs []string) bool {
 		return false
 	}
 
+	// 解析客户端IP，用于标准化比较
+	parsedClientIP := net.ParseIP(clientIP)
+
 	// 检查每个允许的IP规则
 	for _, allowedIP := range allowedIPs {
 		// 如果是CIDR格式
@@ -182,9 +184,16 @@ func (c *Controller) isIPAllowed(clientIP string, allowedIPs []string) bool {
 				return true
 			}
 		} else {
-			// 直接比较IP地址
+			// 直接比较IP地址（支持IPv6标准化比较）
 			if clientIP == allowedIP {
 				return true
+			}
+			// 尝试标准化比较（处理IPv6的不同表示形式）
+			if parsedClientIP != nil {
+				parsedAllowedIP := net.ParseIP(allowedIP)
+				if parsedAllowedIP != nil && parsedClientIP.Equal(parsedAllowedIP) {
+					return true
+				}
 			}
 		}
 	}
@@ -210,39 +219,11 @@ func (c *Controller) isIPInCIDR(ip, cidr string) bool {
 	return ipNet.Contains(parsedIP)
 }
 
-// generateQueryString 生成查询字符串
-// 从请求中获取所有查询参数，排除指定的参数，生成完整的查询字符串
-// 使用 RawQuery 避免重复解码和编码导致的双重编码问题
-func (c *Controller) generateQueryString(ctx *gin.Context, exclude ...string) string {
-	rawQuery := ctx.Request.URL.RawQuery
-	if rawQuery == "" {
-		return ""
-	}
-
-	// 解析原始查询字符串，保持编码状态
-	values, err := url.ParseQuery(rawQuery)
-	if err != nil {
-		return ""
-	}
-
-	// 排除指定的参数
-	for _, ex := range exclude {
-		values.Del(ex)
-	}
-
-	encoded := values.Encode()
-	if encoded == "" {
-		return ""
-	}
-
-	return encoded
-}
-
 // indexHandler 调试器主页处理器（支持搜索功能）
 func (c *Controller) indexHandler(ctx *gin.Context) {
-	// 获取分页参数
+	// 获取分页参数，使用配置中的默认值
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", strconv.Itoa(c.config.PageSize)))
 
 	// 获取搜索关键词
 	keyword := ctx.Query("q")
@@ -271,11 +252,8 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 	// 计算分页信息
 	pagination := c.calculatePagination(page, pageSize, total)
 
-	// 获取统计信息（仅在非搜索模式下显示）
-	var stats map[string]interface{}
-	if keyword == "" {
-		stats, _ = c.debugger.GetStorage().GetStats()
-	}
+	// 获取统计信息（始终显示，不受搜索模式影响）
+	stats, _ := c.debugger.GetStorage().GetStats()
 
 	// 计算每个日志条目的存储大小
 	c.calculateEntriesStorageSize(entries)
@@ -285,7 +263,7 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 
 	// 渲染页面
 	c.renderTemplate(ctx, "index.html", gin.H{
-		"Title":            "调试器 - 日志列表",
+		"Title":            c.config.Title + " - 日志列表",
 		"Entries":          entries,
 		"Pagination":       pagination,
 		"Filters":          filters,
@@ -307,13 +285,7 @@ func (c *Controller) detailHandler(ctx *gin.Context) {
 	if err != nil {
 		// 检查是否是"未找到"的错误
 		if strings.Contains(err.Error(), "未找到") {
-			// 日志不存在，返回 404 状态码
-			ctx.Status(http.StatusNotFound)
-			c.renderTemplate(ctx, "error.html", gin.H{
-				"Title":    "404 - 页面未找到",
-				"Message":  "未找到ID为 " + id + " 的日志条目",
-				"BasePath": c.basePath,
-			})
+			c.renderNotFound(ctx, id)
 			return
 		}
 		// 其他错误
@@ -322,13 +294,7 @@ func (c *Controller) detailHandler(ctx *gin.Context) {
 	}
 
 	if entry == nil {
-		// 日志不存在，返回 404 状态码
-		ctx.Status(http.StatusNotFound)
-		c.renderTemplate(ctx, "error.html", gin.H{
-			"Title":    "404 - 页面未找到",
-			"Message":  "未找到ID为 " + id + " 的日志条目",
-			"BasePath": c.basePath,
-		})
+		c.renderNotFound(ctx, id)
 		return
 	}
 
@@ -346,7 +312,7 @@ func (c *Controller) detailHandler(ctx *gin.Context) {
 // logsAPIHandler 日志列表API处理器
 func (c *Controller) logsAPIHandler(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", strconv.Itoa(c.config.PageSize)))
 	filters := c.parseFilters(ctx)
 
 	entries, total, err := c.debugger.GetStorage().FindAll(page, pageSize, filters)
@@ -404,7 +370,7 @@ func (c *Controller) logDetailAPIHandler(ctx *gin.Context) {
 func (c *Controller) searchAPIHandler(ctx *gin.Context) {
 	keyword := ctx.Query("q")
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "20"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", strconv.Itoa(c.config.PageSize)))
 
 	if keyword == "" {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -759,14 +725,15 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 	}
 
 	// 时间范围过滤
+	// 支持两种格式：RFC3339 (2024-01-01T00:00:00Z) 和 datetime-local (2024-01-01T00:00)
 	if startTime := ctx.Query("start_time"); startTime != "" {
-		if t, err := time.Parse(time.RFC3339, startTime); err == nil {
+		if t, err := parseTimeFilter(startTime); err == nil {
 			filters["start_time"] = t
 		}
 	}
 
 	if endTime := ctx.Query("end_time"); endTime != "" {
-		if t, err := time.Parse(time.RFC3339, endTime); err == nil {
+		if t, err := parseTimeFilter(endTime); err == nil {
 			filters["end_time"] = t
 		}
 	}
@@ -789,16 +756,58 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 	return filters
 }
 
+// parseTimeFilter 解析时间筛选参数
+// 支持多种时间格式：RFC3339、datetime-local、日期格式
+// 解析失败时返回零值时间和错误信息
+func parseTimeFilter(timeStr string) (time.Time, error) {
+	if timeStr == "" {
+		return time.Time{}, fmt.Errorf("时间字符串为空")
+	}
+
+	formats := []string{
+		time.RFC3339,
+		"2006-01-02T15:04",
+		"2006-01-02T15:04:05",
+		"2006-01-02",
+	}
+
+	for _, format := range formats {
+		if t, err := time.Parse(format, timeStr); err == nil {
+			return t, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("无法解析时间格式: %s", timeStr)
+}
+
 // calculatePagination 计算分页信息
 func (c *Controller) calculatePagination(page, pageSize, total int) gin.H {
-	// 处理pageSize为0的情况，避免除零错误
+	// 处理pageSize为0、负数或过大的情况
 	if pageSize <= 0 {
-		pageSize = 20 // 默认分页大小
+		pageSize = c.config.PageSize
+		if pageSize <= 0 {
+			pageSize = 20
+		}
+	}
+	// 限制最大分页大小，防止内存问题
+	const maxPageSize = 1000
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	// 处理page为负数或0的情况
+	if page <= 0 {
+		page = 1
 	}
 
 	totalPages := (total + pageSize - 1) / pageSize
 	if totalPages == 0 {
 		totalPages = 1
+	}
+
+	// 如果当前页超过总页数，调整为最后一页
+	if page > totalPages && total > 0 {
+		page = totalPages
 	}
 
 	return gin.H{
@@ -861,6 +870,11 @@ func (c *Controller) renderTemplate(ctx *gin.Context, templateName string, data 
 		"safeURL": func(s string) template.URL {
 			return template.URL(s)
 		},
+		"jsString": func(s string) string {
+			// 将字符串转义为安全的 JavaScript 字符串字面量
+			b, _ := json.Marshal(s)
+			return string(b)
+		},
 		"isJSON": func(s string) bool {
 			// 检查字符串是否为空
 			if s == "" {
@@ -898,6 +912,18 @@ func (c *Controller) renderTemplate(ctx *gin.Context, templateName string, data 
 				return string(b)
 			}
 		},
+		"formatDuration": func(d time.Duration) string {
+			// 格式化持续时间为易读的字符串
+			if d < time.Microsecond {
+				return fmt.Sprintf("%dns", d.Nanoseconds())
+			} else if d < time.Millisecond {
+				return fmt.Sprintf("%.2fµs", float64(d.Nanoseconds())/1000)
+			} else if d < time.Second {
+				return fmt.Sprintf("%.2fms", float64(d.Nanoseconds())/1000000)
+			} else {
+				return fmt.Sprintf("%.2fs", d.Seconds())
+			}
+		},
 	}
 
 	// 解析模板
@@ -922,6 +948,16 @@ func (c *Controller) renderError(ctx *gin.Context, message string) {
 	c.renderTemplate(ctx, "error.html", gin.H{
 		"Title":    "错误",
 		"Message":  message,
+		"BasePath": c.basePath,
+	})
+}
+
+// renderNotFound 渲染404页面
+func (c *Controller) renderNotFound(ctx *gin.Context, id string) {
+	ctx.Status(http.StatusNotFound)
+	c.renderTemplate(ctx, "error.html", gin.H{
+		"Title":    "404 - 页面未找到",
+		"Message":  "未找到ID为 " + id + " 的日志条目",
 		"BasePath": c.basePath,
 	})
 }

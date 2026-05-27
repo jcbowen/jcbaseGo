@@ -306,40 +306,63 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 		case "status_code":
 			db = db.Where("status_code = ?", value)
 		case "url":
-			db = db.Where("url LIKE ?", "%"+value.(string)+"%")
+			if v, ok := value.(string); ok {
+				db = db.Where("url LIKE ?", "%"+v+"%")
+			}
 		case "start_time":
-			db = db.Where("timestamp >= ?", value)
+			if v, ok := value.(time.Time); ok {
+				db = db.Where("timestamp >= ?", v)
+			}
 		case "end_time":
-			db = db.Where("timestamp <= ?", value)
+			if v, ok := value.(time.Time); ok {
+				db = db.Where("timestamp <= ?", v)
+			}
 		case "client_ip":
-			db = db.Where("client_ip LIKE ?", "%"+value.(string)+"%")
+			if v, ok := value.(string); ok {
+				db = db.Where("client_ip LIKE ?", "%"+v+"%")
+			}
 		case "process_name":
-			db = db.Where("process_name LIKE ?", "%"+value.(string)+"%")
+			if v, ok := value.(string); ok {
+				db = db.Where("process_name LIKE ?", "%"+v+"%")
+			}
 		case "process_id":
-			db = db.Where("process_id = ?", value)
+			if v, ok := value.(string); ok {
+				db = db.Where("process_id = ?", v)
+			}
 		case "process_status":
-			db = db.Where("status = ?", value)
+			if v, ok := value.(string); ok {
+				db = db.Where("status = ?", v)
+			}
 		case "has_error":
-			if value.(bool) {
-				db = db.Where("error != ''")
-			} else {
-				db = db.Where("error = ''")
+			if v, ok := value.(bool); ok {
+				if v {
+					db = db.Where("error != ''")
+				} else {
+					db = db.Where("error = ''")
+				}
 			}
 		case "min_duration":
-			db = db.Where("duration >= ?", value.(time.Duration).Nanoseconds())
+			if v, ok := value.(time.Duration); ok {
+				db = db.Where("duration >= ?", v.Nanoseconds())
+			}
 		case "max_duration":
-			db = db.Where("duration <= ?", value.(time.Duration).Nanoseconds())
+			if v, ok := value.(time.Duration); ok {
+				db = db.Where("duration <= ?", v.Nanoseconds())
+			}
 		case "is_streaming":
 			// 流式请求过滤：true/false 字符串转换为布尔值
-			filterIsStreaming := strings.ToLower(value.(string)) == "true"
-			db = db.Where("is_streaming_response = ?", filterIsStreaming)
+			if v, ok := value.(string); ok {
+				filterIsStreaming := strings.ToLower(v) == "true"
+				db = db.Where("is_streaming_response = ?", filterIsStreaming)
+			}
 		case "streaming_status":
 			// 流式状态过滤：active/inactive 字符串匹配
-			filterStatus := value.(string)
-			if filterStatus == "active" {
-				db = db.Where("is_streaming_response = ?", true)
-			} else if filterStatus == "inactive" {
-				db = db.Where("is_streaming_response = ?", false)
+			if v, ok := value.(string); ok {
+				if v == "active" {
+					db = db.Where("is_streaming_response = ?", true)
+				} else if v == "inactive" {
+					db = db.Where("is_streaming_response = ?", false)
+				}
 			}
 		}
 	}

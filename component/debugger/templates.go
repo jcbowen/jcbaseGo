@@ -256,6 +256,11 @@ const indexTemplate = `<!DOCTYPE html>
         .nav a { color: #3498db; text-decoration: none; padding: 10px 15px; border-radius: 4px; }
         .nav a.active { background: #3498db; color: white; }
         
+        /* 记录类型标识 */
+        .record-type-badge { padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-left: 10px; vertical-align: middle; }
+        .http-badge { background: #d1ecf1; color: #0c5460; }
+        .process-badge { background: #fff3cd; color: #856404; }
+        
         @media (max-width: 768px) {
             .container { padding: 10px; }
             .header { padding: 15px; margin-bottom: 15px; }
@@ -381,7 +386,6 @@ const indexTemplate = `<!DOCTYPE html>
                     <div class="label">存储大小</div>
                     <div class="value">{{.Stats.storage_size}}</div>
                 </div>
-                {{if .Stats.streaming_request_count}}
                 <div class="stat-item">
                     <div class="label">流式请求数</div>
                     <div class="value">{{.Stats.streaming_request_count}}</div>
@@ -395,7 +399,6 @@ const indexTemplate = `<!DOCTYPE html>
                     <div class="value">{{.Stats.max_streaming_chunks}}</div>
                 </div>
                 {{end}}
-                {{end}}
             </div>
         </div>
         
@@ -404,143 +407,150 @@ const indexTemplate = `<!DOCTYPE html>
         </div>
         
         <div class="filters">
-            <div class="filter-header">
-                <h3>筛选条件</h3>
-                <div class="filter-actions">
-                    <button type="submit" form="filter-form">筛选</button>
-                    <a href="javascript:void(0)" onclick="resetFilters()">重置</a>
-                </div>
-            </div>
             <form class="filter-form" method="get" id="filter-form" onsubmit="handleFilterSubmit(event)">
-                    <!-- 基础筛选组 -->
-                    <div class="filter-group">
-                        <h4>基础筛选</h4>
-                        <div class="filter-row">
-                            <select name="record_type" id="filter-record_type" onchange="handleFilterChange(this)">
-                                <option value="">所有记录类型</option>
-                                <option value="http">HTTP记录</option>
-                                <option value="process">进程记录</option>
-                            </select>
-                        </div>
-                        <div class="filter-row">
-                            <input type="text" name="q" id="filter-q" placeholder="搜索日志内容...">
-                        </div>
+                <div class="filter-header">
+                    <h3>筛选条件</h3>
+                    <div class="filter-actions">
+                        <button type="submit">筛选</button>
+                        <a href="javascript:void(0)" onclick="resetFilters()">重置</a>
                     </div>
-                    
-                    <!-- HTTP记录筛选组 -->
-                    <div class="filter-group">
-                        <h4>HTTP记录筛选</h4>
-                        <div class="filter-row">
-                            <select name="method" id="filter-method" onchange="handleFilterChange(this)">
-                                <option value="">所有方法</option>
-                                <option value="GET">GET</option>
-                                <option value="POST">POST</option>
-                                <option value="PUT">PUT</option>
-                                <option value="DELETE">DELETE</option>
-                            </select>
-                            <select name="status_code" id="filter-status_code" onchange="handleFilterChange(this)">
-                                <option value="">所有状态码</option>
-                                <option value="200">200 - 成功</option>
-                                <option value="201">201 - 已创建</option>
-                                <option value="204">204 - 无内容</option>
-                                <option value="301">301 - 永久重定向</option>
-                                <option value="302">302 - 临时重定向</option>
-                                <option value="400">400 - 错误请求</option>
-                                <option value="401">401 - 未授权</option>
-                                <option value="403">403 - 禁止访问</option>
-                                <option value="404">404 - 未找到</option>
-                                <option value="500">500 - 服务器错误</option>
-                                <option value="502">502 - 网关错误</option>
-                                <option value="503">503 - 服务不可用</option>
-                            </select>
-                        </div>
-                        <div class="filter-row">
-                            <input type="text" name="client_ip" id="filter-client_ip" placeholder="客户端IP地址">
-                            <input type="text" name="host" id="filter-host" placeholder="域名包含">
-                            <input type="text" name="url" id="filter-url" placeholder="URL路径包含">
-                        </div>
-                        <div class="filter-row time-range-row">
-                            <input type="datetime-local" name="start_time" id="filter-start_time" placeholder="开始时间">
-                            <input type="datetime-local" name="end_time" id="filter-end_time" placeholder="结束时间">
-                        </div>
-                        <div class="filter-row">
-                            <select name="is_streaming" id="filter-is_streaming" onchange="handleFilterChange(this)">
-                                <option value="">所有流式状态</option>
-                                <option value="true">流式请求</option>
-                                <option value="false">非流式请求</option>
-                            </select>
-                        </div>
+                </div>
+                <!-- 基础筛选组 -->
+                <div class="filter-group">
+                    <h4>基础筛选</h4>
+                    <div class="filter-row">
+                        <select name="record_type" id="filter-record_type" onchange="handleFilterChange(this)">
+                            <option value="">所有记录类型</option>
+                            <option value="http">HTTP记录</option>
+                            <option value="process">进程记录</option>
+                        </select>
+                        <select name="pageSize" id="filter-pageSize" onchange="handleFilterChange(this)">
+                            <option value="10">10条/页</option>
+                            <option value="20">20条/页</option>
+                            <option value="50">50条/页</option>
+                            <option value="100">100条/页</option>
+                        </select>
                     </div>
-                    
-                    <!-- 进程记录筛选组 -->
-                    <div class="filter-group">
-                        <h4>进程记录筛选</h4>
-                        <div class="filter-row">
-                            <input type="text" name="process_name" id="filter-process_name" placeholder="进程名称">
-                            <input type="text" name="process_id" id="filter-process_id" placeholder="进程ID">
-                            <select name="process_status" id="filter-process_status" onchange="handleFilterChange(this)">
-                                <option value="">所有进程状态</option>
-                                <option value="running">运行中</option>
-                                <option value="completed">已完成</option>
-                                <option value="failed">失败</option>
-                                <option value="cancelled">已取消</option>
-                            </select>
-                        </div>
+                    <div class="filter-row">
+                        <input type="text" name="q" id="filter-q" placeholder="搜索日志内容...">
                     </div>
-                </form>
+                </div>
                 
-                <script>
-                    // 初始化筛选表单值 - 优先从pageParams获取，后备从URL参数获取
-                    function initFilterForm() {
-                        // 从URL参数获取值（作为后备）
-                        const urlParams = new URLSearchParams(window.location.search);
-                        
-                        // 获取参数值的辅助函数（优先从pageParams，后备从URL）
-                        function getParamValue(key, pageParamsValue) {
-                            if (pageParamsValue && pageParamsValue !== 'null' && pageParamsValue !== '') {
-                                return pageParamsValue;
-                            }
-                            const urlValue = urlParams.get(key);
-                            return urlValue || null;
+                <!-- HTTP记录筛选组 -->
+                <div class="filter-group">
+                    <h4>HTTP记录筛选</h4>
+                    <div class="filter-row">
+                        <select name="method" id="filter-method" onchange="handleFilterChange(this)">
+                            <option value="">所有方法</option>
+                            <option value="GET">GET</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                        </select>
+                        <select name="status_code" id="filter-status_code" onchange="handleFilterChange(this)">
+                            <option value="">所有状态码</option>
+                            <option value="200">200 - 成功</option>
+                            <option value="201">201 - 已创建</option>
+                            <option value="204">204 - 无内容</option>
+                            <option value="301">301 - 永久重定向</option>
+                            <option value="302">302 - 临时重定向</option>
+                            <option value="400">400 - 错误请求</option>
+                            <option value="401">401 - 未授权</option>
+                            <option value="403">403 - 禁止访问</option>
+                            <option value="404">404 - 未找到</option>
+                            <option value="500">500 - 服务器错误</option>
+                            <option value="502">502 - 网关错误</option>
+                            <option value="503">503 - 服务不可用</option>
+                        </select>
+                    </div>
+                    <div class="filter-row">
+                        <input type="text" name="client_ip" id="filter-client_ip" placeholder="客户端IP地址">
+                        <input type="text" name="host" id="filter-host" placeholder="域名包含">
+                        <input type="text" name="url" id="filter-url" placeholder="URL路径包含">
+                    </div>
+                    <div class="filter-row time-range-row">
+                        <input type="datetime-local" name="start_time" id="filter-start_time" placeholder="开始时间">
+                        <input type="datetime-local" name="end_time" id="filter-end_time" placeholder="结束时间">
+                    </div>
+                    <div class="filter-row">
+                        <select name="is_streaming" id="filter-is_streaming" onchange="handleFilterChange(this)">
+                            <option value="">所有流式状态</option>
+                            <option value="true">流式请求</option>
+                            <option value="false">非流式请求</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- 进程记录筛选组 -->
+                <div class="filter-group">
+                    <h4>进程记录筛选</h4>
+                    <div class="filter-row">
+                        <input type="text" name="process_name" id="filter-process_name" placeholder="进程名称">
+                        <input type="text" name="process_id" id="filter-process_id" placeholder="进程ID">
+                        <select name="process_status" id="filter-process_status" onchange="handleFilterChange(this)">
+                            <option value="">所有进程状态</option>
+                            <option value="running">运行中</option>
+                            <option value="completed">已完成</option>
+                            <option value="failed">失败</option>
+                            <option value="cancelled">已取消</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+            
+            <script>
+                // 初始化筛选表单值 - 优先从pageParams获取，后备从URL参数获取
+                function initFilterForm() {
+                    // 从URL参数获取值（作为后备）
+                    const urlParams = new URLSearchParams(window.location.search);
+                    
+                    // 获取参数值的辅助函数（优先从pageParams，后备从URL）
+                    function getParamValue(key, pageParamsValue) {
+                        if (pageParamsValue && pageParamsValue !== 'null' && pageParamsValue !== '') {
+                            return pageParamsValue;
                         }
-                        
-                        // 确保 pageParams 存在
-                        const filters = window.pageParams && window.pageParams.filters ? window.pageParams.filters : {};
-                        const keyword = window.pageParams ? window.pageParams.keyword : null;
-                        
-                        // 设置搜索关键词（优先pageParams，后备URL参数q）
-                        const qValue = getParamValue('q', keyword);
-                        if (qValue) {
-                            const qInput = document.getElementById('filter-q');
-                            if (qInput) qInput.value = qValue;
-                        }
-                        
-                        // 设置筛选条件（优先pageParams，后备URL参数）
-                        function setFilterValue(elementId, key, pageParamsValue) {
-                            const value = getParamValue(key, pageParamsValue);
-                            if (value) {
-                                const element = document.getElementById(elementId);
-                                if (element) element.value = value;
-                            }
-                        }
-                        
-                        setFilterValue('filter-record_type', 'record_type', filters.record_type);
-                        setFilterValue('filter-method', 'method', filters.method);
-                        setFilterValue('filter-status_code', 'status_code', filters.status_code);
-                        setFilterValue('filter-client_ip', 'client_ip', filters.client_ip);
-                        setFilterValue('filter-host', 'host', filters.host);
-                        setFilterValue('filter-url', 'url', filters.url);
-                        setFilterValue('filter-start_time', 'start_time', filters.start_time);
-                        setFilterValue('filter-end_time', 'end_time', filters.end_time);
-                        setFilterValue('filter-is_streaming', 'is_streaming', filters.is_streaming);
-                        setFilterValue('filter-process_name', 'process_name', filters.process_name);
-                        setFilterValue('filter-process_id', 'process_id', filters.process_id);
-                        setFilterValue('filter-process_status', 'process_status', filters.process_status);
+                        const urlValue = urlParams.get(key);
+                        return urlValue || null;
                     }
                     
-                    // 页面加载时初始化表单
-                    initFilterForm();
-                </script>
+                    // 确保 pageParams 存在
+                    const filters = window.pageParams && window.pageParams.filters ? window.pageParams.filters : {};
+                    const keyword = window.pageParams ? window.pageParams.keyword : null;
+                    
+                    // 设置搜索关键词（优先pageParams，后备URL参数q）
+                    const qValue = getParamValue('q', keyword);
+                    if (qValue) {
+                        const qInput = document.getElementById('filter-q');
+                        if (qInput) qInput.value = qValue;
+                    }
+                    
+                    // 设置筛选条件（优先pageParams，后备URL参数）
+                    function setFilterValue(elementId, key, pageParamsValue) {
+                        const value = getParamValue(key, pageParamsValue);
+                        if (value) {
+                            const element = document.getElementById(elementId);
+                            if (element) element.value = value;
+                        }
+                    }
+                    
+                    setFilterValue('filter-record_type', 'record_type', filters.record_type);
+                    setFilterValue('filter-pageSize', 'pageSize', filters.pageSize);
+                    setFilterValue('filter-method', 'method', filters.method);
+                    setFilterValue('filter-status_code', 'status_code', filters.status_code);
+                    setFilterValue('filter-client_ip', 'client_ip', filters.client_ip);
+                    setFilterValue('filter-host', 'host', filters.host);
+                    setFilterValue('filter-url', 'url', filters.url);
+                    setFilterValue('filter-start_time', 'start_time', filters.start_time);
+                    setFilterValue('filter-end_time', 'end_time', filters.end_time);
+                    setFilterValue('filter-is_streaming', 'is_streaming', filters.is_streaming);
+                    setFilterValue('filter-process_name', 'process_name', filters.process_name);
+                    setFilterValue('filter-process_id', 'process_id', filters.process_id);
+                    setFilterValue('filter-process_status', 'process_status', filters.process_status);
+                }
+                
+                // 页面加载时初始化表单
+                initFilterForm();
+            </script>
         </div>
         
         <div class="logs-table">
@@ -561,7 +571,7 @@ const indexTemplate = `<!DOCTYPE html>
                     <div class="log-row">
                         <div class="request-id"><a href="{{$.BasePath}}/detail/{{.ID}}" title="查看详情">{{.ID}}</a></div>
                         <div class="timestamp">{{.Timestamp.Format "2006-01-02 15:04:05"}}</div>
-                        <div class="duration">{{.Duration.Milliseconds}}ms</div>
+                        <div class="duration">{{formatDuration .Duration}}</div>
                         <div class="storage-size">{{.StorageSize}}</div>
                         <div class="record-type">
                             {{if eq .RecordType "process"}}
@@ -639,7 +649,7 @@ const indexTemplate = `<!DOCTYPE html>
             basePath: '{{.BasePath}}',
             page: {{.Page}},
             pageSize: {{.PageSize}},
-            keyword: {{if .Keyword}}'{{.Keyword}}'{{else}}null{{end}},
+            keyword: {{if .Keyword}}{{jsString .Keyword}}{{else}}null{{end}},
             filters: {
                 record_type: {{if .Filters.record_type}}'{{.Filters.record_type}}'{{else}}null{{end}},
                 method: {{if .Filters.method}}'{{.Filters.method}}'{{else}}null{{end}},
@@ -651,12 +661,13 @@ const indexTemplate = `<!DOCTYPE html>
                 process_id: {{if .Filters.process_id}}'{{.Filters.process_id}}'{{else}}null{{end}},
                 process_status: {{if .Filters.process_status}}'{{.Filters.process_status}}'{{else}}null{{end}},
                 is_streaming: {{if .Filters.is_streaming}}'{{.Filters.is_streaming}}'{{else}}null{{end}},
+                pageSize: {{if .Filters.pageSize}}'{{.Filters.pageSize}}'{{else}}null{{end}},
                 start_time: {{if .Filters.start_time}}'{{.Filters.start_time}}'{{else}}null{{end}},
                 end_time: {{if .Filters.end_time}}'{{.Filters.end_time}}'{{else}}null{{end}}
             }
         };
 
-        // 构建列表页URL - 从当前URL获取参数，确保包含用户最新的筛选条件
+        // 构建列表页URL - 从当前URL和表单获取参数，确保包含用户最新的筛选条件
         function buildListURL(targetPage) {
             const params = new URLSearchParams();
 
@@ -668,7 +679,20 @@ const indexTemplate = `<!DOCTYPE html>
                 }
             }
 
-            // 2. 更新分页参数
+            // 2. 从表单获取最新的筛选条件（覆盖URL中的旧值）
+            const form = document.getElementById('filter-form');
+            if (form) {
+                const formData = new FormData(form);
+                for (const [key, value] of formData.entries()) {
+                    if (value && value.trim() !== '') {
+                        params.set(key, value);
+                    } else {
+                        params.delete(key);
+                    }
+                }
+            }
+
+            // 3. 更新分页参数
             const pageNum = parseInt(targetPage, 10);
             if (!isNaN(pageNum) && pageNum > 0) {
                 params.set('page', pageNum);
@@ -676,7 +700,7 @@ const indexTemplate = `<!DOCTYPE html>
                 params.delete('page');
             }
 
-            // 3. 更新pageSize（如果与默认值不同）
+            // 4. 更新pageSize（如果与默认值不同）
             if (window.pageParams.pageSize && window.pageParams.pageSize !== 20) {
                 params.set('pageSize', window.pageParams.pageSize);
             }
@@ -687,7 +711,10 @@ const indexTemplate = `<!DOCTYPE html>
 
         // 跳转到指定页面
         function goToPage(page) {
-            window.location.href = buildListURL(page);
+            const url = buildListURL(page);
+            // 保存当前列表页URL到sessionStorage，供详情页返回时使用
+            sessionStorage.setItem('debugger_list_url', url);
+            window.location.href = url;
         }
 
         // 处理筛选条件变化（下拉框onchange事件）
@@ -717,7 +744,10 @@ const indexTemplate = `<!DOCTYPE html>
             params.delete('page');
 
             const queryString = params.toString();
-            window.location.href = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+            const url = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+            // 保存当前列表页URL到sessionStorage，供详情页返回时使用
+            sessionStorage.setItem('debugger_list_url', url);
+            window.location.href = url;
         }
 
         // 处理筛选表单提交 - 排除空值参数，保留URL中已有的其他参数
@@ -749,11 +779,15 @@ const indexTemplate = `<!DOCTYPE html>
             params.delete('page');
 
             const queryString = params.toString();
-            window.location.href = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+            const url = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+            // 保存当前列表页URL到sessionStorage，供详情页返回时使用
+            sessionStorage.setItem('debugger_list_url', url);
+            window.location.href = url;
         }
 
         // 重置筛选条件
         function resetFilters() {
+            sessionStorage.removeItem('debugger_list_url');
             window.location.href = window.pageParams.basePath + '/list';
         }
 
@@ -1244,10 +1278,10 @@ const detailTemplate = `<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <a href="{{.BasePath}}/list" class="back-link" id="back-link">← 返回日志列表</a>
+        <a href="javascript:void(0)" onclick="goBackToList()" class="back-link" id="back-link">← 返回日志列表</a>
 
         <div class="header">
-            <h1>{{.Title}} <a href="{{.BasePath}}/api/logs/{{.Entry.ID}}" target="_blank" class="json-view-link" title="查看JSON数据">[JSON]</a></h1>
+            <h1>{{.Title}} <span class="record-type-badge {{.Entry.RecordType}}-badge">{{if eq .Entry.RecordType "process"}}进程记录{{else}}HTTP记录{{end}}</span> <a href="{{.BasePath}}/api/logs/{{.Entry.ID}}" target="_blank" class="json-view-link" title="查看JSON数据">[JSON]</a></h1>
         </div>
         
         {{if .Entry}}
@@ -1272,7 +1306,7 @@ const detailTemplate = `<!DOCTYPE html>
                     </div>
                     <div class="info-item">
                         <div class="info-label">进程状态</div>
-                        <div class="info-value status-badge process-status-{{.Entry.Status}}">{{.Entry.Status}}</div>
+                        <div class="info-value status-badge process-status-{{lower .Entry.Status}}">{{.Entry.Status}}</div>
                     </div>
                     <div class="info-item">
                         <div class="info-label">开始时间</div>
@@ -1299,7 +1333,7 @@ const detailTemplate = `<!DOCTYPE html>
                     {{end}}
                     <div class="info-item">
                         <div class="info-label">耗时</div>
-                        <div class="info-value">{{.Entry.Duration.Milliseconds}}ms</div>
+                        <div class="info-value">{{formatDuration .Entry.Duration}}</div>
                     </div>
                     {{if ne .Entry.RecordType "process"}}
                     <div class="info-item">
@@ -1470,7 +1504,7 @@ const detailTemplate = `<!DOCTYPE html>
                         </div>
                         <div class="info-item">
                             <div class="info-label">流式数据大小</div>
-                            <div class="info-value">{{.Entry.StreamingData | len}} bytes</div>
+                            <div class="info-value">{{if .Entry.StreamingData}}{{.Entry.StreamingData | len}} bytes{{else}}0 bytes{{end}}</div>
                         </div>
                     </div>
                 </div>
@@ -1539,49 +1573,72 @@ const detailTemplate = `<!DOCTYPE html>
         document.addEventListener('DOMContentLoaded', function() {
             beautifyJSONContent();
         });
-        
+
         function lower(str) {
             return str ? str.toLowerCase() : '';
+        }
+
+        // 返回日志列表，优先使用referrer保留筛选条件，否则使用sessionStorage中的列表URL
+        function goBackToList() {
+            // 尝试从sessionStorage获取之前保存的列表页URL
+            const savedListUrl = sessionStorage.getItem('debugger_list_url');
+            if (savedListUrl) {
+                window.location.href = savedListUrl;
+                return;
+            }
+            // 如果referrer来自同一应用的列表页，使用浏览器返回
+            if (document.referrer && document.referrer.includes(window.location.pathname.split('/detail/')[0])) {
+                history.back();
+            } else {
+                // 默认返回列表页（不带筛选条件）
+                window.location.href = '{{.BasePath}}/list';
+            }
         }
         
         // JSON美化功能
         function beautifyJSONContent() {
             const jsonViewers = document.querySelectorAll('.json-viewer pre');
-            
+
             jsonViewers.forEach(pre => {
                 try {
                     const originalText = pre.textContent.trim();
                     if (!originalText) return;
-                    
-                    // 检查内容是否看起来像JSON（以{或[开头，以}或]结尾）
+
+                    // 严格检查是否为有效的JSON格式
                     const trimmedText = originalText.trim();
+
+                    // 必须以 { 或 [ 开头
                     if (!trimmedText.startsWith('{') && !trimmedText.startsWith('[')) {
-                        // 不是JSON格式，保持原样显示
                         return;
                     }
-                    
-                    // 进一步检查是否以对应的括号结尾
-                    if ((trimmedText.startsWith('{') && !trimmedText.endsWith('}')) ||
-                        (trimmedText.startsWith('[') && !trimmedText.endsWith(']'))) {
-                        // 括号不匹配，不是完整的JSON格式
+
+                    // 必须以对应的括号结尾
+                    const lastChar = trimmedText.charAt(trimmedText.length - 1);
+                    if ((trimmedText.startsWith('{') && lastChar !== '}') ||
+                        (trimmedText.startsWith('[') && lastChar !== ']')) {
                         return;
                     }
-                    
+
+                    // 检查最小长度（空对象 {} 或空数组 [] 至少2个字符）
+                    if (trimmedText.length < 2) {
+                        return;
+                    }
+
                     // 尝试解析JSON
                     const jsonData = JSON.parse(originalText);
-                    
+
                     // 格式化JSON
                     const formattedJSON = JSON.stringify(jsonData, null, 2);
-                    
+
                     // 创建语法高亮的HTML
                     const highlightedHTML = syntaxHighlight(formattedJSON);
-                    
+
                     // 替换原始内容
                     pre.innerHTML = highlightedHTML;
-                    
+
                     // 添加复制按钮
                     addCopyButton(pre.parentElement, formattedJSON);
-                    
+
                 } catch (error) {
                     // 如果不是有效的JSON，保持原样显示
                     console.log('内容不是有效的JSON，保持原样显示:', error);
