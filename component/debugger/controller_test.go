@@ -554,20 +554,20 @@ func TestControllerPagination(t *testing.T) {
 
 		// 测试分页计算
 		pagination := controller.calculatePagination(1, 20, 100)
-		assert.Equal(t, 1, pagination["Page"])
-		assert.Equal(t, 20, pagination["PageSize"])
-		assert.Equal(t, 100, pagination["Total"])
+		assert.Equal(t, 1, pagination.Page)
+		assert.Equal(t, 20, pagination.PageSize)
+		assert.Equal(t, 100, pagination.Total)
 
 		pagination = controller.calculatePagination(2, 20, 100)
-		assert.Equal(t, 2, pagination["Page"])
-		assert.Equal(t, 20, pagination["PageSize"])
-		assert.Equal(t, 100, pagination["Total"])
+		assert.Equal(t, 2, pagination.Page)
+		assert.Equal(t, 20, pagination.PageSize)
+		assert.Equal(t, 100, pagination.Total)
 
 		// 测试默认值 - 当pageSize为0时，方法会设置默认值20避免除零错误；page<=0时设置为1
 		pagination = controller.calculatePagination(0, 0, 0)
-		assert.Equal(t, 1, pagination["Page"])      // page<=0时默认为1
-		assert.Equal(t, 20, pagination["PageSize"]) // 默认分页大小
-		assert.Equal(t, 0, pagination["Total"])
+		assert.Equal(t, 1, pagination.Page)      // page<=0时默认为1
+		assert.Equal(t, 20, pagination.PageSize) // 默认分页大小
+		assert.Equal(t, 0, pagination.Total)
 	})
 
 	t.Run("分页参数解析", func(t *testing.T) {

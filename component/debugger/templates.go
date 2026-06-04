@@ -207,8 +207,6 @@ const indexTemplate = `<!DOCTYPE html>
         .status-5xx { background: #f5c6cb; color: #721c24; }
         
         /* 进程记录样式 */
-        .process-badge { background: #e8f4fd; color: #1976d2; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-        .http-badge { background: #f3e5f5; color: #7b1fa2; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
         .process-status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; }
         .process-status-running { background: #fff3cd; color: #856404; }
         .process-status-completed { background: #d4edda; color: #155724; }
@@ -258,8 +256,12 @@ const indexTemplate = `<!DOCTYPE html>
         
         /* 记录类型标识 */
         .record-type-badge { padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-left: 10px; vertical-align: middle; }
-        .http-badge { background: #d1ecf1; color: #0c5460; }
-        .process-badge { background: #fff3cd; color: #856404; }
+        .record-type-http { background: #d1ecf1; color: #0c5460; }
+        .record-type-process { background: #fff3cd; color: #856404; }
+        
+        /* 列表页记录类型标签 */
+        .type-badge-http { background: #f3e5f5; color: #7b1fa2; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .type-badge-process { background: #e8f4fd; color: #1976d2; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
         
         @media (max-width: 768px) {
             .container { padding: 10px; }
@@ -575,9 +577,9 @@ const indexTemplate = `<!DOCTYPE html>
                         <div class="storage-size">{{.StorageSize}}</div>
                         <div class="record-type">
                             {{if eq .RecordType "process"}}
-                            <span class="process-badge" title="进程记录">进程</span>
+                            <span class="type-badge-process" title="进程记录">进程</span>
                             {{else}}
-                            <span class="http-badge" title="HTTP记录">HTTP</span>
+                            <span class="type-badge-http" title="HTTP记录">HTTP</span>
                             <div class="http-method method-{{lower .Method}}">{{.Method}}</div>
                             {{end}}
                         </div>
@@ -1079,7 +1081,7 @@ const detailTemplate = `<!DOCTYPE html>
         .status-5xx { background: #f5c6cb; color: #721c24; }
         
         /* 进程状态样式 */
-        .process-status { padding: 4px 8px; border-radius: 4px; font-size: 12px; display: inline-block; }
+        .process-status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; display: inline-block; }
         .process-status-running { background: #fff3cd; color: #856404; }
         .process-status-completed { background: #d4edda; color: #155724; }
         .process-status-failed { background: #f5c6cb; color: #721c24; }
@@ -1281,7 +1283,7 @@ const detailTemplate = `<!DOCTYPE html>
         <a href="javascript:void(0)" onclick="goBackToList()" class="back-link" id="back-link">← 返回日志列表</a>
 
         <div class="header">
-            <h1>{{.Title}} <span class="record-type-badge {{.Entry.RecordType}}-badge">{{if eq .Entry.RecordType "process"}}进程记录{{else}}HTTP记录{{end}}</span> <a href="{{.BasePath}}/api/logs/{{.Entry.ID}}" target="_blank" class="json-view-link" title="查看JSON数据">[JSON]</a></h1>
+            <h1>{{.Title}} <span class="record-type-badge record-type-{{.Entry.RecordType}}">{{if eq .Entry.RecordType "process"}}进程记录{{else}}HTTP记录{{end}}</span> <a href="{{.BasePath}}/api/logs/{{.Entry.ID}}" target="_blank" class="json-view-link" title="查看JSON数据">[JSON]</a></h1>
         </div>
         
         {{if .Entry}}
@@ -1448,50 +1450,11 @@ const detailTemplate = `<!DOCTYPE html>
             {{end}}
             
             <!-- 响应信息 -->
-            {{if eq .Entry.RecordType "process"}}
-            <!-- 进程输出信息 -->
             {{if or .Entry.ResponseBody .Entry.ResponseHeaders}}
             <div class="section">
+                {{if eq .Entry.RecordType "process"}}
                 <h2>进程输出</h2>
-                
-                {{if .Entry.ResponseHeaders}}
-                        <div style="margin-top: 15px;">
-                            <h3>响应头</h3>
-                            <div class="table-container">
-                                <table class="headers-table">
-                                    <thead>
-                                        <tr>
-                                            <th>名称</th>
-                                            <th>值</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {{range $key, $value := .Entry.ResponseHeaders}}
-                                        <tr>
-                                            <td>{{$key}}</td>
-                                            <td>{{$value}}</td>
-                                        </tr>
-                                        {{end}}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        {{end}}
-                
-                {{if .Entry.ResponseBody}}
-                <div style="margin-top: 15px;">
-                    <h3>输出内容</h3>
-                    <div class="json-viewer">
-                        <pre>{{.Entry.ResponseBody | html}}</pre>
-                    </div>
-                </div>
-                {{end}}
-            </div>
-            {{end}}
-            {{else}}
-            <!-- HTTP响应信息 -->
-            {{if .Entry.ResponseBody}}
-            <div class="section">
+                {{else}}
                 <h2>响应信息</h2>
                 {{if .Entry.IsStreamingResponse}}
                 <!-- 流式响应信息 -->
@@ -1517,11 +1480,45 @@ const detailTemplate = `<!DOCTYPE html>
                 </div>
                 {{end}}
                 {{end}}
-                <div class="json-viewer">
-                    <pre>{{.Entry.ResponseBody | html}}</pre>
+                {{end}}
+
+                {{if .Entry.ResponseHeaders}}
+                <div style="margin-top: 15px;">
+                    <h3>响应头</h3>
+                    <div class="table-container">
+                        <table class="headers-table">
+                            <thead>
+                                <tr>
+                                    <th>名称</th>
+                                    <th>值</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{range $key, $value := .Entry.ResponseHeaders}}
+                                <tr>
+                                    <td>{{$key}}</td>
+                                    <td>{{$value}}</td>
+                                </tr>
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
+                {{end}}
+
+                {{if .Entry.ResponseBody}}
+                <div style="margin-top: 15px;">
+                    {{if eq .Entry.RecordType "process"}}
+                    <h3>输出内容</h3>
+                    {{else}}
+                    <h3>响应体</h3>
+                    {{end}}
+                    <div class="json-viewer">
+                        <pre>{{.Entry.ResponseBody | html}}</pre>
+                    </div>
+                </div>
+                {{end}}
             </div>
-            {{end}}
             {{end}}
 
             <!-- Logger -->
@@ -1578,7 +1575,7 @@ const detailTemplate = `<!DOCTYPE html>
             return str ? str.toLowerCase() : '';
         }
 
-        // 返回日志列表，优先使用referrer保留筛选条件，否则使用sessionStorage中的列表URL
+        // 返回日志列表，优先使用sessionStorage中的列表URL，其次使用浏览器返回，最后回退到列表页
         function goBackToList() {
             // 尝试从sessionStorage获取之前保存的列表页URL
             const savedListUrl = sessionStorage.getItem('debugger_list_url');
@@ -1586,13 +1583,13 @@ const detailTemplate = `<!DOCTYPE html>
                 window.location.href = savedListUrl;
                 return;
             }
-            // 如果referrer来自同一应用的列表页，使用浏览器返回
-            if (document.referrer && document.referrer.includes(window.location.pathname.split('/detail/')[0])) {
+            // 如果有referrer且不是当前详情页，使用浏览器返回
+            if (document.referrer && !document.referrer.includes('/detail/')) {
                 history.back();
-            } else {
-                // 默认返回列表页（不带筛选条件）
-                window.location.href = '{{.BasePath}}/list';
+                return;
             }
+            // 默认返回列表页（不带筛选条件）
+            window.location.href = '{{.BasePath}}/list';
         }
         
         // JSON美化功能

@@ -781,7 +781,7 @@ func parseTimeFilter(timeStr string) (time.Time, error) {
 }
 
 // calculatePagination 计算分页信息
-func (c *Controller) calculatePagination(page, pageSize, total int) gin.H {
+func (c *Controller) calculatePagination(page, pageSize, total int) Pagination {
 	// 处理pageSize为0、负数或过大的情况
 	if pageSize <= 0 {
 		pageSize = c.config.PageSize
@@ -810,15 +810,15 @@ func (c *Controller) calculatePagination(page, pageSize, total int) gin.H {
 		page = totalPages
 	}
 
-	return gin.H{
-		"Page":       page,
-		"PageSize":   pageSize,
-		"Total":      total,
-		"TotalPages": totalPages,
-		"HasPrev":    page > 1,
-		"HasNext":    page < totalPages,
-		"PrevPage":   page - 1,
-		"NextPage":   page + 1,
+	return Pagination{
+		Page:       page,
+		PageSize:   pageSize,
+		Total:      total,
+		TotalPages: totalPages,
+		HasPrev:    page > 1,
+		HasNext:    page < totalPages,
+		PrevPage:   page - 1,
+		NextPage:   page + 1,
 	}
 }
 
@@ -911,6 +911,9 @@ func (c *Controller) renderTemplate(ctx *gin.Context, templateName string, data 
 				b, _ := json.Marshal(val)
 				return string(b)
 			}
+		},
+		"len": func(s string) int {
+			return len(s)
 		},
 		"formatDuration": func(d time.Duration) string {
 			// 格式化持续时间为易读的字符串

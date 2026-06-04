@@ -483,7 +483,9 @@ func (ms *MemoryStorage) containsKeyword(entry *LogEntry, keyword string) bool {
 func (ms *MemoryStorage) rebuildIndex() {
 	ms.index = make(map[string]int)
 	for i, entry := range ms.entries {
-		ms.index[entry.ID] = i
+		if entry != nil {
+			ms.index[entry.ID] = i
+		}
 	}
 }
 

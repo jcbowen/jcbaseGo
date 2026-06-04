@@ -56,6 +56,9 @@ type LogEntryModel struct {
 	StreamingChunkSize  int    `gorm:"column:streaming_chunk_size;type:INT" json:"streaming_chunk_size"`             // 流式响应分块大小限制（字节）
 	MaxStreamingChunks  int    `gorm:"column:max_streaming_chunks;type:INT" json:"max_streaming_chunks"`             // 流式响应最大分块数量限制
 	StreamingData       string `gorm:"column:streaming_data;type:TEXT" json:"streaming_data"`                        // 流式响应数据摘要（格式化显示）
+
+	// Logger日志字段（JSON格式存储）
+	LoggerLogs string `gorm:"column:logger_logs;type:JSON" json:"logger_logs"` // 通过logger记录的日志（JSON格式）
 }
 
 // TableName 实现自定义表名
@@ -419,6 +422,13 @@ func (ds *DatabaseStorage) entryToModel(entry *LogEntry) (*LogEntryModel, error)
 		model.SessionData = string(sessionData)
 	}
 
+	// 转换Logger日志字段
+	if len(entry.LoggerLogs) > 0 {
+		if loggerLogs, err := json.Marshal(entry.LoggerLogs); err == nil {
+			model.LoggerLogs = string(loggerLogs)
+		}
+	}
+
 	// 生成URL哈希（用于快速搜索）
 	model.URLHash = ds.generateURLHash(entry.URL)
 
@@ -479,6 +489,13 @@ func (ds *DatabaseStorage) modelToEntry(model *LogEntryModel) (*LogEntry, error)
 	if model.SessionData != "" {
 		if err := json.Unmarshal([]byte(model.SessionData), &entry.SessionData); err != nil {
 			return nil, fmt.Errorf("解析会话数据失败: %v", err)
+		}
+	}
+
+	// 解析Logger日志字段
+	if model.LoggerLogs != "" {
+		if err := json.Unmarshal([]byte(model.LoggerLogs), &entry.LoggerLogs); err != nil {
+			return nil, fmt.Errorf("解析Logger日志失败: %v", err)
 		}
 	}
 
