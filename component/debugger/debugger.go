@@ -555,7 +555,8 @@ func (d *Debugger) recordErrorInfo(entry *LogEntry, c *gin.Context) {
 // recordLoggerLogs 记录logger收集的日志
 func (d *Debugger) recordLoggerLogs(entry *LogEntry, c *gin.Context) {
 	if loggerValue, exists := c.Get("debugger_logger"); exists {
-		if logger, ok := loggerValue.(*DefaultLogger); ok {
+		// 使用接口断言而非具体类型断言，因为logger可能通过接口返回
+		if logger, ok := loggerValue.(LoggerInterface); ok {
 			// 获取logger收集的所有日志
 			entry.LoggerLogs = logger.GetLogs()
 			// 清空logger的日志记录，避免内存泄漏

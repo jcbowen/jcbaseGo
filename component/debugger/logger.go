@@ -58,6 +58,12 @@ type LoggerInterface interface {
 
 	// GetLevel 获取当前日志记录器的日志级别
 	GetLevel() LogLevel
+
+	// GetLogs 获取收集的日志信息
+	GetLogs() []LoggerLog
+
+	// ClearLogs 清空收集的日志信息
+	ClearLogs()
 }
 
 // ----- DefaultLogger 方法实现
@@ -724,6 +730,22 @@ func (p *ProcessLogger) GetProcessID() string {
 	return p.processID
 }
 
+// GetLogs 获取收集的日志信息
+// 委托给内部DefaultLogger实现
+//
+// 返回值:
+//
+//	[]LoggerLog: 日志条目切片
+func (p *ProcessLogger) GetLogs() []LoggerLog {
+	return p.logger.GetLogs()
+}
+
+// ClearLogs 清空收集的日志信息
+// 委托给内部DefaultLogger实现
+func (p *ProcessLogger) ClearLogs() {
+	p.logger.ClearLogs()
+}
+
 // GetProcessName 获取进程名称
 // 返回当前进程的名称，用于标识进程用途
 //
@@ -868,6 +890,16 @@ func (l *MainLogger) WithFields(fields map[string]interface{}) LoggerInterface {
 func (l *MainLogger) GetLevel() LogLevel {
 	return l.level
 }
+
+// GetLogs 获取收集的日志信息
+// MainLogger不支持此操作，返回空切片
+func (l *MainLogger) GetLogs() []LoggerLog {
+	return []LoggerLog{}
+}
+
+// ClearLogs 清空收集的日志信息
+// MainLogger不支持此操作，为空操作
+func (l *MainLogger) ClearLogs() {}
 
 // log 内部日志记录方法
 // - level: 日志级别（info/warn/error/silent）
@@ -1096,6 +1128,14 @@ func (l noopLogger) WithFields(fields map[string]interface{}) LoggerInterface {
 func (l noopLogger) GetLevel() LogLevel {
 	return LevelSilent
 }
+
+// GetLogs 空操作实现，返回空切片
+func (l noopLogger) GetLogs() []LoggerLog {
+	return []LoggerLog{}
+}
+
+// ClearLogs 空操作实现
+func (l noopLogger) ClearLogs() {}
 
 // GetLoggerFromContext 从Gin上下文中获取Logger实例
 // 控制器可以通过此函数获取Logger来记录日志
