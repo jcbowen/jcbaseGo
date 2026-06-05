@@ -11,6 +11,9 @@ Helper 工具包提供了大量常用的工具函数，包括类型转换、文�
 - [component/helper/money.go](mdc:component/helper/money.go) - 金额处理工具
 - [component/helper/ssh.go](mdc:component/helper/ssh.go) - SSH 密钥管理工具
 - [component/helper/util.go](mdc:component/helper/util.go) - 通用工具函数
+- [component/helper/ip.go](mdc:component/helper/ip.go) - IP 地址处理工具
+- [component/helper/http.go](mdc:component/helper/http.go) - HTTP 请求处理工具
+- [component/helper/unit.go](mdc:component/helper/unit.go) - 单位转换工具
 
 ## 类型转换工具 (convert.go)
 
@@ -336,18 +339,9 @@ fmt.Printf("数据库配置: %+v", dbConfig)
 
 ### 其他实用工具
 ```go
-// 生成唯一 ID
-uniqueID := helper.GenerateUUID()
-fmt.Printf("唯一ID: %s", uniqueID)
-
-// 时间戳转换
-timestamp := time.Now().Unix()
-timeStr := helper.TimestampToString(timestamp, "2006-01-02 15:04:05")
-fmt.Printf("时间字符串: %s", timeStr)
-
 // 获取主机信息（需要 HTTP 请求对象）
-// hostInfo := helper.GetHostInfo(request)
-// fmt.Printf("主机信息: %s", hostInfo)
+hostInfo := helper.GetHostInfo(request)
+fmt.Printf("主机信息: %s", hostInfo)
 
 // MD5 哈希
 text := "Hello, World!"
@@ -357,6 +351,28 @@ fmt.Printf("MD5 哈希: %s", md5Hash)
 // SHA256 哈希
 sha256Hash := helper.SHA256(text)
 fmt.Printf("SHA256 哈希: %s", sha256Hash)
+
+// 生成随机字符串
+randomStr := helper.Random(16)
+fmt.Printf("随机字符串: %s", randomStr)
+
+// IP 地址处理
+ip := helper.NewIP("192.168.1.1")
+if ip.IsValid() {
+    fmt.Printf("IP 有效，是否为私有地址: %t", ip.IsPrivate())
+}
+
+// HTTP 头提取
+headers := helper.ExtractHeaders(request.Header)
+fmt.Printf("请求头: %+v", headers)
+
+// 单位转换
+storageSize := helper.ParseUnit("1.5GB")
+fmt.Printf("存储大小: %.0f 字节", storageSize)
+
+// 时间单位转换
+timeValue := helper.ParseUnit("2h")
+fmt.Printf("时间: %.0f 秒", timeValue)
 ```
 
 ## 最佳实践

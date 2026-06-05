@@ -88,9 +88,13 @@ func main() {
 
 	// 创建Gin路由
 	router := gin.New()
-	
-	// 使用调试器中间件
+
+	// 使用调试器中间件（默认顺序）
 	router.Use(dbg.Middleware())
+
+	// 或者指定中间件执行顺序
+	// router.Use(dbg.MiddlewareWithOrder("early"))  // 优先执行
+	// router.Use(dbg.MiddlewareWithOrder("late"))   // 最后执行
 	
 	// 添加业务路由
 	router.GET("/api/users", func(c *gin.Context) {
@@ -124,12 +128,13 @@ customStorage, _ := debugger.NewMemoryStorage(150)
 dbg, err := debugger.NewWithCustomStorage(customStorage)
 
 // 方式5：生产环境调试器
-	dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs")
-	if err != nil {
-		panic(err)
-	}
+		dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs")
+		if err != nil {
+			panic(err)
+		}
 
-router.Use(dbg.Middleware())
+		router.Use(dbg.Middleware())
+		// 或指定中间件顺序: router.Use(dbg.MiddlewareWithOrder("early"))
 ```
 
 ##### 手动配置方式（高级使用）
@@ -148,14 +153,25 @@ config := &debugger.Config{
 	MaxRecords:      150,                     // 最大记录数量，默认150
 
 	// 过滤配置
-	SkipPaths:   []string{"/static", "/health"}, // 跳过的路径
-	SkipMethods: []string{"OPTIONS"},              // 跳过的HTTP方法
+	SkipPaths:        []string{"/static", "/health"}, // 跳过的路径
+	SkipMethods:      []string{"OPTIONS"},              // 跳过的HTTP方法
+	AutoSkipStatic:   true,                              // 自动跳过静态资源请求
+	StaticExtensions: []string{".css", ".js", ".png"},   // 自定义静态资源扩展名
 
 	// 采样配置
 	SampleRate: 1.0,                            // 采样率（0-1之间），默认1.0（记录所有请求）
 
 	// IP访问控制配置
 	AllowedIPs: []string{},                     // 允许访问的IP白名单，空数组表示不限制
+
+	// Multipart请求配置
+	EnableMultipartSupport: true,               // 启用multipart请求支持
+	MultipartMaxPartSize:   64,                 // multipart单个部分最大大小（KB）
+	MultipartSkipFiles:     false,              // 是否跳过文件内容记录
+	MultipartPreserveState: true,               // 保持Gin上下文状态
+
+	// 中间件执行顺序配置
+	MiddlewareOrder: "normal",                  // 中间件执行顺序：normal/early/late
 
 	// 日志记录器配置（可选）
 	Logger:  nil,                              // 日志记录器实例
@@ -344,7 +360,7 @@ func main() {
 		c.Header("Connection", "keep-alive")
 
 		for i := 1; i <= 3; i++ {
-			c.Writer.Write([]byte(fmt.Sprintf("data: 消息 %d\\n\\n", i)))
+			c.Writer.Write([]byte(fmt.Sprintf("data: 消息 %d\n\n", i)))
 			c.Writer.(http.Flusher).Flush()
 			time.Sleep(1 * time.Second)
 		}
@@ -355,7 +371,7 @@ func main() {
 		c.Header("Transfer-Encoding", "chunked")
 		
 		for i := 1; i <= 4; i++ {
-			chunk := fmt.Sprintf("分块 %d 内容\\n", i)
+			chunk := fmt.Sprintf("分块 %d 内容\n", i)
 			c.Writer.Write([]byte(chunk))
 			c.Writer.(http.Flusher).Flush()
 			time.Sleep(500 * time.Millisecond)
@@ -1774,6 +1790,15 @@ type LogEntry struct {
 	StreamingStatus string            `json:"streaming_status,omitempty"` // 流式状态：started/processing/completed
 	ChunkCount      int               `json:"chunk_count,omitempty"`     // 流式响应块数量
 	StreamingData   map[string]interface{} `json:"streaming_data,omitempty"` // 流式响应相关数据
+
+	// 主机信息
+	Host            string            `json:"host,omitempty"`            // 请求主机信息
+
+	// 时间信息
+	EndTime         time.Time         `json:"end_time,omitempty"`        // 请求结束时间
+
+	// Logger日志
+	LoggerLogs      []LoggerLog       `json:"logger_logs,omitempty"`     // 关联的Logger日志列表
 }
 ```
 
@@ -1788,11 +1813,18 @@ type Config struct {
 	MaxRecords            int              // 最大记录数量
 	SkipPaths             []string         // 跳过的路径
 	SkipMethods           []string         // 跳过的HTTP方法
+	AutoSkipStatic        bool             // 是否自动跳过静态资源请求
+	StaticExtensions      []string         // 静态资源扩展名列表
 	SampleRate            float64          // 采样率（0-1之间）
 	Logger                LoggerInterface  // 日志记录器实例
 	AllowedIPs            []string         // 允许访问的IP白名单
 	UseCDN                bool             // 是否使用CDN获取真实IP
-	EnableStreamingSupport bool             // 启用流式请求支持
+	EnableStreamingSupport bool            // 启用流式请求支持
+	EnableMultipartSupport bool            // 启用multipart请求支持
+	MultipartMaxPartSize   int64           // multipart单个部分最大大小（KB）
+	MultipartSkipFiles     bool            // 是否跳过文件内容记录
+	MultipartPreserveState bool            // 是否保持Gin上下文状态
+	MiddlewareOrder        string          // 中间件执行顺序：normal/early/late
 }
 ```
 
@@ -1832,7 +1864,7 @@ type LoggerInterface interface {
 	WithFields(fields map[string]interface{}) LoggerInterface
 
 	// GetLevel 获取当前日志记录器的日志级别
-	GetLevel() string
+	GetLevel() LogLevel
 }
 ```
 

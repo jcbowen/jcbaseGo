@@ -393,6 +393,105 @@ err := db.GetDb().Transaction(func(tx *gorm.DB) error {
 - **MySQL**：最大连接数 100，空闲连接数 10
 - **SQLite**：最大连接数 1，空闲连接数 1（SQLite 限制）
 
+### MySQL 自动重连机制
+
+MySQL 实例内置了自动重连机制，当数据库连接断开或失效时，会自动尝试重新建立连接。
+
+#### 重连配置
+
+```go
+// 默认重连配置
+type ReconnectConfig struct {
+    MaxRetries          int           // 最大重试次数，默认3次
+    RetryInterval       time.Duration // 重试间隔，默认1秒
+    PingTimeout         time.Duration // Ping测试超时时间，默认2秒
+    EnableAutoReconnect bool          // 是否启用自动重连，默认true
+}
+
+// 获取默认重连配置
+config := mysql.DefaultReconnectConfig()
+```
+
+#### 配置重连参数
+
+```go
+// 创建数据库实例
+db, err := mysql.New(dbConfig)
+if err != nil {
+    panic(err)
+}
+
+// 自定义重连配置
+db.SetReconnectConfig(mysql.ReconnectConfig{
+    MaxRetries:          5,
+    RetryInterval:       2 * time.Second,
+    PingTimeout:         3 * time.Second,
+    EnableAutoReconnect: true,
+})
+
+// 或使用链式配置
+db.EnableAutoReconnect().
+    SetMaxRetries(5).
+    SetRetryInterval(2 * time.Second).
+    SetPingTimeout(3 * time.Second)
+
+// 禁用自动重连
+db.DisableAutoReconnect()
+
+// 获取当前重连配置
+config := db.GetReconnectConfig()
+fmt.Printf("重试次数: %d\n", config.MaxRetries)
+```
+
+#### 重连机制说明
+
+1. **连接有效性检查**：每次调用 `GetDb()` 时，会检查连接是否有效（基于30秒缓存）
+2. **自动重连**：当连接失效时，自动尝试重新建立连接
+3. **并发安全**：使用读写锁保护，支持高并发场景
+4. **调试模式恢复**：重连后自动恢复 SQL 日志记录或 Debug 模式
+5. **连接池重建**：重连时重新配置连接池参数
+
+#### 使用示例
+
+```go
+package main
+
+import (
+    "fmt"
+    "time"
+    "github.com/jcbowen/jcbaseGo/component/orm/mysql"
+)
+
+func main() {
+    dbConfig := jcbaseGo.DbStruct{
+        Username: "root",
+        Password: "password",
+        Host:     "localhost",
+        Port:     "3306",
+        Dbname:   "testdb",
+    }
+
+    db, err := mysql.New(dbConfig)
+    if err != nil {
+        panic(err)
+    }
+
+    // 配置重连参数（可选，使用默认值通常已足够）
+    db.SetMaxRetries(5).
+        SetRetryInterval(2 * time.Second).
+        SetPingTimeout(3 * time.Second)
+
+    // 获取数据库连接（会自动检查连接有效性）
+    gormDB := db.GetDb()
+    if gormDB == nil {
+        fmt.Println("数据库连接失败，无法重连")
+        return
+    }
+
+    // 正常使用数据库...
+}
+```
+
 ### 查询优化
 
 1. **使用索引**：确保常用查询字段有索引
@@ -432,10 +531,11 @@ type Instance interface {
 
 ### MySQL Instance 方法
 
-- `New(dbConfig DbStruct, opts ...string) *Instance` - 创建实例
-- `NewWithDebugger(dbConfig DbStruct, debuggerLogger debugger.LoggerInterface, opts ...string) *Instance` - 创建并集成 Debugger
+- `New(dbConfig DbStruct, opts ...string) (*Instance, error)` - 创建实例
+- `NewWithDebugger(dbConfig DbStruct, debuggerLogger debugger.LoggerInterface, opts ...string) (*Instance, error)` - 创建并集成 Debugger
+- `DefaultReconnectConfig() ReconnectConfig` - 获取默认重连配置
 - `Debug() *Instance` - 开启调试模式
-- `GetDb() *gorm.DB` - 获取数据库连接（支持调试模式优先级：debuggerLogger > debug标志）
+- `GetDb() *gorm.DB` - 获取数据库连接（支持调试模式优先级：debuggerLogger > debug标志，自动重连）
 - `GetConf() interface{}` - 获取配置信息
 - `GetAllTableName() ([]AllTableName, error)` - 获取所有表名
 - `TableName(tableName *string, quotes ...bool) *Instance` - 处理表名
@@ -445,6 +545,13 @@ type Instance interface {
 - `SetDebuggerLogger(debugger.LoggerInterface)` - 设置 Debugger 日志记录器
 - `GetDebuggerLogger() debugger.LoggerInterface` - 获取 Debugger 日志记录器
 - `EnableSQLLogging(debugger.LoggerInterface, opts ...interface{}) *Instance` - 启用 SQL 日志记录
+- `SetReconnectConfig(config ReconnectConfig)` - 设置重连配置
+- `GetReconnectConfig() ReconnectConfig` - 获取重连配置
+- `EnableAutoReconnect() *Instance` - 启用自动重连
+- `DisableAutoReconnect() *Instance` - 禁用自动重连
+- `SetMaxRetries(maxRetries int) *Instance` - 设置最大重试次数
+- `SetRetryInterval(interval time.Duration) *Instance` - 设置重试间隔
+- `SetPingTimeout(timeout time.Duration) *Instance` - 设置 Ping 超时时间
 
 ### SQLite Instance 方法
 

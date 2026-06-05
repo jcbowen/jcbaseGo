@@ -9,10 +9,11 @@ description: 配置管理和环境配置规范
 项目使用 [config.go](mdc:config.go) 作为核心配置管理模块，支持多种配置源：
 
 ### 支持的配置类型
-- **ConfigTypeJSON**: JSON 格式配置文件
-- **ConfigTypeINI**: INI 格式配置文件
-- **ConfigTypeFile**: 根据文件扩展名自动识别
+- **ConfigTypeJSON**: JSON 格式配置文件（推荐）
+- **ConfigTypeINI**: INI 格式配置文件（推荐）
 - **ConfigTypeCommand**: 通过命令行脚本获取配置
+
+> **注意**: `ConfigTypeFile` 已弃用，不再推荐使用。请显式指定 `ConfigTypeJSON` 或 `ConfigTypeINI`。
 
 ### 配置结构体设计规范
 ```go
@@ -59,11 +60,63 @@ func initConfig() {
         ConfigType:   jcbaseGo.ConfigTypeJSON,
         ConfigSource: "config.json",
     })
-    
+
     // 获取配置实例
     appConfig := opt.GetConfig().(*AppConfig)
 }
 ```
+
+### 配置替换规则 (ConfigReplaceRules)
+
+支持在初始化时对配置进行动态替换，适用于不同环境需要覆盖特定配置值的场景。
+
+#### ConfigReplaceRule 结构
+
+```go
+type ConfigReplaceRule struct {
+    NodePath  string      // 节点路径，如 "title" 或 "db.host"
+    NewValue  interface{} // 新的配置值
+    Condition interface{} // 条件值（可选），只有当原节点值等于条件值时才替换
+}
+```
+
+#### 使用示例
+
+```go
+// 初始化配置并应用替换规则
+opt := jcbaseGo.New(jcbaseGo.Option{
+    ConfigData:   config,
+    ConfigType:   jcbaseGo.ConfigTypeJSON,
+    ConfigSource: "config.json",
+    ConfigReplaceRules: []jcbaseGo.ConfigReplaceRule{
+        // 无条件替换：将 title 替换为 "生产环境"
+        {
+            NodePath: "title",
+            NewValue: "生产环境",
+        },
+        // 条件替换：只有当 db.host 原值为 "localhost" 时才替换为 "prod.db.example.com"
+        {
+            NodePath:  "db.host",
+            NewValue:  "prod.db.example.com",
+            Condition: "localhost",
+        },
+        // 嵌套路径替换
+        {
+            NodePath: "server.port",
+            NewValue: 8080,
+        },
+    },
+})
+```
+
+#### 规则说明
+
+1. **NodePath**: 使用点号分隔的路径访问嵌套配置节点
+2. **NewValue**: 替换后的新值，支持任意类型
+3. **Condition**（可选）:
+   - 如果提供，只有当原节点值等于条件值时才执行替换
+   - 如果不提供，直接替换原节点值
+4. 替换规则按数组顺序依次执行
 
 ## 配置更新和迁移
 - 配置结构变更时自动生成新的配置文件

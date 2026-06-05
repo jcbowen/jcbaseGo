@@ -460,11 +460,21 @@ func main() {
 
 - **ToString()**: 将任意类型转换为字符串
 - **ToInt()**: 转换为 int 类型
-- **ToInt64()**: 转换为 int64 类型  
+- **ToInt8()**: 转换为 int8 类型
+- **ToInt64()**: 转换为 int64 类型
+- **ToUint()**: 转换为 uint 类型
+- **ToUint64()**: 转换为 uint64 类型
 - **ToFloat64()**: 转换为 float64 类型
 - **ToBool()**: 转换为 bool 类型
 - **ToFileMode()**: 转换为文件权限类型
 - **ToArrByte()**: 转换为字节数组
+- **ToNumber()**: 转换为数值类型（自动判断 int 或 float64）
+- **ToTime()**: 转换为 time.Time 类型
+- **ToMap()**: 转换为 map[string]interface{}
+- **ToMapString()**: 转换为 map[string]string
+- **ToSlice()**: 转换为 []interface{}
+- **ToDuration()**: 转换为 time.Duration 类型
+- **ToInterface()**: 返回原始接口值
 
 ### Str 字符串处理模块
 
@@ -472,11 +482,12 @@ func main() {
 
 - **字节操作**: ByteLength(), ByteSubstr()
 - **字符串截断**: Truncate(), TruncateWords()
-- **字符串检查**: StartsWith(), EndsWith()
+- **字符串检查**: StartsWith(), EndsWith(), Contains(), IsNumeric()
 - **字符串分割**: Explode(), CountWords()
 - **编码解码**: Base64UrlEncode(), Base64UrlDecode()
-- **格式转换**: ToUpper(), ToLower(), ConvertCamelToSnake()
-- **安全处理**: EscapeHTML(), TrimSpace()
+- **格式转换**: ToUpper(), ToLower(), ConvertCamelToSnake(), ConvertSnakeToCamel(), MbUcFirst(), MbUcWords()
+- **安全处理**: EscapeHTML(), TrimSpace(), Trim()
+- **数值处理**: SetFloat64(), FloatToString(), ParseUnit(), ToUnitValue(), IsUnitString(), GetUnitTypeFromString(), FormatAsUnit(), ConvertBetweenUnits()
 
 #### 核心函数说明
 
@@ -656,6 +667,7 @@ SSH 密钥的生成和获取：
 - **数组操作**: ArrayValue(), ArrayDiff(), ArrayIntersect()
 - **Map操作**: ArrayKeys(), ArrayValues(), GetData()
 - **排序支持**: DoSort()
+- **字段提取**: Extract(), ExtractString(), ExtractWithDefault(), ExtractInt(), ExtractInt64(), ExtractFloat64(), ExtractBool(), ExtractTime(), ExtractStringSlice()
 
 ### Map字段提取功能
 
@@ -1233,10 +1245,33 @@ func SetArrStr(str []string) *ArrStr
 func NewMap(mapData map[string]interface{}) *MapHelper
 func StrReplace(search interface{}, replace interface{}, subject interface{}, count int) (interface{}, error)
 func StringStartWith(str, prefix string) bool
-```
 func StringEndWith(str, suffix string) bool
 func InArray(needle interface{}, haystack []string) bool
 func MatchWildcard(pattern, s string, caseSensitive bool) bool
+func Random(length int) string
+func MD5(text string) string
+func SHA256(text string) string
+func Base64Encode(data []byte) string
+func Base64Decode(s string) ([]byte, error)
+func IsError(err error) bool
+func IsEmptyValue(v interface{}) bool
+func CheckAndSetDefault(config interface{}) error
+func CheckAndSetDefaultWithPreserveTag(config interface{}) error
+func StructToMap(obj interface{}) map[string]interface{}
+func MapToStruct(m map[string]interface{}, target interface{}) error
+func CopyStruct(src, dst interface{}) error
+func StructMerge(dst, src interface{}) error
+func GetFieldNameByJSONTag(t reflect.Type, jsonTag string) string
+func CalculateAge(birthDate string) int
+func ParseIP(ip string) *IP
+func ParseChineseIDCard(idCard string) (map[string]interface{}, error)
+func CompareNumber(a, b interface{}) int
+func Max(a, b interface{}) interface{}
+func Min(a, b interface{}) interface{}
+func TraceCaller(skip int) (file string, line int, function string)
+func FindAvailablePort(startPort int) int
+func BuildYii2RedisCacheKey(key string) string
+func CompareVersion(v1, v2 string) int
 ```
 
 ## 版本历史

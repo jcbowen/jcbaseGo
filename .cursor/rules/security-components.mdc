@@ -25,6 +25,28 @@ description: 安全组件开发规范和使用指导
 - 文件：[component/security/password.go](mdc:component/security/password.go)
 - 使用 bcrypt 进行密码哈希和验证
 
+## 安全输入处理 (safe.go)
+- 文件：[component/security/safe.go](mdc:component/security/safe.go)
+- **Input 结构体**：提供安全的输入处理功能
+  - `Sanitize()`：自动判断类型并进行通用清理，支持字符串、切片、Map、结构体
+  - `SanitizeString(str string, args ...any)`：清理字符串以防止 SQL 注入和 XSS 攻击，支持多种清理类型（badStr、htmlEntity、sql、xss）
+  - `Belong(allow interface{}, strict bool)`：检查值是否属于允许列表
+  - `Html()`：清理并返回安全的 HTML 内容
+- **清理类型说明**：
+  - `badStr`：替换潜在有害子字符串（如 null 字节、路径遍历等）
+  - `htmlEntity`：处理 HTML 实体字符
+  - `sql`：过滤 SQL 关键字（union、select、insert 等）
+  - `xss`：移除 XSS 攻击向量（事件属性、危险标签等）
+
+## 基础安全类型和通用加密 (base.go)
+- 文件：[component/security/base.go](mdc:component/security/base.go)
+- **CipherConfig 结构体**：加密配置管理
+  - 支持 AES-128-CBC、AES-192-CBC、AES-256-CBC 等加密算法
+  - 可配置 KDF 哈希算法、MAC 哈希算法、派生迭代次数
+- **GenerateRandomBytes(length int)`**：生成指定长度的安全随机字节
+- **Encrypt(data, secret string, passwordBased bool, config CipherConfig)`**：通用加密函数，支持密码派生和密钥派生两种模式
+- **Decrypt(data, secret string, passwordBased bool, config CipherConfig)`**：通用解密函数，带 HMAC 认证验证
+
 ## 最佳实践
 - 密钥建议通过配置或环境变量注入，避免硬编码
 - 错误日志不应泄露明文或密钥

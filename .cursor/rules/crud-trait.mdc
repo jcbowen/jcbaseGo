@@ -422,7 +422,7 @@ func (i *Index) DeleteBefore(delArr []map[string]interface{}, delIds []interface
 #### DeleteAfter - 删除后钩子
 ```go
 // 删除后的清理工作（在事务内执行）
-func (i *Index) DeleteAfter(delIds []interface{}, delArr []map[string]interface{}) error {
+func (i *Index) DeleteAfter(tx *gorm.DB, delIds []interface{}, delArr []map[string]interface{}) error {
     // 删除相关的用户资料
     if err := tx.Where("user_id IN ?", delIds).Delete(&userModel.Profile{}).Error; err != nil {
         return err

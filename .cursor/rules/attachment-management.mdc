@@ -34,9 +34,10 @@ import (
 func uploadHandler(c *gin.Context) {
     // 基础配置
     baseConfig := &jcbaseGo.AttachmentStruct{
-        StorageType:  "local",           // 存储类型
-        LocalDir:     "data/attachment", // 本地存储目录
-        VisitDomain:  "/",               // 访问域名
+        StorageType:      "local",           // 存储类型
+        LocalDir:         "data/attachment", // 本地存储目录
+        VisitDomain:      "/",               // 附件访问域名（远程附件时为远程域名，本地时为本地域名）
+        LocalVisitDomain: "/",               // 本地附件访问域名（始终指向本地，不受远程配置影响）
     }
 
     // 远程配置（可选，取决于存储类型）
@@ -45,7 +46,9 @@ func uploadHandler(c *gin.Context) {
         remoteConfig = jcbaseGo.COSStruct{
             SecretId:  "your-secret-id",
             SecretKey: "your-secret-key",
-            Url:       "https://bucket.cos.region.myqcloud.com",
+            Bucket:    "your-bucket-name",
+            Region:    "ap-guangzhou",
+            Url:       "https://your-bucket.cos.ap-guangzhou.myqcloud.com",
         }
     }
 
@@ -161,7 +164,9 @@ fullURL := att.ToMedia(relativePath, false, true)
 cosConfig := jcbaseGo.COSStruct{
     SecretId:  "your-secret-id",
     SecretKey: "your-secret-key",
-    Url:       "https://bucket.cos.region.myqcloud.com",
+    Bucket:    "your-bucket-name",
+    Region:    "ap-guangzhou",
+    Url:       "https://your-bucket.cos.ap-guangzhou.myqcloud.com",
     CustomizeVisitDomain: "https://your-custom-domain.com/",
 }
 ```
