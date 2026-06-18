@@ -167,6 +167,17 @@ func (c Convert) ToInt() int {
 			return 0
 		}
 		return i
+	case []byte:
+		i, err := strconv.ParseInt(string(v), 10, 64)
+		if err != nil {
+			log.Println("Error parsing int from []byte:", err)
+			return 0
+		}
+		if i < math.MinInt || i > math.MaxInt {
+			log.Println("Int value out of range from []byte:", i)
+			return 0
+		}
+		return int(i)
 	default:
 		return 0
 	}
@@ -199,6 +210,13 @@ func (c Convert) ToInt64() int64 {
 		i, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
 			log.Println("Error parsing int64 from string:", err)
+			return 0
+		}
+		return i
+	case []byte:
+		i, err := strconv.ParseInt(string(v), 10, 64)
+		if err != nil {
+			log.Println("Error parsing int64 from []byte:", err)
 			return 0
 		}
 		return i
@@ -241,6 +259,17 @@ func (c Convert) ToInt8() int8 {
 			return 0
 		}
 		if i < int64(math.MinInt8) || i > int64(math.MaxInt8) {
+			return 0
+		}
+		return int8(i)
+	case []byte:
+		i, err := strconv.ParseInt(string(v), 10, 64)
+		if err != nil {
+			log.Println("Error parsing int8 from []byte:", err)
+			return 0
+		}
+		if i < int64(math.MinInt8) || i > int64(math.MaxInt8) {
+			log.Println("Int8 value out of range from []byte:", i)
 			return 0
 		}
 		return int8(i)
@@ -303,6 +332,18 @@ func (c Convert) ToUint64() uint64 {
 			return 0
 		}
 		return u
+	case []byte:
+		s := string(v)
+		if len(s) > 0 && s[0] == '-' {
+			log.Println("Error parsing uint64 from []byte: negative value")
+			return 0
+		}
+		u, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			log.Println("Error parsing uint64 from []byte:", err)
+			return 0
+		}
+		return u
 	default:
 		return 0
 	}
@@ -323,6 +364,17 @@ func (c Convert) ToNumber() (interface{}, bool) {
 			return u, true
 		}
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f, true
+		}
+	case []byte:
+		s := string(v)
+		if i, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return i, true
+		}
+		if u, err := strconv.ParseUint(s, 10, 64); err == nil {
+			return u, true
+		}
+		if f, err := strconv.ParseFloat(s, 64); err == nil {
 			return f, true
 		}
 	case int, int8, int16, int32, int64:
