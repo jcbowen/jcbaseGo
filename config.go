@@ -15,6 +15,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"gopkg.in/ini.v1"
+	"gopkg.in/yaml.v3"
 )
 
 // Config 实例化后配置信息将储存在此全局变量中
@@ -206,13 +207,15 @@ func (opt *Option) checkConfig() {
 			opt.ConfigType = ConfigTypeJSON
 		case ".ini":
 			opt.ConfigType = ConfigTypeINI
+		case ".yaml", ".yml":
+			opt.ConfigType = ConfigTypeYAML
 		default:
 			log.Fatalf("不支持的配置文件类型: %s", ext)
 		}
 	}
 
 	switch opt.ConfigType {
-	case ConfigTypeJSON, ConfigTypeINI, ConfigTypeFile:
+	case ConfigTypeJSON, ConfigTypeINI, ConfigTypeYAML, ConfigTypeFile:
 		// 获取配置文件绝对路径
 		fileNameFull := opt.getConfigFilePath()
 		// 如果配置文件不存在，则创建
@@ -311,7 +314,7 @@ func (opt *Option) createConfigFileIfNotExists(fileNameFull string) {
 }
 
 // readConfigFile 读取配置文件并解析到结构体中
-// 支持 INI 和 JSON 两种格式
+// 支持 INI、JSON 和 YAML 三种格式
 // INI 格式支持多级嵌套，使用点号(.)分隔，第一级为节名，后续为字段名
 // 例如：[Database] db.name = test 会被解析到 Database 结构体的 DB 字段的 Name 属性
 func (opt *Option) readConfigFile(fileNameFull string) {
@@ -450,6 +453,15 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 				}
 			}
 		}
+	case ConfigTypeYAML:
+		// YAML 格式直接解析到结构体
+		// 注意：yaml.v3 与 encoding/json 对 *interface{} 的处理不同。
+		// 当 ConfigData 为结构体指针时，传入 &opt.ConfigData 会导致解析结果变成 map[string]interface{}，
+		// 因此这里直接传入 opt.ConfigData（其动态值应为结构体指针）。
+		err = yaml.Unmarshal(file, opt.ConfigData)
+		if err != nil {
+			log.Fatalf("解析YAML配置文件错误: %v", err)
+		}
 	case ConfigTypeJSON:
 		// JSON 格式直接解析到结构体
 		err = json.Unmarshal(file, &opt.ConfigData)
@@ -478,6 +490,12 @@ func (opt *Option) updateConfigFile(fileNameFull string, overwrite bool) {
 			log.Fatalf("写入INI缓冲区错误: %v", err)
 		}
 		err = helper.NewFile(&helper.File{Path: fileNameFull}).CreateFile(buf.Bytes(), overwrite)
+	case ConfigTypeYAML:
+		fileData, err = yaml.Marshal(opt.ConfigData)
+		if err != nil {
+			log.Fatalf("转换YAML错误: %v", err)
+		}
+		err = helper.NewFile(&helper.File{Path: fileNameFull}).CreateFile(fileData, overwrite)
 	case ConfigTypeJSON:
 		fileData, err = json.MarshalIndent(opt.ConfigData, "", " ")
 		if err != nil {

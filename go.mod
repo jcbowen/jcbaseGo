@@ -15,6 +15,7 @@ require (
 	github.com/tjfoc/gmsm v1.4.1
 	golang.org/x/crypto v0.37.0
 	gopkg.in/ini.v1 v1.67.0
+	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.4.1
 	gorm.io/driver/sqlite v1.5.6
 	gorm.io/gorm v1.25.7-0.20240204074919-46816ad31dde
@@ -61,5 +62,4 @@ require (
 	golang.org/x/text v0.24.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

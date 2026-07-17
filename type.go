@@ -7,10 +7,11 @@ import (
 const (
 	ConfigTypeJSON    = "json"    // 配置类型：json文件
 	ConfigTypeINI     = "ini"     // 配置类型：ini文件
+	ConfigTypeYAML    = "yaml"    // 配置类型：yaml文件
 	ConfigTypeCommand = "command" // 配置类型：通过命令行传递的字符串json
 
-	// ConfigTypeFile 文件类型，根据文件后缀自动识别是json还是ini文件
-	// Deprecated: 推荐使用ConfigTypeJSON或者ConfigTypeINI，保留仅为了兼容旧版
+	// ConfigTypeFile 文件类型，根据文件后缀自动识别是json、ini还是yaml文件
+	// Deprecated: 推荐使用ConfigTypeJSON、ConfigTypeINI或ConfigTypeYAML，保留仅为了兼容旧版
 	ConfigTypeFile = "file"
 )
 
@@ -23,7 +24,7 @@ type ConfigReplaceRule struct {
 
 // Option jcbaseGo配置选项
 type Option struct {
-	ConfigType         string              `json:"config_type" ini:"config_type" default:"file"`                        // 配置类型，仅支持：json、ini、command
+	ConfigType         string              `json:"config_type" ini:"config_type" default:"file"`                        // 配置类型，支持：json、ini、yaml、command、file
 	ConfigSource       string              `json:"config_source" ini:"config_source" default:"./data/conf.ini"`         // 配置源（json文件/ini文件/命令行）
 	ConfigData         interface{}         `json:"config_data" ini:"config_data"`                                       // 配置信息
 	RuntimePath        string              `json:"runtime_path" ini:"runtime_path" default:"./data/runtime/"`           // 运行缓存目录，默认在data目录下
