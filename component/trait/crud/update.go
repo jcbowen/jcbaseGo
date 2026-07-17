@@ -72,11 +72,11 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 
 		// 仅更新传入的字段
 		var updateFields []string
-		if helper.InArray("updated_at", t.ModelFields) {
+		if helper.InArray("updated_at", t.ModelFields) && !t.isGormUpdateIgnored("updated_at") {
 			updateFields = append(updateFields, "updated_at")
 		}
 		for key := range mapData {
-			if helper.InArray(key, t.ModelFields) {
+			if helper.InArray(key, t.ModelFields) && !t.isGormUpdateIgnored(key) {
 				updateFields = append(updateFields, key)
 			}
 		}

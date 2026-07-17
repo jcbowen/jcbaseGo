@@ -5,20 +5,55 @@
 ORM 基础模型位于 [component/orm/base/](mdc:component/orm/base/)，提供了 MySQL 和 SQLite 两种数据库的基础模型，包含通用的字段定义、软删除配置、时间戳管理等功能。
 
 ### 核心文件
+- [base_common.go](mdc:component/orm/base/base_common.go) - 跨数据库通用基础模型
 - [base_mysql.go](mdc:component/orm/base/base_mysql.go) - MySQL 基础模型
-- [base_sqlite.go](mdc:component/orm/base/base_sqlite.go) - SQLite 基础模型  
+- [base_sqlite.go](mdc:component/orm/base/base_sqlite.go) - SQLite 基础模型
 - [model_utils.go](mdc:component/orm/base/model_utils.go) - 模型工具函数
 
 ## 基础模型类型
+
+### CommonBaseModel - 跨数据库通用基础模型
+
+`CommonBaseModel` 是不绑定具体数据库驱动的通用基础模型，业务模型可直接嵌入以获得统一的 `ModelParse`、创建/更新钩子能力。
+
+```go
+package base
+
+// CommonBaseModel 跨数据库通用基础模型
+// 不绑定具体数据库驱动，字段由业务模型自行定义。
+// 提供 CRUD trait 所需的 ModelParse 方法以及 GORM 创建/更新钩子。
+type CommonBaseModel struct{}
+```
+
+#### 表名生成规则
+1. 优先使用模型自定义的 `TableName() string` 方法。
+2. 否则读取环境变量中的数据库配置：
+   - 优先读取 MySQL 配置：`jc_mysql_<alias>`
+   - 未配置时再读取 SQLite 配置：`jc_sql_lite_<alias>`
+3. 使用配置中的 `TablePrefix` 作为默认表前缀。
+4. 将模型名称从驼峰转换为下划线格式。
+5. 根据配置中的 `SingularTable` 决定是否添加复数后缀 `s`。
+6. 模型自定义的 `TablePrefix() string` 优先级高于数据库配置中的前缀。
+
+#### 配置别名
+- 默认别名为 `"db"`。
+- 模型可实现 `ConfigAlias() string` 方法自定义别名。
+
+#### 数据库配置回退说明
+`CommonBaseModel` 为通用模型，在找不到首选数据库配置时会按 `[mysql, sqlite]` 顺序回退读取，便于跨库复用模型定义。
+`MysqlBaseModel` 与 `SqliteBaseModel` 为保持向后兼容，分别只读取自身对应的数据库环境变量，不会交叉回退。
 
 ### MysqlBaseModel - MySQL 基础模型
 ```go
 package base
 
 // MysqlBaseModel MySQL 基础模型
-// 提供 MySQL 数据库的标准字段和方法
+// 继承 CommonBaseModel 的 ModelParse、BeforeCreate、BeforeUpdate 等方法。
+// 当前版本默认字段已注释，业务模型如需使用 id/created_at/updated_at/deleted_at 等字段需自行定义，
+// 以获得更灵活的字段类型和数据库特性控制。
 type MysqlBaseModel struct {
-    // 注释中的字段定义展示了默认的数据库字段结构：
+    CommonBaseModel
+    // 以下为历史默认字段参考，当前已注释：
     // Id        uint   `gorm:"column:id;type:INT(11) UNSIGNED;primaryKey;autoIncrement" json:"id"`
     // UpdatedAt string `gorm:"column:updated_at;type:DATETIME;default:NULL;comment:更新时间" json:"updated_at"`
     // CreatedAt string `gorm:"column:created_at;type:DATETIME;default:NULL;comment:创建时间" json:"created_at"`
@@ -31,9 +66,11 @@ type MysqlBaseModel struct {
 package base
 
 // SqliteBaseModel SQLite 基础模型
-// 提供 SQLite 数据库的标准字段和方法
+// 继承 CommonBaseModel 的 ModelParse、BeforeCreate、BeforeUpdate 等方法。
+// 当前版本默认字段已注释，业务模型如需使用 id/created_at/updated_at/deleted_at 等字段需自行定义。
 type SqliteBaseModel struct {
-    // 注释中的字段定义展示了默认的数据库字段结构：
+    CommonBaseModel
+    // 以下为历史默认字段参考，当前已注释：
     // Id        uint   `gorm:"column:id;type:INTEGER;primaryKey;autoIncrement" json:"id"`
     // UpdatedAt string `gorm:"column:updated_at;type:STRING;default:NULL" json:"updated_at"`
     // CreatedAt string `gorm:"column:created_at;type:STRING;default:NULL" json:"created_at"`
@@ -153,7 +190,11 @@ func (b *MysqlBaseModel) ModelParse(modelType reflect.Type) (
 ### 字段解析规则
 1. 优先使用 `gorm:"column:字段名"` 标签指定的字段名
 2. 如果没有 column 标签，将字段名从驼峰转换为下划线格式
-3. 跳过基础模型本身的字段（`MysqlBaseModel`、`SqliteBaseModel`）
+3. 跳过 `gorm:"-"` 和 `gorm:"-:all"` 等**完全忽略**字段
+4. `gorm:"-:create"`、`gorm:"-:update"`、`gorm:"-:migrate"` 等**部分忽略**标签不会使字段从 CRUD 字段列表中移除；CRUD 的 `ActionUpdate` / `ActionSetValue` 等更新类操作会进一步过滤掉 `gorm:"-:update"` / `gorm:"-:all"` 字段
+5. 跳过基础模型本身的字段（`CommonBaseModel`、`MysqlBaseModel`、`SqliteBaseModel`）
+6. 匿名嵌入的结构体字段会被递归展开，其内部字段会加入模型字段列表
+7. 多层嵌入出现同名字段时自动去重
 
 ### 软删除配置优先级
 1. **最高优先级**：`gorm:"soft_delete:条件"` 标签
@@ -195,6 +236,17 @@ type User struct {
     base.MysqlBaseModel
     // 使用特殊默认值，0000-00-00 00:00:00 表示未删除
     DeletedAt string `gorm:"column:deleted_at;type:DATETIME;default:0000-00-00 00:00:00" json:"deleted_at"`
+}
+```
+
+### 默认值含单引号
+当 `soft_delete` 未显式指定条件，且根据 `default` 值推断条件时，若 `default` 值包含单引号，框架会自动将其转义为 `''`，避免拼接 SQL 条件时出现语法错误。
+
+```go
+type User struct {
+    base.MysqlBaseModel
+    // default 值为 O'Brien 时，软删除条件会生成 = 'O''Brien'
+    IsDeleted string `gorm:"column:is_deleted;default:O'Brien;soft_delete" json:"is_deleted"`
 }
 ```
 
@@ -264,8 +316,9 @@ func (u *User) BeforeUpdate(tx *gorm.DB) (err error) {
 ## 配置别名管理
 
 ### 默认配置别名
-- MySQL 基础模型：默认别名为 `"db"`
-- SQLite 基础模型：默认别名为 `"main"`
+- 通用基础模型 `CommonBaseModel`：默认别名为 `"db"`
+- MySQL 基础模型 `MysqlBaseModel`：默认别名为 `"db"`
+- SQLite 基础模型 `SqliteBaseModel`：默认别名为 `"main"`
 
 ### 自定义配置别名
 ```go
@@ -486,6 +539,35 @@ func migrateOldUserToNew(db *gorm.DB) error {
 - 新增字段不影响现有功能
 - 软删除配置可以动态调整
 - 支持渐进式升级
+
+### 升级注意事项
+
+#### 1. 匿名嵌入字段会被递归解析
+自引入 `CommonBaseModel` 后，`ModelParse` 会递归展开匿名嵌入结构体中的字段并加入 `ModelFields`。若你的旧模型中存在匿名嵌入的非基础模型结构体，升级后 CRUD 的字段列表、update/set-value 等操作会看到这些字段。
+
+**若不希望嵌入字段进入字段列表，可改用非匿名字段或加 `gorm:"-"`：**
+```go
+type User struct {
+    base.MysqlBaseModel
+    // 非匿名嵌入：内部字段不会被递归加入 ModelFields
+    Audit AuditInfo
+    // 或显式忽略
+    // Audit AuditInfo `gorm:"-"`
+}
+```
+
+#### 2. deleted_at 字段软删除条件保持保守策略
+系统默认的 `deleted_at` 字段（未带 `soft_delete` 标签）仅识别以下两种条件：
+- `default:0000-00-00 00:00:00` → `= '0000-00-00 00:00:00'`
+- 其他情况（包括 `default:0`、`default:''`、`default:NULL` 等）→ `IS NULL`
+
+如需使用非标准 `default` 值并生成自定义条件，请显式使用 `soft_delete` 标签：
+```go
+type User struct {
+    base.MysqlBaseModel
+    IsDeleted string `gorm:"column:is_deleted;default:0;soft_delete" json:"is_deleted"`
+}
+```
 
 ## 常见问题解决
 

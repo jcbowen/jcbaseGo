@@ -184,6 +184,9 @@ func (t *Trait) SetValueCheckField(ctx *Context, field string) error {
 	if !helper.InArray(field, t.ModelFields) {
 		return errors.New("参数错误，请传入有效的字段名")
 	}
+	if t.isGormUpdateIgnored(field) {
+		return errors.New("参数错误，该字段不允许更新")
+	}
 	return nil
 }
 

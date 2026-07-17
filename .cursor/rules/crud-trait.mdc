@@ -158,6 +158,7 @@ systemGroup.Use(middleware.LoginRequired())
 - **HTTP方法**: POST
 - **功能**: 更新现有数据记录
 - **请求参数**: 包含主键ID和要更新的字段数据
+- **字段过滤**: 标记为 `gorm:"-:update"` 或 `gorm:"-:all"` 的字段不会被更新
 - **返回**: 更新成功的数据记录
 
 **请求示例**:
@@ -224,6 +225,7 @@ systemGroup.Use(middleware.LoginRequired())
   - 主键ID
   - `field`: 字段名
   - `value`: 字段值
+- **字段过滤**: 标记为 `gorm:"-:update"` 或 `gorm:"-:all"` 的字段不允许设置
 - **返回**: 设置成功的消息
 
 **请求示例**:

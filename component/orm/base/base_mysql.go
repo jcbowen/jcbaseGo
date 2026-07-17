@@ -1,175 +1,40 @@
 package base
 
 import (
-	"os"
 	"reflect"
-	"strings"
-	"time"
-
-	"github.com/jcbowen/jcbaseGo"
-	"github.com/jcbowen/jcbaseGo/component/helper"
-	"gorm.io/gorm"
 )
 
 // MysqlBaseModel gorm基础模型
+// 继承 CommonBaseModel 的 BeforeCreate、BeforeUpdate 等方法，
+// 默认配置别名为 "db"。
 type MysqlBaseModel struct {
+	CommonBaseModel
 	//Id        uint   `gorm:"column:id;type:INT(11) UNSIGNED;primaryKey;autoIncrement" json:"id"`
 	//UpdatedAt string `gorm:"column:updated_at;type:DATETIME;default:NULL;comment:更新时间" json:"updated_at"`
 	//CreatedAt string `gorm:"column:created_at;type:DATETIME;default:NULL;comment:创建时间" json:"created_at"`
 	//DeletedAt string `gorm:"column:deleted_at;type:DATETIME;index;default:NULL;comment:删除时间" json:"deleted_at"`
 }
 
-func (b *MysqlBaseModel) GetConfigAlias(model interface{}) string {
-	if aliaser, ok := model.(interface{ ConfigAlias() string }); ok {
-		return aliaser.ConfigAlias()
-	}
-	return "db"
-}
-
 // ModelParse 解析模型信息（供 CRUD trait 使用）
-// 参数说明：
-//   - modelType reflect.Type: 模型的反射类型
+// 复用 CommonBaseModel 的解析逻辑，默认优先读取 MySQL 配置。
+//
+// 参数：
+//   - modelType: 具体模型的反射类型
 //
 // 返回值：
-//   - tableName string: 数据表名称
-//   - fields []string: 字段列表
-//   - softDeleteField string: 软删除字段名
-//   - softDeleteCondition string: 软删除条件
+//   - tableName: 数据表名称
+//   - fields: 模型字段列表
+//   - softDeleteField: 软删除字段名
+//   - softDeleteCondition: 软删除条件
 func (b *MysqlBaseModel) ModelParse(modelType reflect.Type) (tableName string, fields []string, softDeleteField string, softDeleteCondition string) {
-	// ----- 获取数据表名称 ----- /
-	// 通过反射创建模型实例
-	model := reflect.New(modelType).Interface()
-
-	var dbConfig jcbaseGo.DbStruct
-	dbConfigStr := os.Getenv("jc_mysql_" + b.GetConfigAlias(model))
-	helper.Json(dbConfigStr).ToStruct(&dbConfig)
-
-	// 自定义表名
-	if tn, ok := model.(interface{ TableName() string }); ok && tn.TableName() != "" {
-		tableName = tn.TableName()
-	} else {
-		// 获取表前缀
-		prefix := dbConfig.TablePrefix
-		if pfxCtrl, ok := model.(interface{ TablePrefix() string }); ok {
-			prefix = pfxCtrl.TablePrefix()
-		}
-
-		// 转换为小写字母并添加下划线
-		convertModelName := helper.NewStr(modelType.Name()).ConvertCamelToSnake()
-
-		if !dbConfig.SingularTable {
-			convertModelName += "s"
-		}
-
-		// 拼接数据表名称
-		tableName = prefix + convertModelName
-	}
-
-	// ----- 获取数据表所有字段 ----- /
-	fields = []string{}
-	softDeleteField = ""            // 软删除字段名，默认为空
-	softDeleteCondition = "IS NULL" // 默认软删除条件
-
-	// 用于记录 deleted_at 字段信息（默认软删除字段）
-	var deletedAtField string
-	var deletedAtCondition string
-
-	for i := 0; i < modelType.NumField(); i++ {
-		field := modelType.Field(i)
-		gormTag := field.Tag.Get("gorm")
-		columnName := getColumnFromTag(gormTag)
-
-		if columnName != "" {
-			fields = append(fields, columnName)
-
-			// 检查是否有 soft_delete 标签，支持仅标记不带值
-			if hasSoftDeleteTag(gormTag) {
-				softDeleteField = columnName
-				cond := getSoftDeleteFromTag(gormTag)
-				if cond != "" {
-					// 指定了条件，直接使用指定值
-					softDeleteCondition = cond
-				} else {
-					// 未指定条件，尝试根据 default 推断
-					defaultValue := getDefaultFromTag(gormTag)
-					if defaultValue != "" {
-						if strings.EqualFold(defaultValue, "NULL") {
-							softDeleteCondition = "IS NULL"
-						} else if defaultValue == "0000-00-00 00:00:00" || strings.Contains(gormTag, "default:0000-00-00 00:00:00") {
-							softDeleteCondition = "= '0000-00-00 00:00:00'"
-						} else {
-							softDeleteCondition = "= '" + defaultValue + "'"
-						}
-					} else {
-						// 默认条件
-						softDeleteCondition = "IS NULL"
-					}
-				}
-			} else if columnName == "deleted_at" {
-				// 记录 deleted_at 字段信息（系统默认的软删除字段）
-				deletedAtField = columnName
-				defaultValue := getDefaultFromTag(gormTag)
-				if defaultValue == "0000-00-00 00:00:00" || strings.Contains(gormTag, "default:0000-00-00 00:00:00") {
-					// 如果默认值是 0000-00-00 00:00:00，则用这个作为软删除判断条件
-					deletedAtCondition = "= '0000-00-00 00:00:00'"
-				} else {
-					// 默认使用 IS NULL 作为软删除条件
-					deletedAtCondition = "IS NULL"
-				}
-			}
-		} else if field.Name != "MysqlBaseModel" {
-			// 如果没有定义gorm标签，则使用字段名称转换为下划线格式
-			fieldName := helper.NewStr(field.Name).ConvertCamelToSnake()
-			fields = append(fields, fieldName)
-		}
-	}
-
-	// 如果没有通过 soft_delete 标签自定义软删除字段，但存在 deleted_at 字段，则使用系统默认的软删除配置
-	if softDeleteField == "" && deletedAtField != "" {
-		softDeleteField = deletedAtField
-		softDeleteCondition = deletedAtCondition
-	}
-
-	return
+	return modelParse(b, modelType)
 }
 
-// BeforeCreate 创建前钩子
-// 函数名：BeforeCreate
-// 参数：
-//   - tx *gorm.DB：当前事务上下文
+// dbConfigSources 返回 MySQL 配置读取顺序
+// 为保持向后兼容，MySQL 模型只读取 MySQL 环境变量配置，不回退到 SQLite。
 //
 // 返回值：
-//   - err error：错误信息（当前不返回错误）
-//
-// 说明：设置 CreatedAt/UpdatedAt 等时间字段；在使用 Select 限定字段时，确保时间字段包含在持久化列表中
-// 使用示例：
-//
-//	db.Create(&model) // 自动触发
-func (b *MysqlBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
-	strTime := time.Now().Format("2006-01-02 15:04:05")
-	SetFieldIfExist(tx.Statement.Dest, "CreatedAt", strTime)
-	SetFieldIfExist(tx.Statement.Dest, "Created", strTime)
-	SetFieldIfExist(tx.Statement.Dest, "UpdatedAt", strTime)
-	SetFieldIfExist(tx.Statement.Dest, "Updated", strTime)
-	EnsureSelects(tx, "CreatedAt", "Created", "UpdatedAt", "Updated")
-	return
-}
-
-// BeforeUpdate 更新前钩子
-// 函数名：BeforeUpdate
-// 参数：
-//   - tx *gorm.DB：当前事务上下文
-//
-// 返回值：
-//   - err error：错误信息（当前不返回错误）
-//
-// 说明：更新 UpdatedAt/Updated 时间字段；在使用 Select 限定字段时，确保时间字段包含在持久化列表中
-// 使用示例：
-//
-//	db.Model(&model).Updates(map[string]interface{}{...}) // 自动触发
-func (b *MysqlBaseModel) BeforeUpdate(tx *gorm.DB) (err error) {
-	SetFieldIfExist(tx.Statement.Dest, "UpdatedAt", time.Now().Format("2006-01-02 15:04:05"))
-	SetFieldIfExist(tx.Statement.Dest, "Updated", time.Now().Format("2006-01-02 15:04:05"))
-	EnsureSelects(tx, "UpdatedAt", "Updated")
-	return
+//   - []string: 数据库类型标识列表
+func (b *MysqlBaseModel) dbConfigSources() []string {
+	return []string{"mysql"}
 }
