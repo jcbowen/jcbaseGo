@@ -196,6 +196,9 @@ func (opt *Option) checkConfig() {
 		return
 	}
 
+	// 如果 ConfigData 是 nil 的结构体指针，自动分配实例，避免后续解析 panic
+	opt.ensureConfigDataInitialized()
+
 	// 初始化默认配置
 	opt.initializeConfigWithDefaults()
 
@@ -287,6 +290,41 @@ func PanicIfError(err interface{}) {
 }
 
 // ----- 私有方法 ----- /
+
+// ensureConfigDataInitialized 确保 ConfigData 为可解析的非 nil 结构体指针
+// 当调用者传入 nil 的结构体指针时（如 var cfg *AppConfig; ConfigData: cfg），
+// 后续 YAML/INI 解析会因 reflect.Value 不可赋值而 panic。
+// 此方法会在检测到该类情况后，自动分配对应结构体类型的零值实例。
+// 参数：
+//   - 无
+//
+// 返回值：
+//   - 无
+//
+// 异常：
+//   - 无：非指针或非 nil 指针保持原样，完全 nil 的 interface{} 由 checkConfig 前置校验处理
+func (opt *Option) ensureConfigDataInitialized() {
+	val := reflect.ValueOf(opt.ConfigData)
+
+	// 仅处理指针类型
+	if val.Kind() != reflect.Ptr {
+		return
+	}
+
+	// 非 nil 指针无需处理
+	if !val.IsNil() {
+		return
+	}
+
+	elemType := val.Type().Elem()
+	// 仅处理指向结构体的指针，其他类型保持原样由后续逻辑处理
+	if elemType.Kind() != reflect.Struct {
+		return
+	}
+
+	// 分配新的结构体实例并替换 ConfigData
+	opt.ConfigData = reflect.New(elemType).Interface()
+}
 
 func (opt *Option) initializeConfigWithDefaults() {
 	if err := helper.CheckAndSetDefault(opt.ConfigData); err != nil {
