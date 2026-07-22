@@ -377,14 +377,18 @@ func (fs *FileStorage) readLogFileHeader(filePath string) (*LogEntry, error) {
 	}
 
 	// 解析JSON到临时结构体，只包含基本字段
+	// 注意：必须包含所有用于过滤的字段，否则快速统计总数时会漏算
 	var header struct {
-		RecordType  string    `json:"record_type"`
-		Method      string    `json:"method"`
-		StatusCode  int       `json:"status_code"`
-		URL         string    `json:"url"`
-		ProcessName string    `json:"process_name"`
-		ProcessID   string    `json:"process_id"`
-		Timestamp   time.Time `json:"timestamp"`
+		RecordType          string    `json:"record_type"`
+		Method              string    `json:"method"`
+		StatusCode          int       `json:"status_code"`
+		URL                 string    `json:"url"`
+		Host                string    `json:"host"`
+		ClientIP            string    `json:"client_ip"`
+		ProcessName         string    `json:"process_name"`
+		ProcessID           string    `json:"process_id"`
+		IsStreamingResponse bool      `json:"is_streaming_response"`
+		Timestamp           time.Time `json:"timestamp"`
 	}
 
 	if err := json.Unmarshal(buffer[:n], &header); err != nil {
@@ -394,13 +398,16 @@ func (fs *FileStorage) readLogFileHeader(filePath string) (*LogEntry, error) {
 
 	// 转换为完整的LogEntry结构
 	entry := &LogEntry{
-		RecordType:  header.RecordType,
-		Method:      header.Method,
-		StatusCode:  header.StatusCode,
-		URL:         header.URL,
-		ProcessName: header.ProcessName,
-		ProcessID:   header.ProcessID,
-		Timestamp:   header.Timestamp,
+		RecordType:          header.RecordType,
+		Method:              header.Method,
+		StatusCode:          header.StatusCode,
+		URL:                 header.URL,
+		Host:                header.Host,
+		ClientIP:            header.ClientIP,
+		ProcessName:         header.ProcessName,
+		ProcessID:           header.ProcessID,
+		IsStreamingResponse: header.IsStreamingResponse,
+		Timestamp:           header.Timestamp,
 	}
 
 	return entry, nil

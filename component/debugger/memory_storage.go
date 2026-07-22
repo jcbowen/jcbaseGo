@@ -476,6 +476,11 @@ func (ms *MemoryStorage) containsKeyword(entry *LogEntry, keyword string) bool {
 		return true
 	}
 
+	// 检查域名（与文件/数据库存储保持一致）
+	if strings.Contains(strings.ToLower(entry.Host), strings.ToLower(keyword)) {
+		return true
+	}
+
 	return false
 }
 

@@ -3,6 +3,7 @@ package debugger
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ type LogEntryModel struct {
 	Duration   int64     `gorm:"column:duration;type:BIGINT" json:"duration"` // 存储纳秒数
 	ClientIP   string    `gorm:"column:client_ip;type:VARCHAR(45)" json:"client_ip"`
 	UserAgent  string    `gorm:"column:user_agent;type:TEXT" json:"user_agent"`
+	Host       string    `gorm:"column:host;type:VARCHAR(255);index" json:"host"`
 	RequestID  string    `gorm:"column:request_id;type:VARCHAR(64);index" json:"request_id"`
 
 	// 记录类型和进程相关字段
@@ -237,9 +239,10 @@ func (ds *DatabaseStorage) Search(keyword string, page, pageSize int, filters ma
 	db := ds.db.Table(ds.tableName)
 
 	// 使用LIKE进行模糊搜索
+	// 搜索字段与内存/文件存储保持一致，额外包含 process_name 与 host
 	searchKeyword := "%" + strings.ToLower(keyword) + "%"
-	db = db.Where("LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ? OR LOWER(error) LIKE ? OR LOWER(user_agent) LIKE ?",
-		searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword)
+	db = db.Where("LOWER(url) LIKE ? OR LOWER(request_body) LIKE ? OR LOWER(response_body) LIKE ? OR LOWER(error) LIKE ? OR LOWER(user_agent) LIKE ? OR LOWER(process_name) LIKE ? OR LOWER(host) LIKE ?",
+		searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword, searchKeyword)
 
 	// 应用额外的过滤条件
 	db = ds.applyFilters(db, filters)
@@ -307,7 +310,14 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 		case "method":
 			db = db.Where("method = ?", value)
 		case "status_code":
-			db = db.Where("status_code = ?", value)
+			// status_code 在数据库中是整型，但前端传入的是字符串，需要统一转换
+			if v, ok := value.(string); ok {
+				if code, err := strconv.Atoi(v); err == nil {
+					db = db.Where("status_code = ?", code)
+				}
+			} else if v, ok := value.(int); ok {
+				db = db.Where("status_code = ?", v)
+			}
 		case "url":
 			if v, ok := value.(string); ok {
 				db = db.Where("url LIKE ?", "%"+v+"%")
@@ -323,6 +333,11 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 		case "client_ip":
 			if v, ok := value.(string); ok {
 				db = db.Where("client_ip LIKE ?", "%"+v+"%")
+			}
+		case "host":
+			// 域名过滤：与内存/文件存储保持一致，支持包含匹配
+			if v, ok := value.(string); ok {
+				db = db.Where("host LIKE ?", "%"+v+"%")
 			}
 		case "process_name":
 			if v, ok := value.(string); ok {
@@ -384,6 +399,7 @@ func (ds *DatabaseStorage) entryToModel(entry *LogEntry) (*LogEntryModel, error)
 		Duration:     entry.Duration.Nanoseconds(),
 		ClientIP:     entry.ClientIP,
 		UserAgent:    entry.UserAgent,
+		Host:         entry.Host,
 		RequestID:    entry.RequestID,
 		RequestBody:  entry.RequestBody,
 		ResponseBody: entry.ResponseBody,
@@ -446,6 +462,7 @@ func (ds *DatabaseStorage) modelToEntry(model *LogEntryModel) (*LogEntry, error)
 		Duration:     time.Duration(model.Duration),
 		ClientIP:     model.ClientIP,
 		UserAgent:    model.UserAgent,
+		Host:         model.Host,
 		RequestID:    model.RequestID,
 		RequestBody:  model.RequestBody,
 		ResponseBody: model.ResponseBody,

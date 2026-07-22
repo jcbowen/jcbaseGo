@@ -526,17 +526,18 @@ const indexTemplate = `<!DOCTYPE html>
                         if (qInput) qInput.value = qValue;
                     }
                     
-                    // 设置筛选条件（优先pageParams，后备URL参数）
-                    function setFilterValue(elementId, key, pageParamsValue) {
-                        const value = getParamValue(key, pageParamsValue);
+                    // 设置筛选条件（优先URL参数，其次pageParams，最后使用默认值）
+                    function setFilterValue(elementId, key, pageParamsValue, defaultValue) {
+                        const value = getParamValue(key, pageParamsValue) || defaultValue;
                         if (value) {
                             const element = document.getElementById(elementId);
                             if (element) element.value = value;
                         }
                     }
-                    
+
                     setFilterValue('filter-record_type', 'record_type', filters.record_type);
-                    setFilterValue('filter-pageSize', 'pageSize', filters.pageSize);
+                    // pageSize 的后备值使用后端实际生效的 pageSize，避免 HTML 默认第一项（10）与后端默认（20）不一致
+                    setFilterValue('filter-pageSize', 'pageSize', filters.pageSize, window.pageParams.pageSize);
                     setFilterValue('filter-method', 'method', filters.method);
                     setFilterValue('filter-status_code', 'status_code', filters.status_code);
                     setFilterValue('filter-client_ip', 'client_ip', filters.client_ip);
@@ -702,10 +703,8 @@ const indexTemplate = `<!DOCTYPE html>
                 params.delete('page');
             }
 
-            // 4. 更新pageSize（如果与默认值不同）
-            if (window.pageParams.pageSize && window.pageParams.pageSize !== 20) {
-                params.set('pageSize', window.pageParams.pageSize);
-            }
+            // pageSize 已经通过 filter-form 中的下拉框在步骤2中读取，
+            // 不再使用初始值 window.pageParams.pageSize 覆盖，避免用户修改后分页被重置。
 
             const queryString = params.toString();
             return window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
@@ -720,25 +719,37 @@ const indexTemplate = `<!DOCTYPE html>
         }
 
         // 处理筛选条件变化（下拉框onchange事件）
+        // 当下拉框值变化时，自动收集表单中所有字段的最新值并提交，
+        // 避免只提交当前下拉框而丢失用户已输入但未点击筛选按钮的文本/时间条件。
         function handleFilterChange(selectElement) {
             const params = new URLSearchParams();
 
             // 1. 从当前URL中获取最新参数（确保获取用户之前的筛选操作）
             const currentParams = new URLSearchParams(window.location.search);
-
-            // 复制当前URL中的所有参数
             for (const [key, value] of currentParams.entries()) {
                 if (value && value !== 'null' && value !== '') {
                     params.set(key, value);
                 }
             }
 
-            // 2. 添加/更新当前变化的参数
+            // 2. 从整个表单获取最新值（覆盖URL中的旧值）
+            const form = document.getElementById('filter-form');
+            if (form) {
+                const formData = new FormData(form);
+                for (const [key, value] of formData.entries()) {
+                    if (value && value.trim() !== '') {
+                        params.set(key, value);
+                    } else {
+                        params.delete(key);
+                    }
+                }
+            }
+
+            // 3. 如果当前变化的 select 不在 form 中（防御性处理），单独处理它
             const newValue = selectElement.value;
             if (newValue && newValue.trim() !== '') {
                 params.set(selectElement.name, newValue);
             } else {
-                // 如果新值为空，移除该参数
                 params.delete(selectElement.name);
             }
 
