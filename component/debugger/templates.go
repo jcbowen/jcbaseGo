@@ -638,6 +638,16 @@ const indexTemplate = `<!DOCTYPE html>
                         handleFilterSubmit({ preventDefault: function() {}, target: form });
                     }
                 }
+
+                // 在文本/时间输入框中按回车直接提交筛选
+                document.querySelectorAll('#filter-form input[type="text"], #filter-form input[type="datetime-local"]').forEach(function(input) {
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            submitFilters();
+                        }
+                    });
+                });
                 
                 // 页面加载时初始化表单
                 initFilterForm();
