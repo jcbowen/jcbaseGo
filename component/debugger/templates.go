@@ -1357,6 +1357,9 @@ const detailTemplate = `<!DOCTYPE html>
         .json-line:hover {
             background: rgba(52, 152, 219, 0.05);
         }
+        .json-close-line {
+            padding-left: 0;
+        }
         .json-toggle {
             position: absolute;
             left: 0;
@@ -2131,7 +2134,7 @@ const detailTemplate = `<!DOCTYPE html>
             }
 
             const closeLine = document.createElement('span');
-            closeLine.className = 'json-line';
+            closeLine.className = 'json-line json-close-line';
             closeLine.appendChild(createSpan(closeSymbol, 'json-punctuation'));
 
             // 将结束括号放入 children 中，折叠时与内容一起隐藏
