@@ -753,8 +753,8 @@ const indexTemplate = `<!DOCTYPE html>
                 process_status: {{if .Filters.process_status}}'{{.Filters.process_status}}'{{else}}null{{end}},
                 is_streaming: {{if .Filters.is_streaming}}'{{.Filters.is_streaming}}'{{else}}null{{end}},
                 pageSize: {{if .Filters.pageSize}}'{{.Filters.pageSize}}'{{else}}null{{end}},
-                start_time: {{if .Filters.start_time}}'{{.Filters.start_time}}'{{else}}null{{end}},
-                end_time: {{if .Filters.end_time}}'{{.Filters.end_time}}'{{else}}null{{end}}
+                start_time: {{if .Filters.start_time}}'{{.Filters.start_time.Format "2006-01-02T15:04:05"}}'{{else}}null{{end}},
+                end_time: {{if .Filters.end_time}}'{{.Filters.end_time.Format "2006-01-02T15:04:05"}}'{{else}}null{{end}}
             }
         };
 

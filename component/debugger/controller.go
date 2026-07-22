@@ -761,21 +761,27 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 
 // parseTimeFilter 解析时间筛选参数
 // 支持多种时间格式：RFC3339、datetime-local、日期格式
+// 对于不带时区信息的格式，按服务器本地时间解析，与日志存储时间保持一致
 // 解析失败时返回零值时间和错误信息
 func parseTimeFilter(timeStr string) (time.Time, error) {
 	if timeStr == "" {
 		return time.Time{}, fmt.Errorf("时间字符串为空")
 	}
 
-	formats := []string{
-		time.RFC3339,
+	// RFC3339 等带有时区信息的格式直接解析
+	if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
+		return t, nil
+	}
+
+	// 不带时区信息的格式按服务器本地时间解析
+	localFormats := []string{
 		"2006-01-02T15:04",
 		"2006-01-02T15:04:05",
 		"2006-01-02",
 	}
 
-	for _, format := range formats {
-		if t, err := time.Parse(format, timeStr); err == nil {
+	for _, format := range localFormats {
+		if t, err := time.ParseInLocation(format, timeStr, time.Local); err == nil {
 			return t, nil
 		}
 	}

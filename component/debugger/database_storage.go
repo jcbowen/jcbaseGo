@@ -369,9 +369,10 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 			}
 		case "is_streaming":
 			// 流式请求过滤：true/false 字符串转换为布尔值
+			// 该字段仅针对 HTTP 记录，进程记录不应被流式状态匹配
 			if v, ok := value.(string); ok {
 				filterIsStreaming := strings.ToLower(v) == "true"
-				db = db.Where("is_streaming_response = ?", filterIsStreaming)
+				db = db.Where("is_streaming_response = ? AND record_type != ?", filterIsStreaming, "process")
 			}
 		case "streaming_status":
 			// 流式状态过滤：active/inactive 字符串匹配

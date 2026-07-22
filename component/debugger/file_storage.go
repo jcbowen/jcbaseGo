@@ -544,8 +544,12 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 			}
 		case "is_streaming":
 			// 流式请求过滤：true/false 字符串转换为布尔值
+			// 该字段仅针对 HTTP 记录，进程记录不应被流式状态匹配
 			v, ok := value.(string)
 			if !ok {
+				return false
+			}
+			if entry.RecordType == "process" {
 				return false
 			}
 			filterIsStreaming := strings.ToLower(v) == "true"
