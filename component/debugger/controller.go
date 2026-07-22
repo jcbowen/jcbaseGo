@@ -100,6 +100,9 @@ func (c *Controller) registerRoutes(useCDN bool) {
 	// 添加IP访问控制中间件
 	routerGroup.Use(c.ipAccessControlMiddleware(useCDN))
 
+	// 静态资源服务（JSON 查看器依赖的 js 库等）
+	routerGroup.StaticFS("/static", getStaticFileSystem())
+
 	// 重定向根目录到 /list
 	routerGroup.GET("", func(ctx *gin.Context) {
 		ctx.Redirect(http.StatusFound, helper.GetHostInfo(ctx.Request)+c.basePath+"/list")

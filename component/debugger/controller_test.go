@@ -535,6 +535,81 @@ func TestControllerTemplateRendering(t *testing.T) {
 	})
 }
 
+// TestJSONViewerIntegration 测试 JSON 查看器相关功能
+// 验证详情页正确引入 jsonc-parser 并渲染 JSON 查看器所需元素
+func TestJSONViewerIntegration(t *testing.T) {
+	// 创建包含 JSON 请求体和响应体的测试日志
+	testLog := &LogEntry{
+		ID:           "json-viewer-test",
+		Timestamp:    time.Now(),
+		Method:       "POST",
+		URL:          "/api/users",
+		StatusCode:   201,
+		Duration:     150 * time.Millisecond,
+		ClientIP:     "127.0.0.1",
+		RequestBody:  `{"name":"张三","tags":["admin","user"],}`,
+		ResponseBody: `{"id":1,"name":"张三","nested":{"key":"value"}}`,
+		LoggerLogs: []LoggerLog{
+			{
+				Timestamp: time.Now(),
+				Level:     LevelInfo,
+				Message:   `{"action":"create_user","user_id":1}`,
+			},
+		},
+		SessionData: map[string]interface{}{
+			"user_id": 1,
+			"roles":   []string{"admin"},
+		},
+	}
+
+	// 创建内存存储并添加测试数据
+	storage, _ := NewMemoryStorage()
+	_ = storage.Save(testLog)
+
+	// 创建调试器实例
+	config := &Config{
+		Enabled:   true,
+		SkipPaths: []string{},
+	}
+	config.Storage = storage
+	dbg, _ := New(config)
+
+	// 创建Gin引擎并注册路由
+	router := gin.New()
+	dbg.RegisterRoutes(router)
+
+	t.Run("详情页包含 JSON 查看器资源", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/jcbase/debug/detail/json-viewer-test", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		body := w.Body.String()
+
+		// 验证引入了 jsonc-parser 静态资源
+		assert.Contains(t, body, "/static/jsonc-parser.bundle.js")
+
+		// 验证包含 JSON 查看器初始化相关代码
+		assert.Contains(t, body, "JSONViewer")
+		assert.Contains(t, body, "initJSONViewers")
+		assert.Contains(t, body, "json-viewer-toolbar")
+
+		// 验证存在 JSON 查看器容器（请求体、响应体、Logger 日志、会话数据）
+		assert.Contains(t, body, "class=\"json-viewer\"")
+	})
+
+	t.Run("静态文件路由返回 jsonc-parser bundle", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/jcbase/debug/static/jsonc-parser.bundle.js", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Contains(t, w.Body.String(), "jsoncParser")
+		assert.Contains(t, w.Body.String(), "parse")
+		assert.Contains(t, w.Body.String(), "parseTree")
+	})
+}
+
 // TestControllerPagination 测试控制器分页功能
 func TestControllerPagination(t *testing.T) {
 	t.Run("分页计算功能", func(t *testing.T) {
