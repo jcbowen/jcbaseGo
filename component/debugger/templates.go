@@ -31,8 +31,6 @@ const indexTemplate = `<!DOCTYPE html>
         .download-btn:hover {
             background-color: #45a049;
         }
-        .time-range-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end; }
-        .time-range-row input { width: 100%; }
         .header .stats { display: flex; gap: 20px; flex-wrap: wrap; }
         .stat-item { background: #f8f9fa; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #3498db; }
         .stat-item .label { font-size: 12px; color: #666; }
@@ -45,13 +43,23 @@ const indexTemplate = `<!DOCTYPE html>
             justify-content: space-between; 
             align-items: center; 
         }
+        .filter-header h3 { 
+            margin: 0; 
+            font-size: 16px; 
+            font-weight: 600; 
+            color: #2c3e50; 
+            display: flex; 
+            align-items: center; 
+            gap: 8px;
+        }
+        .filter-header h3::before { 
+            content: "📊"; 
+            font-size: 14px; 
+        }
         .filter-header .filter-actions { 
             display: flex; 
             gap: 12px; 
             align-items: center; 
-            margin: 0; 
-            padding: 0; 
-            border-top: none; 
         }
         .filter-header .filter-actions button { 
             background: #3498db; 
@@ -63,8 +71,6 @@ const indexTemplate = `<!DOCTYPE html>
             font-size: 14px; 
             font-weight: 600; 
             transition: background-color 0.2s ease; 
-            grid-column: auto; 
-            justify-self: auto; 
         }
         .filter-header .filter-actions button:hover { 
             background: #2980b9; 
@@ -83,31 +89,47 @@ const indexTemplate = `<!DOCTYPE html>
             border-color: #3498db; 
             background: #f8f9fa; 
         }
-        .filter-header h3 { 
-            margin: 0; 
-            font-size: 16px; 
-            font-weight: 600; 
-            color: #2c3e50; 
+        .filter-tabs { 
             display: flex; 
-            align-items: center; 
-            gap: 8px;
+            gap: 4px; 
+            margin-bottom: 16px; 
+            border-bottom: 2px solid #e9ecef; 
+            flex-wrap: wrap; 
         }
-        .filter-header h3::before { 
-            content: "📊"; 
+        .filter-tab { 
+            padding: 10px 20px; 
+            color: #666; 
             font-size: 14px; 
+            font-weight: 500; 
+            border: none; 
+            border-bottom: 2px solid transparent; 
+            margin-bottom: -2px; 
+            transition: all 0.2s ease; 
+            cursor: pointer; 
+            background: none; 
         }
-        .filter-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: end; }
+        .filter-tab:hover { 
+            color: #3498db; 
+            background: #f8f9fa; 
+        }
+        .filter-tab.active { 
+            color: #3498db; 
+            border-bottom-color: #3498db; 
+            background: #f8f9fa; 
+        }
+        .filter-form { display: flex; flex-direction: column; gap: 16px; }
         .filter-group { 
             display: flex; 
             flex-direction: column; 
-            gap: 8px; 
+            gap: 12px; 
             padding: 16px; 
             background: #f8f9fa; 
             border-radius: 6px; 
             border: 1px solid #e9ecef;
         }
+        .filter-group.hidden { display: none; }
         .filter-group h4 { 
-            margin: 0 0 8px 0; 
+            margin: 0 0 4px 0; 
             font-size: 14px; 
             font-weight: 600; 
             color: #495057; 
@@ -121,8 +143,8 @@ const indexTemplate = `<!DOCTYPE html>
         }
         .filter-group .filter-row { 
             display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
-            gap: 8px; 
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); 
+            gap: 12px; 
             align-items: end;
         }
         .filter-form input, .filter-form select { 
@@ -137,42 +159,6 @@ const indexTemplate = `<!DOCTYPE html>
             outline: none; 
             border-color: #3498db; 
             box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
-        }
-        .filter-form button { 
-            background: #3498db; 
-            color: white; 
-            border: none; 
-            padding: 10px 20px; 
-            border-radius: 6px; 
-            cursor: pointer; 
-            font-size: 14px;
-            font-weight: 600;
-            transition: background-color 0.2s ease;
-            grid-column: 1 / -1;
-            justify-self: start;
-        }
-        .filter-form button:hover { background: #2980b9; }
-        .filter-actions { 
-            display: flex; 
-            gap: 12px; 
-            align-items: center; 
-            margin-top: 16px; 
-            padding-top: 16px; 
-            border-top: 1px solid #eee;
-        }
-        .filter-actions a { 
-            color: #666; 
-            text-decoration: none; 
-            font-size: 14px; 
-            padding: 8px 16px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            transition: all 0.2s ease;
-        }
-        .filter-actions a:hover { 
-            color: #3498db; 
-            border-color: #3498db;
-            background: #f8f9fa;
         }
         
         .logs-table { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -271,16 +257,17 @@ const indexTemplate = `<!DOCTYPE html>
             .stat-item { padding: 8px 12px; }
             .stat-item .value { font-size: 16px; }
             
-            .filter-header { padding: 12px 16px; }
+            .filter-header { margin-bottom: 12px; }
             .filter-header h3 { font-size: 14px; }
-            .filter-content { padding: 16px; }
-            .filter-form { grid-template-columns: 1fr; gap: 12px; }
-            .filter-group { padding: 12px; }
+            .filter-header .filter-actions { gap: 8px; }
+            .filter-header .filter-actions button, .filter-header .filter-actions a { padding: 6px 12px; font-size: 13px; }
+            .filter-tabs { margin-bottom: 12px; }
+            .filter-tab { padding: 8px 14px; font-size: 13px; }
+            .filter-form { gap: 12px; }
+            .filter-group { padding: 12px; gap: 10px; }
             .filter-group h4 { font-size: 13px; }
             .filter-row { grid-template-columns: 1fr; gap: 8px; }
             .filter-form input, .filter-form select { width: 100%; }
-            .filter-actions { flex-direction: column; gap: 8px; }
-            .filter-actions button, .filter-actions a { width: 100%; text-align: center; }
             
             .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
             .table-content { min-width: 600px; }
@@ -345,14 +332,15 @@ const indexTemplate = `<!DOCTYPE html>
                 font-size: 16px; 
             }
             .log-row { padding: 20px; }
-            .filter-form { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+            .filter-form { gap: 20px; }
+            .filter-group { padding: 20px; gap: 14px; }
             .filter-form input, .filter-form select { 
                 padding: 12px 16px; 
                 font-size: 16px; 
             }
-            .filter-form button { 
-                padding: 12px 24px; 
-                font-size: 16px; 
+            .filter-header .filter-actions button, .filter-header .filter-actions a { 
+                padding: 10px 20px; 
+                font-size: 15px; 
             }
         }
     </style>
@@ -409,23 +397,30 @@ const indexTemplate = `<!DOCTYPE html>
         </div>
         
         <div class="filters">
-            <form class="filter-form" method="get" id="filter-form" onsubmit="handleFilterSubmit(event)">
-                <div class="filter-header">
-                    <h3>筛选条件</h3>
-                    <div class="filter-actions">
-                        <button type="submit">筛选</button>
-                        <a href="javascript:void(0)" onclick="resetFilters()">重置</a>
-                    </div>
+            <div class="filter-header">
+                <h3>筛选条件</h3>
+                <div class="filter-actions">
+                    <button type="button" onclick="submitFilters()">筛选</button>
+                    <a href="javascript:void(0)" onclick="resetFilters()">重置</a>
                 </div>
+            </div>
+            
+            <div class="filter-tabs" id="filter-tabs">
+                <button type="button" class="filter-tab active" data-type="" onclick="switchRecordType('')">全部记录</button>
+                <button type="button" class="filter-tab" data-type="http" onclick="switchRecordType('http')">HTTP记录</button>
+                <button type="button" class="filter-tab" data-type="process" onclick="switchRecordType('process')">进程记录</button>
+            </div>
+            
+            <form class="filter-form" method="get" id="filter-form" onsubmit="handleFilterSubmit(event)">
+                <input type="hidden" name="record_type" id="filter-record_type">
+                
                 <!-- 基础筛选组 -->
                 <div class="filter-group">
                     <h4>基础筛选</h4>
                     <div class="filter-row">
-                        <select name="record_type" id="filter-record_type" onchange="handleFilterChange(this)">
-                            <option value="">所有记录类型</option>
-                            <option value="http">HTTP记录</option>
-                            <option value="process">进程记录</option>
-                        </select>
+                        <input type="text" name="q" id="filter-q" placeholder="搜索日志内容...">
+                        <input type="datetime-local" name="start_time" id="filter-start_time" placeholder="开始时间">
+                        <input type="datetime-local" name="end_time" id="filter-end_time" placeholder="结束时间">
                         <select name="pageSize" id="filter-pageSize" onchange="handleFilterChange(this)">
                             <option value="10">10条/页</option>
                             <option value="20">20条/页</option>
@@ -433,13 +428,10 @@ const indexTemplate = `<!DOCTYPE html>
                             <option value="100">100条/页</option>
                         </select>
                     </div>
-                    <div class="filter-row">
-                        <input type="text" name="q" id="filter-q" placeholder="搜索日志内容...">
-                    </div>
                 </div>
                 
                 <!-- HTTP记录筛选组 -->
-                <div class="filter-group">
+                <div class="filter-group" id="filter-group-http">
                     <h4>HTTP记录筛选</h4>
                     <div class="filter-row">
                         <select name="method" id="filter-method" onchange="handleFilterChange(this)">
@@ -464,27 +456,21 @@ const indexTemplate = `<!DOCTYPE html>
                             <option value="502">502 - 网关错误</option>
                             <option value="503">503 - 服务不可用</option>
                         </select>
-                    </div>
-                    <div class="filter-row">
-                        <input type="text" name="client_ip" id="filter-client_ip" placeholder="客户端IP地址">
-                        <input type="text" name="host" id="filter-host" placeholder="域名包含">
-                        <input type="text" name="url" id="filter-url" placeholder="URL路径包含">
-                    </div>
-                    <div class="filter-row time-range-row">
-                        <input type="datetime-local" name="start_time" id="filter-start_time" placeholder="开始时间">
-                        <input type="datetime-local" name="end_time" id="filter-end_time" placeholder="结束时间">
-                    </div>
-                    <div class="filter-row">
                         <select name="is_streaming" id="filter-is_streaming" onchange="handleFilterChange(this)">
                             <option value="">所有流式状态</option>
                             <option value="true">流式请求</option>
                             <option value="false">非流式请求</option>
                         </select>
                     </div>
+                    <div class="filter-row">
+                        <input type="text" name="client_ip" id="filter-client_ip" placeholder="客户端IP地址">
+                        <input type="text" name="host" id="filter-host" placeholder="域名包含">
+                        <input type="text" name="url" id="filter-url" placeholder="URL路径包含">
+                    </div>
                 </div>
                 
                 <!-- 进程记录筛选组 -->
-                <div class="filter-group">
+                <div class="filter-group" id="filter-group-process">
                     <h4>进程记录筛选</h4>
                     <div class="filter-row">
                         <input type="text" name="process_name" id="filter-process_name" placeholder="进程名称">
@@ -515,9 +501,10 @@ const indexTemplate = `<!DOCTYPE html>
                         return urlValue || null;
                     }
                     
-                    // 确保 pageParams 存在
-                    const filters = window.pageParams && window.pageParams.filters ? window.pageParams.filters : {};
-                    const keyword = window.pageParams ? window.pageParams.keyword : null;
+                    // 安全访问页面参数，避免筛选区脚本在 window.pageParams 定义之前执行时报错
+                    const pageParams = window.pageParams || {};
+                    const filters = pageParams.filters || {};
+                    const keyword = pageParams.keyword || null;
                     
                     // 设置搜索关键词（优先pageParams，后备URL参数q）
                     const qValue = getParamValue('q', keyword);
@@ -537,7 +524,7 @@ const indexTemplate = `<!DOCTYPE html>
 
                     setFilterValue('filter-record_type', 'record_type', filters.record_type);
                     // pageSize 的后备值使用后端实际生效的 pageSize，避免 HTML 默认第一项（10）与后端默认（20）不一致
-                    setFilterValue('filter-pageSize', 'pageSize', filters.pageSize, window.pageParams.pageSize);
+                    setFilterValue('filter-pageSize', 'pageSize', filters.pageSize, pageParams.pageSize);
                     setFilterValue('filter-method', 'method', filters.method);
                     setFilterValue('filter-status_code', 'status_code', filters.status_code);
                     setFilterValue('filter-client_ip', 'client_ip', filters.client_ip);
@@ -549,6 +536,107 @@ const indexTemplate = `<!DOCTYPE html>
                     setFilterValue('filter-process_name', 'process_name', filters.process_name);
                     setFilterValue('filter-process_id', 'process_id', filters.process_id);
                     setFilterValue('filter-process_status', 'process_status', filters.process_status);
+                    
+                    // 所有字段赋值完成后再根据记录类型初始化Tab和分组显隐
+                    updateRecordTypeUI(document.getElementById('filter-record_type').value);
+                }
+                
+                // 更新记录类型相关UI（Tab激活状态、分组显隐），不触发提交
+                function updateRecordTypeUI(type) {
+                    const recordTypeInput = document.getElementById('filter-record_type');
+                    if (recordTypeInput) {
+                        recordTypeInput.value = type;
+                    }
+                    
+                    document.querySelectorAll('.filter-tab').forEach(function(tab) {
+                        tab.classList.toggle('active', tab.dataset.type === type);
+                    });
+                    
+                    const httpGroup = document.getElementById('filter-group-http');
+                    const processGroup = document.getElementById('filter-group-process');
+                    if (httpGroup) {
+                        httpGroup.classList.toggle('hidden', type === 'process');
+                    }
+                    if (processGroup) {
+                        processGroup.classList.toggle('hidden', type === 'http');
+                    }
+                    
+                    // 清空不相关分组的表单值，避免隐藏字段被提交
+                    clearUnrelatedFilters(type);
+                }
+                
+                // 清空与当前记录类型无关的筛选条件
+                function clearUnrelatedFilters(type) {
+                    if (type === 'http') {
+                        ['process_name', 'process_id', 'process_status'].forEach(function(name) {
+                            const el = document.getElementById('filter-' + name);
+                            if (el) el.value = '';
+                        });
+                    } else if (type === 'process') {
+                        ['method', 'status_code', 'client_ip', 'host', 'url', 'is_streaming'].forEach(function(name) {
+                            const el = document.getElementById('filter-' + name);
+                            if (el) el.value = '';
+                        });
+                    }
+                }
+                
+                // 切换记录类型并提交筛选
+                function switchRecordType(type) {
+                    updateRecordTypeUI(type);
+                    submitFiltersByType(type);
+                }
+                
+                // 根据记录类型提交筛选，并清理不相关参数
+                function submitFiltersByType(type) {
+                    const params = new URLSearchParams();
+                    const currentParams = new URLSearchParams(window.location.search);
+                    
+                    for (const [key, value] of currentParams.entries()) {
+                        if (value && value !== 'null' && value !== '') {
+                            params.set(key, value);
+                        }
+                    }
+                    
+                    const form = document.getElementById('filter-form');
+                    if (form) {
+                        const formData = new FormData(form);
+                        for (const [key, value] of formData.entries()) {
+                            if (value && value.trim() !== '') {
+                                params.set(key, value);
+                            } else {
+                                params.delete(key);
+                            }
+                        }
+                    }
+                    
+                    // 切换类型时移除不相关的筛选参数
+                    if (type === 'http') {
+                        params.delete('process_name');
+                        params.delete('process_id');
+                        params.delete('process_status');
+                    } else if (type === 'process') {
+                        params.delete('method');
+                        params.delete('status_code');
+                        params.delete('client_ip');
+                        params.delete('host');
+                        params.delete('url');
+                        params.delete('is_streaming');
+                    }
+                    
+                    params.delete('page');
+                    
+                    const queryString = params.toString();
+                    const url = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+                    sessionStorage.setItem('debugger_list_url', url);
+                    window.location.href = url;
+                }
+                
+                // 触发筛选提交
+                function submitFilters() {
+                    const form = document.getElementById('filter-form');
+                    if (form) {
+                        handleFilterSubmit({ preventDefault: function() {}, target: form });
+                    }
                 }
                 
                 // 页面加载时初始化表单
