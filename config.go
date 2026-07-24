@@ -484,6 +484,36 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 						} else {
 							log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：浮点数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
 						}
+					case reflect.Slice, reflect.Array:
+						// INI 中的 slice/array 被 processStructToINI 序列化为 JSON 字符串，这里反序列化
+						if key.Value() == "" {
+							if currentField.Type.Kind() == reflect.Slice {
+								currentVal.Set(reflect.MakeSlice(currentField.Type, 0, 0))
+							} else {
+								// 定长数组无法使用 MakeSlice，直接赋零值数组
+								currentVal.Set(reflect.New(currentField.Type).Elem())
+							}
+							break
+						}
+						ptr := reflect.New(currentField.Type)
+						if err := json.Unmarshal([]byte(key.Value()), ptr.Interface()); err == nil {
+							currentVal.Set(ptr.Elem())
+						} else {
+							// 对于字符串 slice，回退到逗号分隔；定长数组保持 JSON 格式要求
+							if currentField.Type.Kind() == reflect.Slice && currentField.Type.Elem().Kind() == reflect.String {
+								newSlice := reflect.MakeSlice(currentField.Type, 0, 0)
+								parts := strings.Split(key.Value(), ",")
+								for _, part := range parts {
+									part = strings.TrimSpace(part)
+									if part != "" {
+										newSlice = reflect.Append(newSlice, reflect.ValueOf(part))
+									}
+								}
+								currentVal.Set(newSlice)
+							} else {
+								log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：%s 数组\n实际值有误，无法转换为数组类型。\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), currentField.Type.Elem().Kind())
+							}
+						}
 					default:
 						// 其他类型（如字符串）直接设置
 						currentVal.SetString(key.Value())
