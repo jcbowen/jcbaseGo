@@ -100,14 +100,15 @@ class Console
 //                if($result == null)
 //                    $result = 'NULL';
                 self::stdout((string)$result);
+                exit();
             } else {
                 self::error("fatal:Function $func not exists");
+                exit(1);
             }
-
-            exit();
         }
 
         self::error("fatal:Function not specified");
+        exit(1);
     }
 
 

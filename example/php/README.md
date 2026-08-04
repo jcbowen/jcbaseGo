@@ -401,7 +401,7 @@ if err != nil {
 2. **权限错误**
    ```bash
    # 给生成的 PHP 文件添加执行权限
-   chmod +x /tmp/php/main.go
+   chmod +x /tmp/php/main.php
    ```
 
 3. **函数调用失败**
