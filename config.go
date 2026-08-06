@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -189,18 +190,46 @@ func (opt *Option) replaceNodeValue(fieldVal reflect.Value, newValue interface{}
 	return true
 }
 
+// ReloadConfig 重新加载配置
+// 当配置文件在外部被更新后，调用此方法可重新读取最新配置并同步更新全局 Config 变量
+// 参数：
+//   - 无
+//
+// 返回：
+//   - error: 重载失败时返回错误，成功返回 nil
+//
+// 使用示例：
+//
+//	opt := jcbaseGo.New(jcbaseGo.Option{ConfigSource: "./config.json", ConfigData: &cfg})
+//	if err := opt.ReloadConfig(); err != nil {
+//		log.Printf("重载配置失败: %v", err)
+//	}
+func (opt *Option) ReloadConfig() error {
+	return opt.loadConfig()
+}
+
 // checkConfig 将配置信息初始化到 Config 中
+// 加载失败时调用 log.Fatalf 退出程序，供 New 初始化使用
 func (opt *Option) checkConfig() {
+	if err := opt.loadConfig(); err != nil {
+		log.Fatalf("配置加载错误: %v", err)
+	}
+}
+
+// loadConfig 加载配置并同步到 Config 变量
+// 加载失败时返回 error，供 ReloadConfig 使用
+func (opt *Option) loadConfig() error {
 	if reflect.TypeOf(opt.ConfigData) == nil {
-		log.Fatalf("配置信息不能为空")
-		return
+		return errors.New("配置信息不能为空")
 	}
 
 	// 如果 ConfigData 是 nil 的结构体指针，自动分配实例，避免后续解析 panic
 	opt.ensureConfigDataInitialized()
 
 	// 初始化默认配置
-	opt.initializeConfigWithDefaults()
+	if err := opt.initializeConfigWithDefaults(); err != nil {
+		return err
+	}
 
 	// 如果是文件类型配置，根据文件后缀名判断配置类型
 	if opt.ConfigType == ConfigTypeFile {
@@ -213,22 +242,29 @@ func (opt *Option) checkConfig() {
 		case ".yaml", ".yml":
 			opt.ConfigType = ConfigTypeYAML
 		default:
-			log.Fatalf("不支持的配置文件类型: %s", ext)
+			return fmt.Errorf("不支持的配置文件类型: %s", ext)
 		}
 	}
 
 	switch opt.ConfigType {
 	case ConfigTypeJSON, ConfigTypeINI, ConfigTypeYAML, ConfigTypeFile:
 		// 获取配置文件绝对路径
-		fileNameFull := opt.getConfigFilePath()
+		fileNameFull, err := opt.getConfigFilePath()
+		if err != nil {
+			return err
+		}
 		// 如果配置文件不存在，则创建
 		opt.createConfigFileIfNotExists(fileNameFull)
 		// 从文件中读取配置
-		opt.readConfigFile(fileNameFull)
+		if err := opt.readConfigFile(fileNameFull); err != nil {
+			return err
+		}
 		// 执行配置替换规则
 		opt.applyConfigReplaceRules()
 		// 配置结构体是有可能更新升级的，所以每次运行之后，应当更新一下配置文件
-		opt.updateConfigFile(fileNameFull, true)
+		if err := opt.updateConfigFile(fileNameFull, true); err != nil {
+			return err
+		}
 	case ConfigTypeCommand:
 		// 执行脚本并获取JSON输出
 		cmd := exec.Command("sh", "-c", opt.ConfigSource)
@@ -240,8 +276,7 @@ func (opt *Option) checkConfig() {
 
 		err := cmd.Run()
 		if err != nil {
-			log.Fatalf("执行脚本错误: %v\n错误输出: %s", err, stderr.String())
-			return
+			return fmt.Errorf("执行脚本错误: %v\n错误输出: %s", err, stderr.String())
 		}
 
 		output := stdout.Bytes()
@@ -250,24 +285,23 @@ func (opt *Option) checkConfig() {
 
 		jsonStartIndex := bytes.Index(output, []byte("{"))
 		if jsonStartIndex == -1 {
-			log.Fatalf("输出中未找到JSON数据: %s", string(output))
-			return
+			return fmt.Errorf("输出中未找到JSON数据: %s", string(output))
 		}
 
 		// 截取可能的JSON部分
 		pureJSON := output[jsonStartIndex:]
 		if err = json.Unmarshal(pureJSON, &opt.ConfigData); err != nil {
-			log.Fatalf("JSON解析错误: %v\n原始数据: %s", err, pureJSON)
-			return
+			return fmt.Errorf("JSON解析错误: %v\n原始数据: %s", err, pureJSON)
 		}
 		// 执行配置替换规则
 		opt.applyConfigReplaceRules()
 	default:
-		log.Panic("错误的配置类型")
+		return errors.New("错误的配置类型")
 	}
 
 	// 将配置信息写入全局变量
 	Config = opt.ConfigData
+	return nil
 }
 
 // PanicIfError 异常处理
@@ -326,27 +360,31 @@ func (opt *Option) ensureConfigDataInitialized() {
 	opt.ConfigData = reflect.New(elemType).Interface()
 }
 
-func (opt *Option) initializeConfigWithDefaults() {
+func (opt *Option) initializeConfigWithDefaults() error {
 	if err := helper.CheckAndSetDefault(opt.ConfigData); err != nil {
-		log.Fatalf("初始化配置默认值错误: %v", err)
+		return fmt.Errorf("初始化配置默认值错误: %v", err)
 	}
 
 	if err := helper.CheckAndSetDefault(opt); err != nil {
-		log.Fatalf("初始化参数默认值错误: %v", err)
+		return fmt.Errorf("初始化参数默认值错误: %v", err)
 	}
+
+	return nil
 }
 
-func (opt *Option) getConfigFilePath() string {
+func (opt *Option) getConfigFilePath() (string, error) {
 	fileNameFull, err := filepath.Abs(opt.ConfigSource)
 	if err != nil {
-		log.Fatalf("获取配置文件路径错误: %v", err)
+		return "", fmt.Errorf("获取配置文件路径错误: %v", err)
 	}
-	return fileNameFull
+	return fileNameFull, nil
 }
 
 func (opt *Option) createConfigFileIfNotExists(fileNameFull string) {
 	if !helper.NewFile(&helper.File{Path: fileNameFull}).Exists() {
-		opt.updateConfigFile(fileNameFull, false)
+		if err := opt.updateConfigFile(fileNameFull, false); err != nil {
+			log.Fatalf("创建默认配置文件失败: %v", err)
+		}
 		log.Printf("配置文件不存在，已创建默认配置文件，请修改配置文件后重启程序！\n配置文件路径：%s", fileNameFull)
 	}
 }
@@ -355,11 +393,11 @@ func (opt *Option) createConfigFileIfNotExists(fileNameFull string) {
 // 支持 INI、JSON 和 YAML 三种格式
 // INI 格式支持多级嵌套，使用点号(.)分隔，第一级为节名，后续为字段名
 // 例如：[Database] db.name = test 会被解析到 Database 结构体的 DB 字段的 Name 属性
-func (opt *Option) readConfigFile(fileNameFull string) {
+func (opt *Option) readConfigFile(fileNameFull string) error {
 	// 读取配置文件内容
 	file, err := os.ReadFile(fileNameFull)
 	if err != nil {
-		log.Fatalf("读取配置文件错误: %v", err)
+		return fmt.Errorf("读取配置文件错误: %v", err)
 	}
 
 	switch opt.ConfigType {
@@ -367,7 +405,7 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 		// 加载 INI 配置文件
 		cfg, err := ini.Load(fileNameFull)
 		if err != nil {
-			log.Fatalf("解析INI配置文件错误: %v", err)
+			return fmt.Errorf("解析INI配置文件错误: %v", err)
 		}
 		// 遍历所有节（第一级标题）
 		for _, section := range cfg.Sections() {
@@ -461,28 +499,28 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 						} else if key.Value() == "false" || key.Value() == "0" {
 							currentVal.SetBool(false)
 						} else {
-							log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：布尔值\n实际值有误，无法转换为布尔类型。\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value())
+							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：布尔值\n实际值有误，无法转换为布尔类型。\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value())
 						}
 					case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 						// 整数类型转换
 						if i, err := strconv.ParseInt(key.Value(), 10, 64); err == nil {
 							currentVal.SetInt(i)
 						} else {
-							log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：整数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
+							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：整数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
 						}
 					case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 						// 无符号整数类型转换
 						if i, err := strconv.ParseUint(key.Value(), 10, 64); err == nil {
 							currentVal.SetUint(i)
 						} else {
-							log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：无符号整数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
+							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：无符号整数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
 						}
 					case reflect.Float32, reflect.Float64:
 						// 浮点数类型转换
 						if f, err := strconv.ParseFloat(key.Value(), 64); err == nil {
 							currentVal.SetFloat(f)
 						} else {
-							log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：浮点数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
+							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：浮点数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
 						}
 					case reflect.Slice, reflect.Array:
 						// INI 中的 slice/array 被 processStructToINI 序列化为 JSON 字符串，这里反序列化
@@ -511,7 +549,7 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 								}
 								currentVal.Set(newSlice)
 							} else {
-								log.Fatalf("\n配置错误：[%s] %s = %s\n期望类型：%s 数组\n实际值有误，无法转换为数组类型。\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), currentField.Type.Elem().Kind())
+								return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：%s 数组\n实际值有误，无法转换为数组类型。\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), currentField.Type.Elem().Kind())
 							}
 						}
 					default:
@@ -528,21 +566,23 @@ func (opt *Option) readConfigFile(fileNameFull string) {
 		// 因此这里直接传入 opt.ConfigData（其动态值应为结构体指针）。
 		err = yaml.Unmarshal(file, opt.ConfigData)
 		if err != nil {
-			log.Fatalf("解析YAML配置文件错误: %v", err)
+			return fmt.Errorf("解析YAML配置文件错误: %v", err)
 		}
 	case ConfigTypeJSON:
 		// JSON 格式直接解析到结构体
 		err = json.Unmarshal(file, &opt.ConfigData)
 		if err != nil {
-			log.Fatalf("解析JSON配置文件错误: %v", err)
+			return fmt.Errorf("解析JSON配置文件错误: %v", err)
 		}
 	default:
-		log.Fatalf("不支持的配置文件类型")
+		return errors.New("不支持的配置文件类型")
 	}
+
+	return nil
 }
 
 // updateConfigFile 更新配置文件
-func (opt *Option) updateConfigFile(fileNameFull string, overwrite bool) {
+func (opt *Option) updateConfigFile(fileNameFull string, overwrite bool) error {
 	var fileData []byte
 	var err error
 
@@ -555,28 +595,30 @@ func (opt *Option) updateConfigFile(fileNameFull string, overwrite bool) {
 		// 使用 helper.NewFile 创建文件
 		var buf bytes.Buffer
 		if _, err = cfg.WriteTo(&buf); err != nil {
-			log.Fatalf("写入INI缓冲区错误: %v", err)
+			return fmt.Errorf("写入INI缓冲区错误: %v", err)
 		}
 		err = helper.NewFile(&helper.File{Path: fileNameFull}).CreateFile(buf.Bytes(), overwrite)
 	case ConfigTypeYAML:
 		fileData, err = yaml.Marshal(opt.ConfigData)
 		if err != nil {
-			log.Fatalf("转换YAML错误: %v", err)
+			return fmt.Errorf("转换YAML错误: %v", err)
 		}
 		err = helper.NewFile(&helper.File{Path: fileNameFull}).CreateFile(fileData, overwrite)
 	case ConfigTypeJSON:
 		fileData, err = json.MarshalIndent(opt.ConfigData, "", " ")
 		if err != nil {
-			log.Fatalf("转换JSON错误: %v", err)
+			return fmt.Errorf("转换JSON错误: %v", err)
 		}
 		err = helper.NewFile(&helper.File{Path: fileNameFull}).CreateFile(fileData, overwrite)
 	default:
-		log.Fatalf("不支持的配置文件类型")
+		return errors.New("不支持的配置文件类型")
 	}
 
 	if err != nil {
-		log.Fatalf("更新配置文件出错: %v", err)
+		return fmt.Errorf("更新配置文件出错: %v", err)
 	}
+
+	return nil
 }
 
 // formatErrors 将 []error 格式化为单个字符串
