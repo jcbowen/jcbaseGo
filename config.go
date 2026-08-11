@@ -205,7 +205,47 @@ func (opt *Option) replaceNodeValue(fieldVal reflect.Value, newValue interface{}
 //		log.Printf("重载配置失败: %v", err)
 //	}
 func (opt *Option) ReloadConfig() error {
+	// 重载前重置配置数据，避免已移除的配置项仍以旧值残留
+	if err := opt.resetConfigData(); err != nil {
+		return err
+	}
 	return opt.loadConfig()
+}
+
+// resetConfigData 将 ConfigData 重置为结构体类型的零值
+// 保持原指针地址不变，避免外部引用失效；仅对结构体指针生效
+// 参数：
+//   - 无
+//
+// 返回：
+//   - error: 配置信息为空或重置失败时返回错误
+func (opt *Option) resetConfigData() error {
+	if opt.ConfigData == nil {
+		return errors.New("配置信息不能为空")
+	}
+
+	val := reflect.ValueOf(opt.ConfigData)
+	if val.Kind() != reflect.Ptr {
+		return nil
+	}
+
+	// nil 指针分配新的零值实例
+	if val.IsNil() {
+		elemType := val.Type().Elem()
+		if elemType.Kind() != reflect.Struct {
+			return nil
+		}
+		opt.ConfigData = reflect.New(elemType).Interface()
+		return nil
+	}
+
+	// 结构体指针重置所有字段为零值
+	elem := val.Elem()
+	if elem.Kind() == reflect.Struct {
+		elem.Set(reflect.Zero(elem.Type()))
+	}
+
+	return nil
 }
 
 // checkConfig 将配置信息初始化到 Config 中
