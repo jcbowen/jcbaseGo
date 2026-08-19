@@ -5,8 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/crypto/ssh"
+	"net"
+	"net/url"
+	"strings"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // 存储类型常量定义
@@ -31,7 +35,10 @@ func (e *Error) Unwrap() error {
 	return e.Err
 }
 
-// withContextTimeout 包装一个操作，使其能够响应上下文的取消信号
+// withContextTimeout 包装一个操作，使其能够响应上下文的取消信号。
+// 注意：该函数同步执行 fn，仅在操作前后检查 ctx 状态。由于底层 FTP/SFTP SDK 不支持
+// context，无法中断正在进行的 IO 操作，但可保证在 ctx 已取消时不发起新操作，并在操作
+// 完成后及时发现取消状态。此实现消除了早期 goroutine 方案带来的并发安全隐患。
 func withContextTimeout[T any](ctx context.Context, op string, fn func() (T, error)) (T, error) {
 	select {
 	case <-ctx.Done():
@@ -40,32 +47,23 @@ func withContextTimeout[T any](ctx context.Context, op string, fn func() (T, err
 	default:
 	}
 
-	// 使用channel来实现操作超时
-	resultChan := make(chan T, 1)
-	errChan := make(chan error, 1)
-
-	go func() {
-		result, err := fn()
-		if err != nil {
-			errChan <- err
-			return
-		}
-		resultChan <- result
-	}()
+	result, err := fn()
+	if err != nil {
+		var zero T
+		return zero, &Error{Op: op, Err: err}
+	}
 
 	select {
 	case <-ctx.Done():
 		var zero T
 		return zero, &Error{Op: op, Err: ctx.Err()}
-	case err := <-errChan:
-		var zero T
-		return zero, &Error{Op: op, Err: err}
-	case result := <-resultChan:
+	default:
 		return result, nil
 	}
 }
 
-// withContextTimeoutVoid 包装一个无返回值的操作，使其能够响应上下文的取消信号
+// withContextTimeoutVoid 包装一个无返回值的操作，使其能够响应上下文的取消信号。
+// 实现逻辑与 withContextTimeout 一致，均为同步执行并在操作前后检查 ctx 状态。
 func withContextTimeoutVoid(ctx context.Context, op string, fn func() error) error {
 	select {
 	case <-ctx.Done():
@@ -73,27 +71,57 @@ func withContextTimeoutVoid(ctx context.Context, op string, fn func() error) err
 	default:
 	}
 
-	// 使用channel来实现操作超时
-	errChan := make(chan error, 1)
-
-	go func() {
-		errChan <- fn()
-	}()
+	if err := fn(); err != nil {
+		return &Error{Op: op, Err: err}
+	}
 
 	select {
 	case <-ctx.Done():
 		return &Error{Op: op, Err: ctx.Err()}
-	case err := <-errChan:
-		if err != nil {
-			return &Error{Op: op, Err: err}
-		}
+	default:
 		return nil
 	}
 }
 
+// normalizeAddress 校验并规范化 FTP/SFTP 服务器地址。
+// - 去除可能存在的 scheme（如 ftp:// / sftp://）
+// - 若未指定端口，则追加 defaultPort
+// 返回值：
+//   - 规范化后的 host:port 地址
+//   - 地址非法时返回错误
+func normalizeAddress(address, defaultPort string) (string, error) {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return "", errors.New("服务器地址不能为空")
+	}
+
+	// 去除 scheme
+	if strings.Contains(address, "://") {
+		u, err := url.Parse(address)
+		if err != nil {
+			return "", fmt.Errorf("服务器地址格式错误: %w", err)
+		}
+		address = u.Host
+	}
+
+	if address == "" {
+		return "", errors.New("服务器地址不能为空")
+	}
+
+	// 未指定端口时追加默认端口
+	if !strings.Contains(address, ":") {
+		address = net.JoinHostPort(address, defaultPort)
+	}
+
+	return address, nil
+}
+
 // ListOptions 定义了分页和过滤选项
+// 注意：不同存储类型对 Prefix 的语义不同：
+//   - COS/OSS：对象键前缀过滤
+//   - FTP/SFTP：待列出内容的目录路径
 type ListOptions struct {
-	Prefix  string // 文件名前缀过滤，可选
+	Prefix  string // 文件名前缀过滤或目录路径，可选
 	Marker  string // 分页标记，可选
 	MaxKeys int    // 每次返回的最大文件数量，可选
 }
