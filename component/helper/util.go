@@ -422,16 +422,16 @@ func StrReplace(search interface{}, replace interface{}, subject interface{}, co
 	}
 }
 
-// InArray 检查某个值是否存在于切片中
+// InArray 检查某个值是否存在于切片或数组中
 // val 是要检查的值
-// array 是要检查的切片
-// exists 是返回的布尔值，表示 val 是否存在于 array 中
+// array 是要检查的切片或数组
+// exists 是返回的布尔值，表示 val 是否存在于 array 中；如果 array 不是切片或数组，返回 false
 func InArray(val interface{}, array interface{}) (exists bool) {
 	arr := reflect.ValueOf(array)
 
-	// 确保 array 是一个切片
-	if arr.Kind() != reflect.Slice {
-		panic("第二个参数必须是一个切片")
+	// 确保 array 是一个切片或数组
+	if arr.Kind() != reflect.Slice && arr.Kind() != reflect.Array {
+		return false
 	}
 
 	// 遍历切片，检查 val 是否存在
@@ -474,10 +474,25 @@ func StructToMap(obj interface{}, useJsonTag bool) map[string]interface{} {
 }
 
 // MapToStruct 通过reflect将map转换为结构体
-func MapToStruct(mapData interface{}, obj interface{}) {
-	objValue := reflect.ValueOf(obj).Elem()
+// mapData 是要转换的 map，必须是 map[string]interface{} 类型或其兼容类型
+// obj 是目标结构体指针
+// 返回转换过程中发生的错误，成功时返回 nil
+func MapToStruct(mapData interface{}, obj interface{}) error {
+	objValue := reflect.ValueOf(obj)
+	if objValue.Kind() != reflect.Ptr || objValue.IsNil() {
+		return errors.New("MapToStruct: obj 必须是有效的结构体指针")
+	}
+	objValue = objValue.Elem()
+	if objValue.Kind() != reflect.Struct {
+		return errors.New("MapToStruct: obj 指向的值必须是结构体")
+	}
 
-	for key, value := range mapData.(map[string]interface{}) {
+	data, ok := mapData.(map[string]interface{})
+	if !ok {
+		return errors.New("MapToStruct: mapData 必须是 map[string]interface{} 类型")
+	}
+
+	for key, value := range data {
 		field := objValue.FieldByName(key)
 		if !field.IsValid() {
 			// 如果结构体中不存在这个字段，则尝试匹配 JSON 标记
@@ -495,6 +510,8 @@ func MapToStruct(mapData interface{}, obj interface{}) {
 			log.Println("值类型无法转换为字段类型：", key)
 		}
 	}
+
+	return nil
 }
 
 // setFieldValue 将 map 中的值转换为对应的类型，并设置到结构体字段中（属于MapToStruct的递归调用）
@@ -512,7 +529,15 @@ func setFieldValue(field reflect.Value, value interface{}) bool {
 
 	if field.Kind() == reflect.Struct && fieldValue.Kind() == reflect.Map {
 		// 如果字段是结构体，并且值是一个 map，则递归调用 MapToStruct 函数
-		MapToStruct(value.(map[string]interface{}), field.Addr().Interface()) // 传递值的指针
+		data, ok := value.(map[string]interface{})
+		if !ok {
+			log.Println("递归设置结构体字段失败：value 不是 map[string]interface{} 类型")
+			return false
+		}
+		if err := MapToStruct(data, field.Addr().Interface()); err != nil {
+			log.Println("递归设置结构体字段失败：", err)
+			return false
+		}
 		return true
 	}
 
@@ -936,7 +961,10 @@ func IsEmptyValue(val interface{}) bool {
 	case reflect.Bool:
 		return !value.Bool()
 	case reflect.Interface, reflect.Ptr:
-		return value.IsNil() || IsEmptyValue(value.Elem().Interface())
+		if value.IsNil() {
+			return true
+		}
+		return IsEmptyValue(value.Elem().Interface())
 	case reflect.Struct:
 		for i := 0; i < value.NumField(); i++ {
 			if !IsEmptyValue(value.Field(i).Interface()) {

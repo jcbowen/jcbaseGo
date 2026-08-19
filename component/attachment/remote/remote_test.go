@@ -45,10 +45,10 @@ func TestNewClient(t *testing.T) {
 		config      interface{}
 		wantErr     bool
 	}{
-		{"FTP", TypeFTP, ftpConfig, true},  // 预期失败，因为没有实际的FTP服务器
+		{"FTP", TypeFTP, ftpConfig, true},   // 预期失败，因为没有实际的FTP服务器
 		{"SFTP", TypeSFTP, sftpConfig, true}, // 预期失败，因为没有实际的SFTP服务器
-		{"COS", TypeCOS, cosConfig, true},  // 预期失败，因为没有实际的COS配置
-		{"OSS", TypeOSS, ossConfig, true},  // 预期失败，因为没有实际的OSS配置
+		{"COS", TypeCOS, cosConfig, false},  // 本地创建COS客户端不会连接服务器，预期成功
+		{"OSS", TypeOSS, ossConfig, false},  // 本地创建OSS客户端不会连接服务器，预期成功
 		{"Unknown", "unknown", nil, true},   // 预期失败，因为类型未知
 	}
 

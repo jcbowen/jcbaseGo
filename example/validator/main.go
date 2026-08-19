@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== 数据验证器使用示例 ===\n")
+	fmt.Println("=== 数据验证器使用示例 ===")
 
 	// 1. 基本验证示例
 	fmt.Println("1. 基本验证示例:")

@@ -30,7 +30,7 @@ func (User) TableName() string {
 // main 主函数
 // 演示MySQL ORM的基本使用方法，包括连接、迁移、CRUD、查询和事务操作
 func main() {
-	fmt.Println("=== MySQL ORM 使用示例 ===\n")
+	fmt.Println("=== MySQL ORM 使用示例 ===")
 
 	// 1. 连接数据库
 	fmt.Println("1. 连接数据库:")

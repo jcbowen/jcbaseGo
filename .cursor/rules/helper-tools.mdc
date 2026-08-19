@@ -333,8 +333,11 @@ dataMap := map[string]interface{}{
 }
 
 var dbConfig Config
-helper.MapToStruct(dataMap, &dbConfig)
-fmt.Printf("数据库配置: %+v", dbConfig)
+if err := helper.MapToStruct(dataMap, &dbConfig); err != nil {
+    log.Printf("MapToStruct 失败: %v", err)
+} else {
+    fmt.Printf("数据库配置: %+v", dbConfig)
+}
 ```
 
 ### 其他实用工具

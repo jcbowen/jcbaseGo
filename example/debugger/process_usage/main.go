@@ -13,11 +13,7 @@ import (
 // processWorker 模拟一个后台工作进程
 func processWorker(debuggerInstance *debugger.Debugger, processName string) {
 	// 启动工作进程
-	logger, err := debuggerInstance.StartProcess(processName, "worker")
-	if err != nil {
-		log.Printf("启动工作进程失败: %v", err)
-		return
-	}
+	logger := debuggerInstance.StartProcess(processName, "worker")
 
 	// 记录进程开始信息
 	logger.Info("进程开始执行", debugger.Fields{
@@ -26,7 +22,7 @@ func processWorker(debuggerInstance *debugger.Debugger, processName string) {
 	})
 
 	// 模拟工作步骤1
-	logger.Debug("步骤1: 数据预处理", debugger.Fields{
+	logger.Info("步骤1: 数据预处理", debugger.Fields{
 		"data_size": 1024,
 		"operation": "preprocessing",
 	})
@@ -60,8 +56,7 @@ func processWorker(debuggerInstance *debugger.Debugger, processName string) {
 	})
 
 	// 结束进程记录
-	err = debuggerInstance.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
-	if err != nil {
+	if err := debuggerInstance.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted); err != nil {
 		log.Printf("结束进程记录失败: %v", err)
 	}
 }
@@ -69,11 +64,7 @@ func processWorker(debuggerInstance *debugger.Debugger, processName string) {
 // batchProcessor 模拟批量处理进程
 func batchProcessor(debuggerInstance *debugger.Debugger) {
 	// 启动批量处理进程
-	logger, err := debuggerInstance.StartProcess("batch_processor", "batch")
-	if err != nil {
-		log.Printf("启动批量处理进程失败: %v", err)
-		return
-	}
+	logger := debuggerInstance.StartProcess("batch_processor", "batch")
 
 	logger.Info("批量处理开始", debugger.Fields{
 		"batch_id":    "batch-2024-01",
@@ -119,13 +110,8 @@ func batchProcessor(debuggerInstance *debugger.Debugger) {
 
 // main 主函数，演示进程级debugger的使用
 func main() {
-	// 创建调试器实例（使用内存存储）
-	debuggerInstance, err := debugger.NewWithMemoryStorage(&debugger.Config{
-		Enabled:         true,
-		LogLevel:        debugger.LevelInfo,
-		MaxBodySize:     1024 * 1024, // 1MB
-		RetentionPeriod: 24 * time.Hour,
-	})
+	// 创建调试器实例（使用内存存储，最多保存150条记录）
+	debuggerInstance, err := debugger.NewWithMemoryStorage(150)
 	if err != nil {
 		log.Fatal("创建调试器失败:", err)
 	}
@@ -134,7 +120,7 @@ func main() {
 	router := gin.Default()
 
 	// 注册调试器控制器
-	controller := debugger.NewController(debuggerInstance, router, &debugger.ControllerConfig{
+	_ = debugger.NewController(debuggerInstance, router, &debugger.ControllerConfig{
 		BasePath: "/debug",
 		Title:    "进程调试器",
 		PageSize: 20,
@@ -197,7 +183,7 @@ func main() {
 
 		// 同时启动一个后台进程
 		go func() {
-			logger, _ := debuggerInstance.StartProcess("mixed_operation_worker", "background")
+			logger := debuggerInstance.StartProcess("mixed_operation_worker", "background")
 			logger.Info("混合操作中的后台进程", debugger.Fields{
 				"http_request_id": c.GetHeader("X-Request-ID"),
 			})

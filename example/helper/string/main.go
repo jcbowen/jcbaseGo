@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Helper 字符串处理工具使用示例 ===\n")
+	fmt.Println("=== Helper 字符串处理工具使用示例 ===")
 
 	// 1. 字符串截取示例
 	fmt.Println("1. 字符串截取示例:")

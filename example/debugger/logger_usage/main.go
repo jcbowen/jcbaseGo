@@ -32,7 +32,7 @@ func main() {
 		logger := debugger.GetLoggerFromContext(c)
 
 		// 记录不同级别的日志
-		logger.Debug("收到根路径请求", map[string]interface{}{
+		logger.Info("收到根路径请求", map[string]interface{}{
 			"client_ip":  c.ClientIP(),
 			"user_agent": c.Request.UserAgent(),
 			"timestamp":  time.Now().Format(time.RFC3339),
@@ -65,14 +65,14 @@ func main() {
 		})
 
 		// 模拟数据库查询
-		logger.Debug("开始查询数据库", map[string]interface{}{
+		logger.Info("开始查询数据库", map[string]interface{}{
 			"operation":  "query_users",
 			"start_time": time.Now().Format(time.RFC3339),
 		})
 
 		time.Sleep(50 * time.Millisecond) // 模拟数据库查询时间
 
-		logger.Debug("数据库查询完成", map[string]interface{}{
+		logger.Info("数据库查询完成", map[string]interface{}{
 			"operation": "query_users",
 			"end_time":  time.Now().Format(time.RFC3339),
 			"duration":  "50ms",
@@ -139,7 +139,7 @@ func main() {
 		}
 
 		// 模拟创建用户
-		logger.Debug("开始创建用户", map[string]interface{}{
+		logger.Info("开始创建用户", map[string]interface{}{
 			"user_data": user,
 			"operation": "create_user",
 		})

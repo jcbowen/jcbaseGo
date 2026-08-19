@@ -149,7 +149,7 @@ func example3(router *gin.Engine) {
 	// 添加自定义路由
 	customGroup.GET("/test", func(c *gin.Context) {
 		logger := debugger.GetLoggerFromContext(c)
-		logger.Debug("自定义路由测试")
+		logger.Info("自定义路由测试")
 		
 		c.JSON(http.StatusOK, gin.H{
 			"message": "自定义路由",

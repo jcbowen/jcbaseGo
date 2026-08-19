@@ -77,7 +77,7 @@ func main() {
 
 		// 记录一些进程日志
 		processLogger.Info("进程开始执行")
-		processLogger.Debug("初始化配置", map[string]interface{}{"config": "test"})
+		processLogger.Info("初始化配置", map[string]interface{}{"config": "test"})
 
 		// 模拟进程执行
 		time.Sleep(100 * time.Millisecond)

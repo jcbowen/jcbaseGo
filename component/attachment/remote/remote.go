@@ -140,25 +140,41 @@ func NewClient(storageType string, config interface{}, args ...ssh.HostKeyCallba
 		if !ok {
 			return nil, errors.New("invalid config for FTP")
 		}
-		return NewFTPClient(ftpConfig)
+		c, err := NewFTPClient(ftpConfig)
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
 	case TypeSFTP:
 		sftpConfig, ok := config.(SFTPConfig)
 		if !ok {
 			return nil, errors.New("invalid config for SFTP")
 		}
-		return NewSFTPClient(sftpConfig, hostKeyCallback)
+		c, err := NewSFTPClient(sftpConfig, hostKeyCallback)
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
 	case TypeCOS:
 		cosConfig, ok := config.(COSConfig)
 		if !ok {
 			return nil, errors.New("invalid config for COS")
 		}
-		return NewCOSClient(cosConfig)
+		c, err := NewCOSClient(cosConfig)
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
 	case TypeOSS:
 		ossConfig, ok := config.(OSSConfig)
 		if !ok {
 			return nil, errors.New("invalid config for OSS")
 		}
-		return NewOSSClient(ossConfig)
+		c, err := NewOSSClient(ossConfig)
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
 	default:
 		return nil, errors.New("unsupported storage type")
 	}

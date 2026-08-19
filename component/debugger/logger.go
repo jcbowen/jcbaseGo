@@ -41,6 +41,9 @@ func (l LogLevel) String() string {
 	}
 }
 
+// Fields 日志字段映射的便捷类型别名
+type Fields = map[string]interface{}
+
 // LoggerInterface 日志记录器接口
 // 支持不同级别的日志记录，可以在控制器中直接使用
 type LoggerInterface interface {
@@ -310,7 +313,7 @@ func (l *DefaultLogger) ClearLogs() {
 // LoggerLog 记录通过logger打印的日志信息
 type LoggerLog struct {
 	Timestamp time.Time              `json:"timestamp"` // 日志时间戳
-	Level     LogLevel               `json:"level"`     // 日志级别：debug/info/warn/error
+	Level     LogLevel               `json:"level"`     // 日志级别：silent/error/warn/info
 	Message   string                 `json:"message"`   // 日志消息
 	Fields    map[string]interface{} `json:"fields"`    // 日志附加字段
 
@@ -497,6 +500,9 @@ type ProcessLoggerInterface interface {
 
 	// GetProcessType 获取进程类型
 	GetProcessType() string
+
+	// GetStartTime 获取进程开始时间
+	GetStartTime() time.Time
 
 	// SetProcessInfo 设置进程信息
 	SetProcessInfo(info map[string]interface{})
@@ -764,6 +770,16 @@ func (p *ProcessLogger) GetProcessName() string {
 //	string: 进程类型
 func (p *ProcessLogger) GetProcessType() string {
 	return p.processType
+}
+
+// GetStartTime 获取进程开始时间
+// 返回进程记录器创建时的时间戳，用于计算进程执行耗时
+//
+// 返回值:
+//
+//	time.Time: 进程开始时间
+func (p *ProcessLogger) GetStartTime() time.Time {
+	return p.startTime
 }
 
 // SetProcessInfo 设置进程信息

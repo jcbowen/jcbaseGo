@@ -46,7 +46,7 @@ func (User) TableName() string {
 // 3. 连接池配置更简单（通常只需要1个连接）
 // 4. 无需网络连接，适合本地开发和测试
 func main() {
-	fmt.Println("=== SQLite ORM 使用示例 ===\n")
+	fmt.Println("=== SQLite ORM 使用示例 ===")
 
 	// 1. 连接数据库
 	fmt.Println("1. 连接SQLite数据库:")

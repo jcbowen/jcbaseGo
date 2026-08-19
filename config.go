@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -37,8 +38,9 @@ func (opt *Option) GetConfig() *interface{} {
 }
 
 // ConfigToStruct 将 Option.ConfigData 赋值到自定义结构体中
-func (opt *Option) ConfigToStruct(configStruct interface{}) {
-	helper.MapToStruct(opt.ConfigData, configStruct)
+// 返回转换过程中发生的错误，成功时返回 nil
+func (opt *Option) ConfigToStruct(configStruct interface{}) error {
+	return helper.MapToStruct(opt.ConfigData, configStruct)
 }
 
 // GetConfigOption 获取配置选项
@@ -167,26 +169,38 @@ func (opt *Option) replaceNodeValue(fieldVal reflect.Value, newValue interface{}
 
 	// 检查条件
 	if condition != nil {
-		// 检查条件类型是否匹配
-		if reflect.TypeOf(condition) != reflect.TypeOf(currentVal) {
-			log.Printf("条件类型不匹配，期望 %T，实际 %T", currentVal, condition)
-			return false
+		condVal := reflect.ValueOf(condition)
+		currentType := reflect.TypeOf(currentVal)
+		// 类型不一致时尝试转换
+		if condVal.Type() != currentType {
+			if condVal.Type().ConvertibleTo(currentType) {
+				condVal = condVal.Convert(currentType)
+			} else {
+				log.Printf("条件类型不匹配，期望 %T，实际 %T", currentVal, condition)
+				return false
+			}
 		}
 
 		// 检查当前值是否等于条件值
-		if !reflect.DeepEqual(currentVal, condition) {
+		if !reflect.DeepEqual(currentVal, condVal.Interface()) {
 			return false
 		}
 	}
 
-	// 检查新值类型是否匹配
-	if reflect.TypeOf(newValue) != reflect.TypeOf(currentVal) {
-		log.Printf("新值类型不匹配，期望 %T，实际 %T", currentVal, newValue)
-		return false
+	// 检查新值类型是否匹配，不一致时尝试转换
+	newVal := reflect.ValueOf(newValue)
+	currentType := fieldVal.Type()
+	if newVal.Type() != currentType {
+		if newVal.Type().ConvertibleTo(currentType) {
+			newVal = newVal.Convert(currentType)
+		} else {
+			log.Printf("新值类型不匹配，期望 %T，实际 %T", currentVal, newValue)
+			return false
+		}
 	}
 
 	// 替换值
-	fieldVal.Set(reflect.ValueOf(newValue))
+	fieldVal.Set(newVal)
 	return true
 }
 
@@ -307,7 +321,13 @@ func (opt *Option) loadConfig() error {
 		}
 	case ConfigTypeCommand:
 		// 执行脚本并获取JSON输出
-		cmd := exec.Command("sh", "-c", opt.ConfigSource)
+		// Windows使用cmd /c，其他系统使用sh -c
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("cmd", "/c", opt.ConfigSource)
+		} else {
+			cmd = exec.Command("sh", "-c", opt.ConfigSource)
+		}
 
 		// 获取标准输出和错误输出
 		var stdout, stderr bytes.Buffer
@@ -330,8 +350,17 @@ func (opt *Option) loadConfig() error {
 
 		// 截取可能的JSON部分
 		pureJSON := output[jsonStartIndex:]
-		if err = json.Unmarshal(pureJSON, &opt.ConfigData); err != nil {
-			return fmt.Errorf("JSON解析错误: %v\n原始数据: %s", err, pureJSON)
+		// 如果 ConfigData 未指定，则解析为 map[string]interface{}；否则解析到具体结构体
+		if opt.ConfigData == nil {
+			var data map[string]interface{}
+			if err = json.Unmarshal(pureJSON, &data); err != nil {
+				return fmt.Errorf("JSON解析错误: %v\n原始数据: %s", err, pureJSON)
+			}
+			opt.ConfigData = data
+		} else {
+			if err = json.Unmarshal(pureJSON, opt.ConfigData); err != nil {
+				return fmt.Errorf("JSON解析错误: %v\n原始数据: %s", err, pureJSON)
+			}
 		}
 		// 执行配置替换规则
 		opt.applyConfigReplaceRules()
@@ -353,7 +382,9 @@ func PanicIfError(err interface{}) {
 			log.Panic(v)
 		}
 	case []error:
-		log.Panic(formatErrors(v))
+		if helper.IsError(v) {
+			log.Panic(formatErrors(v))
+		}
 	case redis.Error:
 		if !errors.Is(v, redis.Nil) {
 			log.Panic(v)
@@ -610,7 +641,8 @@ func (opt *Option) readConfigFile(fileNameFull string) error {
 		}
 	case ConfigTypeJSON:
 		// JSON 格式直接解析到结构体
-		err = json.Unmarshal(file, &opt.ConfigData)
+		// 传入 opt.ConfigData 本身（其动态值应为结构体指针），避免解析成 map[string]interface{}
+		err = json.Unmarshal(file, opt.ConfigData)
 		if err != nil {
 			return fmt.Errorf("解析JSON配置文件错误: %v", err)
 		}
@@ -661,12 +693,15 @@ func (opt *Option) updateConfigFile(fileNameFull string, overwrite bool) error {
 	return nil
 }
 
-// formatErrors 将 []error 格式化为单个字符串
+// formatErrors 将 []error 格式化为单个字符串，跳过 nil 错误
 func formatErrors(errs []error) string {
 	var sb strings.Builder
 	for _, err := range errs {
+		if err == nil {
+			continue
+		}
 		sb.WriteString(err.Error())
-		sb.WriteString("\n")
+		sb.WriteByte('\n')
 	}
 	return sb.String()
 }

@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Helper 类型转换工具使用示例 ===\n")
+	fmt.Println("=== Helper 类型转换工具使用示例 ===")
 
 	// 1. 字符串转换示例
 	fmt.Println("1. 字符串转换示例:")

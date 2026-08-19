@@ -416,7 +416,7 @@ debugger组件提供了内置的Logger功能，支持多级别日志记录和结
 
 ### 功能特性
 
-- ✅ **多级别日志**: 支持Debug、Info、Warn、Error四种日志级别
+- ✅ **多级别日志**: 支持Silent、Error、Warn、Info四种日志级别
 - ✅ **结构化字段**: 支持添加自定义字段到日志记录
 - ✅ **日志收集**: 自动收集Logger日志并与HTTP请求或进程记录关联
 - ✅ **级别控制**: 支持根据配置的日志级别过滤日志记录
@@ -592,7 +592,7 @@ debugger组件现在支持进程级日志记录功能，可以在非HTTP请求�
 ### 功能特性
 
 - ✅ **进程记录管理**: 支持创建、获取、结束进程记录
-- ✅ **多级日志记录**: 支持Debug、Info、Warn、Error四种日志级别
+- ✅ **多级日志记录**: 支持Silent、Error、Warn、Info四种日志级别
 - ✅ **结构化字段**: 支持添加自定义字段到日志记录
 - ✅ **存储共存**: 进程记录与HTTP请求记录共存于同一存储
 - ✅ **查询过滤**: 支持按进程名称、进程ID、记录类型等条件过滤
@@ -938,7 +938,7 @@ func main() {
 
 #### Logger接口方法
 
-Logger接口支持的方法与[Logger功能](#logger功能)章节中定义的`LoggerInterface`接口一致，包括Debug、Info、Warn、Error四种日志级别记录方法，以及WithFields和GetLevel方法。
+Logger接口支持的方法与[Logger功能](#logger功能)章节中定义的`LoggerInterface`接口一致，包括Info、Warn、Error三种日志级别记录方法，以及WithFields和GetLevel方法。
 
 #### 使用WithFields添加结构化字段
 
@@ -1228,7 +1228,7 @@ defer dbg.EndProcess(logger.GetProcessID(), "completed")
 
 // 记录进程日志
 logger.Info("开始处理数据同步")
-logger.Debug("获取数据源信息", map[string]interface{}{
+logger.Info("获取数据源信息", map[string]interface{}{
     "source": "MySQL",
     "table": "users",
 })
@@ -1253,14 +1253,25 @@ logger.Info("数据同步完成", map[string]interface{}{
 
 ```go
 type ProcessLoggerInterface interface {
-    Debug(msg any, fields ...map[string]interface{})
-    Info(msg any, fields ...map[string]interface{})
-    Warn(msg any, fields ...map[string]interface{})
-    Error(msg any, fields ...map[string]interface{})
+    LoggerInterface
+
+    // GetProcessID 获取进程ID
     GetProcessID() string
-    UpdateProgress(progress float64)
-    SetStatus(status string)
-    AddProcessData(key string, value interface{})
+
+    // GetProcessName 获取进程名称
+    GetProcessName() string
+
+    // GetProcessType 获取进程类型
+    GetProcessType() string
+
+    // GetStartTime 获取进程开始时间
+    GetStartTime() time.Time
+
+    // SetProcessInfo 设置进程信息
+    SetProcessInfo(info map[string]interface{})
+
+    // EndProcess 结束进程记录
+    EndProcess(status string) error
 }
 ```
 
@@ -1361,7 +1372,7 @@ debugger组件现在支持在详情页面中显示业务控制器中记录的log
 #### 功能特性
 
 - ✅ **自动收集**: 在请求处理过程中自动收集logger日志
-- ✅ **级别区分**: 支持Debug、Info、Warn、Error四种日志级别
+- ✅ **级别区分**: 支持Silent、Error、Warn、Info四种日志级别
 - ✅ **结构化字段**: 显示日志的附加字段信息
 - ✅ **时间戳**: 记录每条日志的精确时间戳
 - ✅ **响应式布局**: 适配不同屏幕尺寸的显示
@@ -1861,9 +1872,6 @@ type Storage interface {
 #### LoggerInterface接口
 ```go
 type LoggerInterface interface {
-	// Debug 记录调试级别日志
-	Debug(msg any, fields ...map[string]interface{})
-
 	// Info 记录信息级别日志
 	Info(msg any, fields ...map[string]interface{})
 

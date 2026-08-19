@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== AES 加密组件使用示例 ===\n")
+	fmt.Println("=== AES 加密组件使用示例 ===")
 
 	// 1. 使用默认值进行加解密
 	fmt.Println("1. 使用默认值进行加解密:")
