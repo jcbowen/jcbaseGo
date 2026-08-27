@@ -3,10 +3,40 @@ package debugger
 // 内联HTML模板定义
 
 // indexTemplate 主页模板
+// basePathProbeScript 反向代理二级目录自适应脚本（index/error/detail 三个模板共用，避免重复维护）。
+// 对比浏览器完整路径与后端内部 basePath 识别代理前缀（如 /aaa）：
+// 浏览器路径 /aaa/jcbase/debug/list 与内部 basePath /jcbase/debug 对比得出代理前缀 /aaa，
+// 计算含前缀的外部 basePath 并以 <base> 让相对链接/资源自动补全前缀。
+const basePathProbeScript = `    <script>
+        // 反向代理二级目录自适应：对比浏览器完整路径与后端内部 basePath 识别代理前缀
+        // 例：部署在 /aaa 下时浏览器路径为 /aaa/jcbase/debug/list，后端内部 basePath 为 /jcbase/debug，
+        // 由此得出代理前缀 /aaa，计算含前缀的外部 basePath，并以 <base> 让相对链接/资源自动补全前缀。
+        (function () {
+            var internal = '{{.BasePath}}'; // 后端内部路径（不含代理前缀）
+            var pathname = window.location.pathname || '';
+            var prefix = '';
+            // 仅在内部路径为非空且非根路径时按子串定位代理前缀：
+            // 根路径 "/" 会在 URL 中多处出现，lastIndexOf 无法稳定区分代理前缀与内部路径，
+            // 在 /aaa/detail/x 这类多级路由下会误取前缀（如得到 /aaa/detail/ 而非 /aaa/），
+            // 故对 "/" 不尝试提取，回退为无前缀，避免产生错误链接。
+            if (internal && internal !== '/') {
+                var idx = pathname.lastIndexOf(internal);
+                if (idx > 0) {
+                    prefix = pathname.substring(0, idx); // 提取代理前缀，如 /aaa
+                }
+            }
+            window.__basePath = prefix + internal; // 含代理前缀的外部 basePath
+            var base = document.createElement('base');
+            base.href = window.__basePath + '/';
+            document.head.insertBefore(base, document.head.firstChild);
+        })();
+    </script>
+`
+
 const indexTemplate = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
+` + basePathProbeScript + `    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}}</title>
     <style>
@@ -352,7 +382,7 @@ const indexTemplate = `<!DOCTYPE html>
                 <h1>{{.Title}}</h1>
                 <div class="header-actions">
                     {{if .EnableMainLogger}}
-                    <a href="{{.BasePath}}/api/download-main-logs" class="download-btn">
+                    <a href="api/download-main-logs" class="download-btn">
                         下载主进程日志
                     </a>
                     {{end}}
@@ -393,7 +423,7 @@ const indexTemplate = `<!DOCTYPE html>
         </div>
         
         <div class="nav">
-            <a href="{{.BasePath}}/list" class="active">日志列表</a>
+            <a href="list" class="active">日志列表</a>
         </div>
         
         <div class="filters">
@@ -626,7 +656,7 @@ const indexTemplate = `<!DOCTYPE html>
                     params.delete('page');
                     
                     const queryString = params.toString();
-                    const url = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+                    const url = window.__basePath + '/list' + (queryString ? '?' + queryString : '');
                     sessionStorage.setItem('debugger_list_url', url);
                     window.location.href = url;
                 }
@@ -670,7 +700,7 @@ const indexTemplate = `<!DOCTYPE html>
                     
                     {{range .Entries}}
                     <div class="log-row">
-                        <div class="request-id"><a href="{{$.BasePath}}/detail/{{.ID}}" title="查看详情">{{.ID}}</a></div>
+                        <div class="request-id"><a href="detail/{{.ID}}" title="查看详情">{{.ID}}</a></div>
                         <div class="timestamp">{{.Timestamp.Format "2006-01-02 15:04:05"}}</div>
                         <div class="duration">{{formatDuration .Duration}}</div>
                         <div class="storage-size">{{.StorageSize}}</div>
@@ -805,7 +835,7 @@ const indexTemplate = `<!DOCTYPE html>
             // 不再使用初始值 window.pageParams.pageSize 覆盖，避免用户修改后分页被重置。
 
             const queryString = params.toString();
-            return window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+            return window.__basePath + '/list' + (queryString ? '?' + queryString : '');
         }
 
         // 跳转到指定页面
@@ -855,7 +885,7 @@ const indexTemplate = `<!DOCTYPE html>
             params.delete('page');
 
             const queryString = params.toString();
-            const url = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+            const url = window.__basePath + '/list' + (queryString ? '?' + queryString : '');
             // 保存当前列表页URL到sessionStorage，供详情页返回时使用
             sessionStorage.setItem('debugger_list_url', url);
             window.location.href = url;
@@ -890,7 +920,7 @@ const indexTemplate = `<!DOCTYPE html>
             params.delete('page');
 
             const queryString = params.toString();
-            const url = window.pageParams.basePath + '/list' + (queryString ? '?' + queryString : '');
+            const url = window.__basePath + '/list' + (queryString ? '?' + queryString : '');
             // 保存当前列表页URL到sessionStorage，供详情页返回时使用
             sessionStorage.setItem('debugger_list_url', url);
             window.location.href = url;
@@ -899,7 +929,7 @@ const indexTemplate = `<!DOCTYPE html>
         // 重置筛选条件
         function resetFilters() {
             sessionStorage.removeItem('debugger_list_url');
-            window.location.href = window.pageParams.basePath + '/list';
+            window.location.href = window.__basePath + '/list';
         }
 
         // 辅助函数：字符串转小写
@@ -998,7 +1028,7 @@ const indexTemplate = `<!DOCTYPE html>
 const errorTemplate = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
+` + basePathProbeScript + `    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}}</title>
     <style>
@@ -1019,7 +1049,7 @@ const errorTemplate = `<!DOCTYPE html>
             <div class="error-icon">⚠️</div>
             <h1 class="error-title">{{.Title}}</h1>
             <p class="error-message">{{.Message}}</p>
-            <a href="{{.BasePath}}/list" class="back-link">返回首页</a>
+            <a href="list" class="back-link">返回首页</a>
         </div>
     </div>
     
@@ -1039,7 +1069,7 @@ const errorTemplate = `<!DOCTYPE html>
 const detailTemplate = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
+` + basePathProbeScript + `    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}}</title>
     <style>
@@ -1554,14 +1584,14 @@ const detailTemplate = `<!DOCTYPE html>
             }
         }
     </style>
-    <script src="{{.BasePath}}/static/jsonc-parser.bundle.js"></script>
+    <script src="static/jsonc-parser.bundle.js"></script>
 </head>
 <body>
     <div class="container">
         <a href="javascript:void(0)" onclick="goBackToList()" class="back-link" id="back-link">← 返回日志列表</a>
 
         <div class="header">
-            <h1>{{.Title}} <span class="record-type-badge record-type-{{.Entry.RecordType}}">{{if eq .Entry.RecordType "process"}}进程记录{{else}}HTTP记录{{end}}</span> <a href="{{.BasePath}}/api/logs/{{.Entry.ID}}" target="_blank" class="json-view-link" title="查看JSON数据">[JSON]</a></h1>
+            <h1>{{.Title}} <span class="record-type-badge record-type-{{.Entry.RecordType}}">{{if eq .Entry.RecordType "process"}}进程记录{{else}}HTTP记录{{end}}</span> <a href="api/logs/{{.Entry.ID}}" target="_blank" class="json-view-link" title="查看JSON数据">[JSON]</a></h1>
         </div>
         
         {{if .Entry}}
@@ -1877,7 +1907,7 @@ const detailTemplate = `<!DOCTYPE html>
                 return;
             }
             // 默认返回列表页（不带筛选条件）
-            window.location.href = '{{.BasePath}}/list';
+            window.location.href = window.__basePath + '/list';
         }
 
         // 初始化页面上所有 .json-viewer 容器

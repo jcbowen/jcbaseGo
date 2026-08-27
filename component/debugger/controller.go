@@ -103,10 +103,10 @@ func (c *Controller) registerRoutes(useCDN bool) {
 	// 静态资源服务（JSON 查看器依赖的 js 库等）
 	routerGroup.StaticFS("/static", getStaticFileSystem())
 
-	// 重定向根目录到 /list
-	routerGroup.GET("", func(ctx *gin.Context) {
-		ctx.Redirect(http.StatusFound, helper.GetHostInfo(ctx.Request)+c.basePath+"/list")
-	})
+	// 根目录直接渲染日志列表页（不再 302 重定向）
+	// 经反向代理部署在二级目录（如 /aaa）时，后端无法感知代理前缀，无法拼出正确的 Location；
+	// 改为直接渲染列表页，由前端 <base> 与相对链接自动补全代理前缀，避免跳转丢失二级目录。
+	routerGroup.GET("", c.indexHandler)
 
 	// 调试器主页 - 显示日志列表
 	routerGroup.GET("/list", c.indexHandler)

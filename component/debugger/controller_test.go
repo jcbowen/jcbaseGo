@@ -586,8 +586,8 @@ func TestJSONViewerIntegration(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 		body := w.Body.String()
 
-		// 验证引入了 jsonc-parser 静态资源
-		assert.Contains(t, body, "/static/jsonc-parser.bundle.js")
+		// 验证引入了 jsonc-parser 静态资源（相对路径，由前端 <base> 自动补全代理前缀）
+		assert.Contains(t, body, "static/jsonc-parser.bundle.js")
 
 		// 验证包含 JSON 查看器初始化相关代码
 		assert.Contains(t, body, "JSONViewer")
@@ -1018,5 +1018,67 @@ func TestControllerIntegration(t *testing.T) {
 
 		// 验证页面包含记录的日志
 		assert.Contains(t, string(body), "/api/test")
+	})
+}
+
+// TestControllerReverseProxySubpath 验证调试器前端在反向代理二级目录下的适配
+// 方案为纯前端自检测（window.location 对照后端 basePath）+ 注入 <base> + 相对链接，
+// 无需后端配置、也无需反向代理添加任何头部。
+func TestControllerReverseProxySubpath(t *testing.T) {
+	// 准备测试存储与调试器实例
+	storage, _ := NewMemoryStorage()
+	_ = storage.Save(&LogEntry{
+		ID:         "subpath-test-1",
+		Timestamp:  time.Now(),
+		RecordType: "http",
+		Method:     "GET",
+		URL:        "/api/test",
+		StatusCode: 200,
+	})
+	config := &Config{Enabled: true, SkipPaths: []string{}}
+	config.Storage = storage
+	dbg, _ := New(config)
+
+	router := gin.New()
+	dbg.RegisterRoutes(router)
+
+	t.Run("根路径直接渲染列表页（不再 302 重定向）", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/jcbase/debug", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		body := w.Body.String()
+		// 应直接渲染列表页内容，而非重定向到 /list（避免服务端无法拼代理前缀）
+		assert.Contains(t, body, "日志列表")
+		// 注入代理前缀自检测脚本与 <base>
+		assert.Contains(t, body, "window.__basePath")
+		assert.Contains(t, body, "base.href")
+		// 导航使用相对路径
+		assert.Contains(t, body, `href="list"`)
+	})
+
+	t.Run("列表页使用相对链接与代理前缀自适应脚本", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		body := w.Body.String()
+		assert.Contains(t, body, "window.__basePath")
+		// 详情链接为相对路径（由前端 <base> 自动补全代理前缀）
+		assert.Contains(t, body, `href="detail/`)
+	})
+
+	t.Run("详情页静态资源使用相对路径", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/jcbase/debug/detail/subpath-test-1", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		body := w.Body.String()
+		// jsonc-parser 经相对路径加载，不再硬编码 /static 绝对前缀
+		assert.Contains(t, body, "static/jsonc-parser.bundle.js")
+		assert.Contains(t, body, "window.__basePath")
 	})
 }

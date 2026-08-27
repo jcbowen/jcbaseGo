@@ -31,6 +31,37 @@
 - Logger日志信息（时间戳、级别、消息、附加字段、位置信息）
 - 存储大小信息（自动计算和格式化显示）
 
+## 反向代理 / 二级目录部署
+
+调试器前端页面（日志列表、详情）默认基于后端内部 `basePath`（如 `/jcbase/debug`）拼装链接。
+当服务经反向代理部署在二级目录（如 `/aaa`）下时，代理会**透明剥离前缀**后再转发给后端，
+后端只认内部路径，但浏览器中的完整路径应为 `/aaa/jcbase/debug/...`。
+若仍使用绝对路径，浏览器跳转与静态资源（如 `jsonc-parser.bundle.js`）都会丢失 `/aaa` 前缀导致 404。
+
+本组件采用**纯前端自检测**方案，无需修改反向代理配置、也无需在后端额外配置代理前缀：
+
+1. **自检测前缀**：页面注入脚本对比 `window.location.pathname`（含 `/aaa`）与后端下发的内部 `basePath`，
+   计算出含代理前缀的外部 basePath（变量 `window.__basePath`）；未部署在二级目录时回退为内部路径，行为不变。
+2. **注入 `<base>`**：以 `window.__basePath + "/"` 设置 `<base href>`，使页面内所有相对链接 / 资源
+   （列表、详情、下载、API、静态 JS）自动基于完整 URL 解析，从而带上 `/aaa`。
+3. **相对化链接**：模板中服务端渲染的 `<a href>` 与 `<script src>` 均使用相对路径（不再带 `{{.BasePath}}` 前缀）。
+4. **根路径直渲**：根路由（`/jcbase/debug`）不再 302 重定向到 `/list`，而是直接渲染列表页，
+   绕开"服务端无法感知代理前缀、无法拼出正确 `Location`"的问题（前端无法干预 302）。
+
+### Nginx 部署示例（无需特殊头部）
+
+```nginx
+location /aaa/ {
+    proxy_pass http://127.0.0.1:8080/;   # 注意结尾的 /，用于剥离 /aaa 前缀
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+按以上配置，访问 `https://your-domain/aaa/jcbase/debug/list` 即可正常使用，所有跳转与静态资源均自动包含 `/aaa`。
+
 ## 快速开始
 
 ### 安装
