@@ -6,9 +6,12 @@
 package serializer
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 // defaultMaxDepth 为 Process 递归处理的默认最大深度。
@@ -28,6 +31,9 @@ type Options struct {
 	SkipField func(reflect.StructField) bool
 	// MaxDepth 可选：递归处理的最大深度，小于等于 0 时使用默认值 32
 	MaxDepth int
+	// LegacyMode 可选：使用旧版 json.Marshal/Unmarshal 路径处理结构体与切片，
+	// 保持与重构前一致的输出行为。
+	LegacyMode bool
 }
 
 // maxDepth 返回实际使用的最大递归深度。
@@ -74,6 +80,15 @@ func WithMaxDepth(depth int) Option {
 	return func(o *Options) { o.MaxDepth = depth }
 }
 
+// WithLegacyMode 注入旧版序列化模式。
+//
+// 开启后，结构体通过 json.Marshal/Unmarshal 转为 map（与原 CRUD 行为一致），
+// 切片仅转换为 []interface{} 而不递归处理元素，map 保持原样返回。
+// 该模式主要用于向后兼容，避免已上线项目因序列化逻辑变更而出现响应差异。
+func WithLegacyMode(enabled bool) Option {
+	return func(o *Options) { o.LegacyMode = enabled }
+}
+
 // visitState 用于循环引用检测的 DFS 访问状态。
 type visitState int
 
@@ -100,7 +115,76 @@ func Process(data interface{}, opts ...Option) interface{} {
 	for _, opt := range opts {
 		opt(o)
 	}
+	if o.LegacyMode {
+		return legacyProcess(data)
+	}
 	return processDataRecursive(data, o, 0, make(map[uintptr]visitState))
+}
+
+// legacyProcess 使用重构前的 json.Marshal/Unmarshal 路径处理数据，
+// 用于在兼容模式下保持旧行为。
+func legacyProcess(data interface{}) interface{} {
+	val := reflect.ValueOf(data)
+
+	// 如果是指针类型，循环解引用直到非指针
+	for val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil
+		}
+		val = val.Elem()
+		data = val.Interface()
+	}
+
+	switch val.Kind() {
+	case reflect.Struct:
+		resultMapData := make(map[string]interface{})
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			return data
+		}
+		if err := json.Unmarshal(jsonData, &resultMapData); err != nil {
+			return data
+		}
+		return resultMapData
+	case reflect.Map:
+		// 保持与旧逻辑一致：gin.H 与 map[string]any 直接返回
+		if h, ok := data.(gin.H); ok {
+			return map[string]interface{}(h)
+		}
+		if m, ok := data.(map[string]interface{}); ok {
+			return m
+		}
+		// 其他 map 类型尝试 json 往返转换，失败时返回原值
+		resultMapData := make(map[string]interface{})
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			return data
+		}
+		if err := json.Unmarshal(jsonData, &resultMapData); err != nil {
+			return data
+		}
+		return resultMapData
+	case reflect.String:
+		return data.(string)
+	case reflect.Array, reflect.Slice:
+		return convertToInterfaceSlice(data)
+	}
+	return data
+}
+
+// convertToInterfaceSlice 将特定类型的切片转换为通用的 interface{} 切片。
+func convertToInterfaceSlice(slice interface{}) []interface{} {
+	v := reflect.ValueOf(slice)
+	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
+		return nil
+	}
+
+	interfaceSlice := make([]interface{}, v.Len())
+	for i := 0; i < v.Len(); i++ {
+		interfaceSlice[i] = v.Index(i).Interface()
+	}
+
+	return interfaceSlice
 }
 
 // processDataRecursive 为 Process 的内部递归实现。

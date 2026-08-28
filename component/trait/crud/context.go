@@ -22,6 +22,7 @@ type Context struct {
 
 	// SerializerOpts 为响应数据序列化选项。
 	// 可通过此字段统一配置时间格式化、ID 加密、字段跳过等策略。
+	// 留空时默认使用旧版 json 序列化路径，保证已有项目行为不变。
 	SerializerOpts []serializer.Option
 }
 
@@ -149,8 +150,13 @@ func (ctx *Context) Result(code int, msg string, args ...any) {
 	var resultData any
 
 	if len(args) > 0 && !helper.IsEmptyValue(args[0]) {
-		// 使用统一序列化器处理：结构体转 map、切片元素递归处理、按需格式化时间和加密 ID
-		resultData = serializer.Process(args[0], ctx.SerializerOpts...)
+		// 为兼容旧项目，未显式配置 SerializerOpts 时默认使用旧版 json 序列化路径。
+		// 只有显式设置 SerializerOpts 后，才会启用新的递归序列化、时间格式化、ID 加密等功能。
+		opts := ctx.SerializerOpts
+		if len(opts) == 0 {
+			opts = []serializer.Option{serializer.WithLegacyMode(true)}
+		}
+		resultData = serializer.Process(args[0], opts...)
 	} else {
 		resultData = make(map[string]any)
 	}
