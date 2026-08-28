@@ -1,7 +1,6 @@
 package crud
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"reflect"
@@ -10,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/security"
+	"github.com/jcbowen/jcbaseGo/component/serializer"
 	"github.com/jcbowen/jcbaseGo/errcode"
 )
 
@@ -19,6 +19,10 @@ type Context struct {
 	GinContext *gin.Context // 请求上下文
 
 	SafeMapGPCAll map[string]any // GPC 数据映射
+
+	// SerializerOpts 为响应数据序列化选项。
+	// 可通过此字段统一配置时间格式化、ID 加密、字段跳过等策略。
+	SerializerOpts []serializer.Option
 }
 
 // NewContextOpt 目前由于配置项没有分离，所以直接用相等，后续有可能会分离
@@ -143,44 +147,10 @@ func (ctx *Context) Failure(args ...any) {
 func (ctx *Context) Result(code int, msg string, args ...any) {
 	// 虽然定义的是any，但是约定只能为map/string/[]any
 	var resultData any
-	resultMapData := make(map[string]any)
 
 	if len(args) > 0 && !helper.IsEmptyValue(args[0]) {
-		data := args[0]
-		val := reflect.ValueOf(data)
-
-		// 如果是指针类型，获取指针指向的数据类型
-		if val.Kind() == reflect.Ptr {
-			val = val.Elem()
-			data = val.Interface()
-		}
-
-		if val.Kind() == reflect.Struct {
-			// 将 data 转换为 map
-			jsonData, err := json.Marshal(data)
-			if err != nil {
-				log.Panic(err)
-			}
-			// Convert JSON to map
-			err = json.Unmarshal(jsonData, &resultMapData)
-			if err != nil {
-				log.Panic(err)
-			}
-			resultData = resultMapData
-		} else if val.Kind() == reflect.Map {
-			// 检查是否为gin.H类型
-			if _, ok := data.(gin.H); ok {
-				resultData = map[string]any(data.(gin.H))
-			} else {
-				resultData = data.(map[string]any)
-			}
-		} else if val.Kind() == reflect.String {
-			resultData = data.(string)
-		} else if val.Kind() == reflect.Array || val.Kind() == reflect.Slice {
-			resultData = ctx.convertToInterfaceSlice(data)
-		} else {
-			log.Panic("不支持的数据类型：" + val.Kind().String())
-		}
+		// 使用统一序列化器处理：结构体转 map、切片元素递归处理、按需格式化时间和加密 ID
+		resultData = serializer.Process(args[0], ctx.SerializerOpts...)
 	} else {
 		resultData = make(map[string]any)
 	}
@@ -251,28 +221,6 @@ func (ctx *Context) Result(code int, msg string, args ...any) {
 	}
 
 	ctx.GinContext.JSON(http.StatusOK, result)
-}
-
-// convertToInterfaceSlice 将特定类型的切片转换为通用的 interface{} 切片
-// 这个方法用于将任意类型的切片转换为 []interface{} 类型，
-// 这在需要将不同类型的切片合并到一个统一处理的场景中非常有用。
-// 参数：
-//   - slice interface{}: 任意类型的切片，必须是切片类型。
-//
-// 返回值：
-//   - []interface{}: 转换后的通用接口切片。
-func (ctx *Context) convertToInterfaceSlice(slice interface{}) []interface{} {
-	v := reflect.ValueOf(slice)
-	if v.Kind() != reflect.Slice {
-		panic("convertToInterfaceSlice: not a slice")
-	}
-
-	interfaceSlice := make([]interface{}, v.Len())
-	for i := 0; i < v.Len(); i++ {
-		interfaceSlice[i] = v.Index(i).Interface()
-	}
-
-	return interfaceSlice
 }
 
 // GetSafeMapGPC 安全获取map类型GPC数据

@@ -88,6 +88,7 @@ jcbaseGo/
 │   │   ├── http.go             # HTTP相关工具
 │   │   ├── ip.go               # IP地址处理
 │   │   ├── json.go             # JSON 处理工具
+│   │   ├── mask.go             # 敏感信息脱敏
 │   │   ├── money.go            # 金额处理工具
 │   │   ├── ssh.go              # SSH密钥管理
 │   │   ├── string.go           # 字符串处理工具
@@ -112,15 +113,24 @@ jcbaseGo/
 │   ├── php/                    # 🐘 PHP 解释器集成
 │   │   ├── jcbasePHP.go        # PHP 解释器接口
 │   │   └── main.go             # PHP 集成主文件
+│   ├── ratelimit/              # 🚦 滑动窗口限流（Redis + 本地降级）
+│   │   └── ratelimit.go        # 限流器实现
 │   ├── redis/                  # 💾 Redis 缓存组件
 │   │   ├── cache.go            # 缓存操作实现
 │   │   └── main.go             # Redis 连接管理
 │   ├── security/               # 🔐 安全相关功能
 │   │   ├── aes.go              # AES 加密算法
 │   │   ├── base.go             # 安全基础功能
+│   │   ├── id.go               # uint64 ID 加解密
 │   │   ├── password.go         # 密码哈希处理
 │   │   ├── safe.go             # 安全验证工具
 │   │   └── sm4.go              # SM4 国密算法
+│   ├── serializer/             # 🔄 响应数据递归序列化
+│   │   └── serializer.go       # 统一序列化器（结构体转 map、时间、ID 加密）
+│   ├── snowflake/              # ❄️ 雪花算法分布式 ID
+│   │   └── snowflake.go        # Snowflake ID 生成器
+│   ├── timezone/               # 🌏 时区格式化（UTC ↔ 北京时间）
+│   │   └── timezone.go         # 时区工具与 Formatter
 │   ├── tlsconfig/              # 🔒 TLS 配置管理读取
 │   │   └── tlsconfig.go        # TLS 配置实现
 │   ├── trait/                  # 🎭 Trait 模式实现
@@ -155,7 +165,8 @@ jcbaseGo/
 │   ├── debugger/               # 调试器组件示例
 │   └── php/                    # PHP 集成示例
 ├── middleware/                 # 🔗 中间件集合
-│   └── main.go                 # 通用中间件
+│   ├── main.go                 # 通用中间件
+│   └── response.go             # 统一 JSON 响应与数据序列化
 ├── go.mod                      # 📦 Go 模块定义
 ├── go.sum                      # 🔐 依赖锁定文件
 └── LICENSE                     # 📄 MIT 许可证
