@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"time"
 
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss/credentials"
@@ -155,4 +156,49 @@ func (c *OSSClient) List(ctx context.Context, options ListOptions) (ListResult, 
 func (c *OSSClient) Close() error {
 	// OSS客户端不需要显式关闭连接
 	return nil
+}
+
+// PresignUpload 生成用于上传指定对象的预签名 URL。
+// - remotePath: 对象在存储桶中的路径（Key）。
+// - opts: 预签名选项，nil 时表示使用默认选项（仅签名 bucket 与 key，默认有效期 10 分钟）。
+// 返回值：
+//   - string: 预签名 URL。
+//   - map[string]string: 需要在上传请求中携带的已签名请求头。
+//   - error: 生成过程中出现的错误。
+func (c *OSSClient) PresignUpload(ctx context.Context, remotePath string, opts *PresignOptions) (string, map[string]string, error) {
+	select {
+	case <-ctx.Done():
+		return "", nil, &Error{Op: "PresignUpload", Err: ctx.Err()}
+	default:
+	}
+
+	expires := 10 * time.Minute
+	req := &oss.PutObjectRequest{
+		Bucket: &c.bucket,
+		Key:    &remotePath,
+	}
+
+	if opts != nil {
+		if opts.Expires > 0 {
+			expires = opts.Expires
+		}
+		if opts.ContentType != "" {
+			req.ContentType = &opts.ContentType
+		}
+		if len(opts.Metadata) > 0 {
+			req.Metadata = opts.Metadata
+		}
+	}
+
+	result, err := c.client.Presign(ctx, req, oss.PresignExpires(expires))
+	if err != nil {
+		return "", nil, &Error{Op: "PresignUpload", Err: err}
+	}
+
+	headers := result.SignedHeaders
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+
+	return result.URL, headers, nil
 }

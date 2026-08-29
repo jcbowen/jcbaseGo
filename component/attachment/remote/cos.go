@@ -17,6 +17,9 @@ type COSConfig jcbaseGo.COSStruct
 
 // COSClient 实现了腾讯云COS存储的客户端。
 // 注意：COSClient是并发安全的，因为底层COS SDK客户端本身是并发安全的。
+//
+// TODO: 实现 remote.PresignUploader 接口（PresignUpload 方法）以支持预签名上传；
+// 实现后 Attachment.GetPresignURL 将自动放行 cos，无需修改其逻辑。
 type COSClient struct {
 	client *cos.Client
 }

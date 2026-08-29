@@ -361,6 +361,75 @@ func main() {
 }
 ```
 
+### 阿里云 OSS 预签名上传
+
+当需要由客户端直传文件到 OSS 时，可以调用 `GetPresignURL` 生成预签名上传 URL，服务端无需中转文件数据。
+
+```go
+package main
+
+import (
+    "context"
+    "time"
+    "github.com/gin-gonic/gin"
+    "github.com/jcbowen/jcbaseGo"
+    "github.com/jcbowen/jcbaseGo/component/attachment"
+    "github.com/jcbowen/jcbaseGo/component/attachment/remote"
+)
+
+func main() {
+    r := gin.Default()
+
+    r.POST("/presign-oss", func(c *gin.Context) {
+        // 基础配置，存储类型必须为 oss
+        baseConfig := &jcbaseGo.AttachmentStruct{
+            StorageType: "oss",
+            LocalDir:    "uploads",
+        }
+
+        // OSS 远程配置
+        ossConfig := jcbaseGo.OSSStruct{
+            AccessKeyId:     "your-access-key-id",
+            AccessKeySecret: "your-access-key-secret",
+            Endpoint:        "oss-cn-hangzhou.aliyuncs.com",
+            BucketName:      "your-bucket-name",
+        }
+
+        // 创建附件实例
+        att := attachment.New(c, baseConfig, ossConfig)
+
+        // 生成预签名上传 URL，有效期 10 分钟
+        opts := &remote.PresignOptions{
+            Expires:     10 * time.Minute,
+            ContentType: "image/jpeg", // 如需限制文件类型，可指定 Content-Type
+        }
+        url, headers, err := att.GetPresignURL(c.Request.Context(), "images/2024/01/example.jpg", opts)
+        if err != nil {
+            c.JSON(400, gin.H{"error": err.Error()})
+            return
+        }
+
+        c.JSON(200, gin.H{
+            "message": "预签名 URL 生成成功",
+            "data": gin.H{
+                "url":     url,
+                "headers": headers,
+                "method":  "PUT",
+            },
+        })
+    })
+
+    r.Run(":8080")
+}
+```
+
+**注意事项：**
+- 当前仅 `StorageType` 为 `oss` 时实际支持预签名上传，`cos` 等存储类型后续可通过实现同一接口扩展。
+- 客户端需要使用 `PUT` 方法将文件内容上传至返回的 `url`。
+- 如果生成时指定了 `ContentType` 或 `Metadata`，返回的 `headers` 会包含对应签名头，客户端必须原样携带，否则签名校验会失败。
+- 预签名有效期最长不超过 7 天（604800 秒），超出会返回错误；`Expires` 为零时默认使用 10 分钟。
+- 远程客户端实例在首次调用时创建并缓存在 `Attachment` 实例中，同一实例重复调用时直接复用，无需重复创建；若运行期间修改了 `RemoteConfig`，会自动重建客户端。
+
 ### 使用分组管理
 
 ```go
@@ -519,6 +588,7 @@ if result.HasError() {
 - `SetBeforeSave(fn func(a *Attachment) bool) *Attachment` - 设置保存前回调
 - `Save() *Attachment` - 保存文件
 - `ToMedia(src string, args ...interface{}) string` - 生成访问 URL
+- `GetPresignURL(ctx context.Context, remotePath string, opts *remote.PresignOptions) (string, map[string]string, error)` - 生成预签名上传 URL
 - `HasError() bool` - 检查是否有错误
 - `Error() error` - 获取第一个错误
 - `Errors() []error` - 获取所有错误

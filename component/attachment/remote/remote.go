@@ -35,6 +35,17 @@ func (e *Error) Unwrap() error {
 	return e.Err
 }
 
+// ErrPresignNotSupported 表示当前存储类型不支持预签名上传。
+var ErrPresignNotSupported = errors.New("current storage type does not support presigned upload")
+
+// PresignOptions 定义了生成预签名 URL 的可选参数。
+// 不同存储类型对字段的支持程度可能不同，不支持的字段会被忽略。
+type PresignOptions struct {
+	Expires     time.Duration     // 预签名 URL 的有效期，为零时使用存储类型的默认有效期
+	ContentType string            // 上传文件的 Content-Type，为空时不参与签名
+	Metadata    map[string]string // 自定义元数据，为空时不参与签名
+}
+
 // withContextTimeout 包装一个操作，使其能够响应上下文的取消信号。
 // 注意：该函数同步执行 fn，仅在操作前后检查 ctx 状态。由于底层 FTP/SFTP SDK 不支持
 // context，无法中断正在进行的 IO 操作，但可保证在 ctx 已取消时不发起新操作，并在操作
@@ -149,6 +160,19 @@ type Client interface {
 	Delete(ctx context.Context, remotePath string) error
 	List(ctx context.Context, options ListOptions) (ListResult, error)
 	Close() error
+}
+
+// PresignUploader 定义了支持预签名上传的存储类型需要实现的接口。
+// 注意：该接口是可选的，FTP/SFTP 等不支持预签名 URL 的存储类型无需实现。
+type PresignUploader interface {
+	// PresignUpload 生成用于上传指定对象的预签名 URL。
+	// - remotePath: 对象在存储桶中的路径（Key）。
+	// - opts: 预签名选项，nil 时表示使用默认选项。
+	// 返回值：
+	//   - string: 预签名 URL。
+	//   - map[string]string: 需要在上传请求中携带的已签名请求头。
+	//   - error: 生成过程中出现的错误。
+	PresignUpload(ctx context.Context, remotePath string, opts *PresignOptions) (string, map[string]string, error)
 }
 
 // NewClient 创建一个新的远程存储客户端。

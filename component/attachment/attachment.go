@@ -2,6 +2,7 @@ package attachment
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
@@ -17,11 +18,14 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo"
+	"github.com/jcbowen/jcbaseGo/component/attachment/remote"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
@@ -45,6 +49,10 @@ type Attachment struct {
 	saveDir    string                   // 文件保存目录
 	errors     []error                  // 错误信息列表
 	beforeSave func(a *Attachment) bool // 保存前的回调函数，可选
+
+	remoteClient       remote.Client // 已创建的远程客户端实例缓存，避免每次调用重复创建
+	remoteClientConfig interface{}   // 创建缓存客户端时使用的远程配置快照，用于检测配置变化
+	remoteClientMu     sync.Mutex    // 保护远程客户端懒加载过程的互斥锁
 }
 
 // Options 附件实例化时的参数选项
@@ -503,6 +511,98 @@ func (a *Attachment) formatFileSize(size int64) string {
 	default:
 		return fmt.Sprintf("%d Bytes", size)
 	}
+}
+
+// GetPresignURL 生成预签名上传 URL。
+// - ctx: 请求上下文。
+// - remotePath: 对象在存储桶中的路径（Key）。
+// - opts: 预签名选项，nil 时表示使用默认选项。
+// 返回值：
+//   - string: 预签名 URL，客户端可通过 PUT 请求将文件上传至此 URL。
+//   - map[string]string: 需要在上传请求中携带的已签名请求头。
+//   - error: 当存储类型不受支持、远程配置错误或客户端不支持预签名时返回错误。
+//
+// 说明：
+//   - 是否支持预签名由远程客户端是否实现 remote.PresignUploader 接口决定，
+//     新增存储类型实现该接口后无需修改本方法。
+//   - 远程客户端实例在首次调用时创建并缓存在 Attachment 实例中，重复调用时直接复用。
+func (a *Attachment) GetPresignURL(ctx context.Context, remotePath string, opts *remote.PresignOptions) (string, map[string]string, error) {
+	client, err := a.getRemoteClient()
+	if err != nil {
+		return "", nil, err
+	}
+
+	presigner, ok := client.(remote.PresignUploader)
+	if !ok {
+		return "", nil, remote.ErrPresignNotSupported
+	}
+
+	return presigner.PresignUpload(ctx, remotePath, opts)
+}
+
+// getRemoteClient 获取远程存储客户端实例（懒加载 + 实例级缓存）。
+// - 首次调用时根据 StorageType 与 RemoteConfig 创建对应客户端并缓存到 Attachment 实例中
+// - 后续调用若缓存存在且 RemoteConfig 未变化，则直接复用缓存实例
+// - 若 RemoteConfig 在运行期间被外部修改，则重新创建客户端并更新缓存
+// 使用示例：
+//
+//	client, err := a.getRemoteClient()
+//	if err != nil {
+//	    return err
+//	}
+//	_ = client.Upload(ctx, "path/to/file.txt", data)
+//
+// 返回值：
+//   - remote.Client: 远程存储客户端实例
+//   - error: 存储类型不支持、远程配置类型错误或客户端创建失败时返回错误
+func (a *Attachment) getRemoteClient() (remote.Client, error) {
+	a.remoteClientMu.Lock()
+	defer a.remoteClientMu.Unlock()
+
+	// 缓存命中：客户端已创建且远程配置未变化
+	if a.remoteClient != nil && reflect.DeepEqual(a.remoteClientConfig, a.RemoteConfig) {
+		return a.remoteClient, nil
+	}
+
+	var client remote.Client
+	var err error
+
+	switch a.BaseConfig.StorageType {
+	case remote.TypeOSS:
+		config, ok := a.RemoteConfig.(jcbaseGo.OSSStruct)
+		if !ok {
+			return nil, fmt.Errorf("oss 远程配置类型错误，当前类型为 %T", a.RemoteConfig)
+		}
+		client, err = remote.NewClient(remote.TypeOSS, remote.OSSConfig(config))
+	case remote.TypeCOS:
+		config, ok := a.RemoteConfig.(jcbaseGo.COSStruct)
+		if !ok {
+			return nil, fmt.Errorf("cos 远程配置类型错误，当前类型为 %T", a.RemoteConfig)
+		}
+		client, err = remote.NewClient(remote.TypeCOS, remote.COSConfig(config))
+	case remote.TypeFTP:
+		config, ok := a.RemoteConfig.(jcbaseGo.FTPStruct)
+		if !ok {
+			return nil, fmt.Errorf("ftp 远程配置类型错误，当前类型为 %T", a.RemoteConfig)
+		}
+		client, err = remote.NewClient(remote.TypeFTP, remote.FTPConfig(config))
+	case remote.TypeSFTP:
+		config, ok := a.RemoteConfig.(jcbaseGo.SFTPStruct)
+		if !ok {
+			return nil, fmt.Errorf("sftp 远程配置类型错误，当前类型为 %T", a.RemoteConfig)
+		}
+		client, err = remote.NewClient(remote.TypeSFTP, remote.SFTPConfig(config))
+	default:
+		return nil, fmt.Errorf("不支持的远程存储类型: %s", a.BaseConfig.StorageType)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("创建 %s 客户端失败: %w", a.BaseConfig.StorageType, err)
+	}
+
+	a.remoteClient = client
+	a.remoteClientConfig = a.RemoteConfig
+	return client, nil
 }
 
 // addError 添加错误到错误列表
