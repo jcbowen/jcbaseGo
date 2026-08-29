@@ -547,6 +547,38 @@ if result.HasError() {
 - **文件保存失败**：无法将文件保存到目标位置
 - **Base64 解析失败**：Base64 数据格式不正确
 
+## 测试
+
+组件测试全部可以在本地完成，运行 `go test` 时不需要连接任何外部服务器，也不依赖网络环境。
+
+```bash
+# 运行组件全部测试
+go test ./component/attachment/...
+
+# 带竞态检测运行
+go test ./component/attachment/... -race
+```
+
+### 本地测试服务器
+
+FTP 与 SFTP 的用例在测试进程内启动本地服务器，测试结束自动关闭，文件只保存在进程内存中：
+
+| 文件 | 说明 |
+| --- | --- |
+| `remote/ftpserver_test.go` | 内存 FTP 服务器，监听 `127.0.0.1` 随机端口，实现 `USER / PASS / FEAT / TYPE / EPSV / PASV / STOR / RETR / MLSD / MKD / CWD / DELE / SIZE / MDTM / NOOP / QUIT` 等命令 |
+| `remote/sftpserver_test.go` | 内存 SFTP 服务器，基于 SSH 服务端（测试期生成 ed25519 主机密钥）与内存文件系统实现 |
+
+设计要点：
+
+1. **零外部依赖**：服务器绑定回环地址的随机端口，不占用固定端口，不产生端口冲突。
+2. **不落磁盘**：FTP 使用内存目录树，SFTP 使用内存文件系统，测试结束后数据随进程释放。
+3. **不新增依赖**：实现全部基于项目已有依赖（标准库、`jlaffaye/ftp`、`pkg/sftp`、`golang.org/x/crypto/ssh`）。
+4. **COS / OSS 用例**：仅做预签名 URL 的本地签名计算与客户端构造，不发起任何网络请求。
+
+### 已移除的真实测试服依赖
+
+早期 FTP / SFTP 用例需要连接测试服才能执行，相关环境变量（`FTP_TEST_ADDRESS`、`FTP_TEST_USERNAME`、`FTP_TEST_PASSWORD`、`FTP_TEST_SKIP`、`SFTP_TEST_RUN`、`SFTP_TEST_ADDRESS` 等）已全部废弃并移除，源码中不再保留任何指向测试服的地址。
+
 ## 性能优化建议
 
 1. **文件大小限制**：根据实际需求设置合理的文件大小限制

@@ -8,18 +8,22 @@ import (
 	"github.com/jcbowen/jcbaseGo"
 )
 
-// TestNewClient 测试NewClient函数能否正确创建不同类型的客户端
+// TestNewClient 测试NewClient函数能否正确创建不同类型的客户端。
+// FTP/SFTP 使用本地内存测试服务器，整个过程不访问外部网络。
 func TestNewClient(t *testing.T) {
+	ftpServer := newFTPTestServer(t)
+	sftpServer := newSFTPTestServer(t)
+
 	// 测试用配置
 	ftpConfig := FTPConfig(jcbaseGo.FTPStruct{
-		Address:  "localhost:21",
+		Address:  ftpServer.Address(),
 		Username: "test",
 		Password: "test",
 		Timeout:  5 * time.Second,
 	})
 
 	sftpConfig := SFTPConfig(jcbaseGo.SFTPStruct{
-		Address:  "localhost:22",
+		Address:  sftpServer.Address(),
 		Username: "test",
 		Password: "test",
 		Timeout:  5 * time.Second,
@@ -45,11 +49,12 @@ func TestNewClient(t *testing.T) {
 		config      interface{}
 		wantErr     bool
 	}{
-		{"FTP", TypeFTP, ftpConfig, true},   // 预期失败，因为没有实际的FTP服务器
-		{"SFTP", TypeSFTP, sftpConfig, true}, // 预期失败，因为没有实际的SFTP服务器
-		{"COS", TypeCOS, cosConfig, false},  // 本地创建COS客户端不会连接服务器，预期成功
-		{"OSS", TypeOSS, ossConfig, false},  // 本地创建OSS客户端不会连接服务器，预期成功
-		{"Unknown", "unknown", nil, true},   // 预期失败，因为类型未知
+		{"FTP", TypeFTP, ftpConfig, false},   // 连接本地内存 FTP 服务器，预期成功
+		{"SFTP", TypeSFTP, sftpConfig, false}, // 连接本地内存 SFTP 服务器，预期成功
+		{"COS", TypeCOS, cosConfig, false},   // 本地创建COS客户端不会连接服务器，预期成功
+		{"OSS", TypeOSS, ossConfig, false},   // 本地创建OSS客户端不会连接服务器，预期成功
+		{"Unknown", "unknown", nil, true},    // 预期失败，因为类型未知
+		{"WrongConfig", TypeFTP, sftpConfig, true}, // 预期失败，因为配置类型与存储类型不匹配
 	}
 
 	for _, tt := range tests {
