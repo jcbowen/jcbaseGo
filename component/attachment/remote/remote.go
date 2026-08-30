@@ -175,6 +175,23 @@ type PresignUploader interface {
 	PresignUpload(ctx context.Context, remotePath string, opts *PresignOptions) (string, map[string]string, error)
 }
 
+// ObjectExister 定义了支持对象存在性探测的存储类型需要实现的接口。
+// 注意：该接口是可选的，FTP/SFTP 等不支持低成本探测的存储类型无需实现；
+// 未实现时上层会按「对象存在」处理，以保持原有秒传行为不被改变。
+//
+// 该接口与 PresignUploader 成对出现：预签名上传存在「客户端拿到URL却未真正上传」的情况，
+// 秒传命中时必须探测对象是否真实存在。服务端直传的存储类型（FTP/SFTP）不存在这个问题。
+// 目前 OSS 是唯一实现 PresignUploader 的类型，因此也只有它实现了本接口；
+// 若后续为 COS 等类型补充 PresignUploader，请同步实现本接口。
+type ObjectExister interface {
+	// Exists 判断指定对象是否已存在于存储中。
+	// - remotePath: 对象在存储中的相对路径（Key）。
+	// 返回值：
+	//   - bool: 对象存在返回 true，不存在返回 false。
+	//   - error: 探测过程中出现异常时返回错误。
+	Exists(ctx context.Context, remotePath string) (bool, error)
+}
+
 // NewClient 创建一个新的远程存储客户端。
 // - storageType 远程附件类型
 // - config 远程附件连接配置

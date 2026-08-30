@@ -20,6 +20,8 @@ type COSConfig jcbaseGo.COSStruct
 //
 // TODO: 实现 remote.PresignUploader 接口（PresignUpload 方法）以支持预签名上传；
 // 实现后 Attachment.GetPresignURL 将自动放行 cos，无需修改其逻辑。
+// 注意：届时需同步实现 remote.ObjectExister 接口（Exists 方法），
+// 否则秒传命中时无法校验对象是否真实存在，会退回「按存在处理」的旧行为。
 type COSClient struct {
 	client *cos.Client
 }

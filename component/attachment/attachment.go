@@ -540,6 +540,36 @@ func (a *Attachment) GetPresignURL(ctx context.Context, remotePath string, opts 
 	return presigner.PresignUpload(ctx, remotePath, opts)
 }
 
+// ObjectExists 判断指定路径的对象是否已存在于远端存储。
+// 参数：
+//   - ctx context.Context: 上下文，可用于控制探测超时
+//   - remotePath string: 对象在存储中的相对路径
+//
+// 返回值：
+//   - bool: 对象存在返回 true；存储类型不支持探测时同样返回 true
+//   - error: 远程客户端创建失败或探测过程异常时返回错误
+//
+// 说明：
+//   - 是否支持探测由远程客户端是否实现 remote.ObjectExister 接口决定。
+//   - 不支持探测时按「存在」处理，以保持 FTP/SFTP 等存储类型的既有秒传行为。
+//
+// 使用示例：
+//
+//	ok, err := att.ObjectExists(ctx, "images/2026/08/xxx.png")
+func (a *Attachment) ObjectExists(ctx context.Context, remotePath string) (bool, error) {
+	client, err := a.getRemoteClient()
+	if err != nil {
+		return false, err
+	}
+
+	exister, ok := client.(remote.ObjectExister)
+	if !ok {
+		return true, nil
+	}
+
+	return exister.Exists(ctx, remotePath)
+}
+
 // getRemoteClient 获取远程存储客户端实例（懒加载 + 实例级缓存）。
 // - 首次调用时根据 StorageType 与 RemoteConfig 创建对应客户端并缓存到 Attachment 实例中
 // - 后续调用若缓存存在且 RemoteConfig 未变化，则直接复用缓存实例
