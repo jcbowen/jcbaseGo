@@ -9,6 +9,7 @@ Attachment 组件是一个功能强大的文件附件管理工具，支持多种
 ## 功能特性
 
 - **多存储支持**：支持本地存储、腾讯云 COS、阿里云 OSS、FTP、SFTP
+- **预签名上传**：OSS 与 COS 支持生成预签名 URL，客户端直传文件，服务端不中转数据
 - **多种文件类型**：支持图片、音频、视频、办公文件、压缩文件等
 - **灵活配置**：可自定义文件大小限制、允许的文件扩展名
 - **自动目录管理**：按年月自动创建目录结构
@@ -361,9 +362,11 @@ func main() {
 }
 ```
 
-### 阿里云 OSS 预签名上传
+### 预签名上传（OSS / COS）
 
-当需要由客户端直传文件到 OSS 时，可以调用 `GetPresignURL` 生成预签名上传 URL，服务端无需中转文件数据。
+当需要由客户端直传文件到对象存储时，可以调用 `GetPresignURL` 生成预签名上传 URL，服务端无需中转文件数据。目前 `oss` 与 `cos` 两种存储类型支持该能力。
+
+#### 阿里云 OSS 预签名上传
 
 ```go
 package main
@@ -423,12 +426,88 @@ func main() {
 }
 ```
 
+#### 腾讯云 COS 预签名上传
+
+```go
+package main
+
+import (
+    "context"
+    "time"
+    "github.com/gin-gonic/gin"
+    "github.com/jcbowen/jcbaseGo"
+    "github.com/jcbowen/jcbaseGo/component/attachment"
+    "github.com/jcbowen/jcbaseGo/component/attachment/remote"
+)
+
+func main() {
+    r := gin.Default()
+
+    r.POST("/presign-cos", func(c *gin.Context) {
+        // 基础配置，存储类型必须为 cos
+        baseConfig := &jcbaseGo.AttachmentStruct{
+            StorageType: "cos",
+            LocalDir:    "uploads",
+        }
+
+        // COS 远程配置，Url 为存储桶访问域名
+        cosConfig := jcbaseGo.COSStruct{
+            SecretId:  "your-secret-id",
+            SecretKey: "your-secret-key",
+            Region:    "ap-guangzhou",
+            Bucket:    "your-bucket-1250000000",
+            Url:       "https://your-bucket-1250000000.cos.ap-guangzhou.myqcloud.com",
+        }
+
+        att := attachment.New(c, baseConfig, cosConfig)
+
+        opts := &remote.PresignOptions{
+            Expires:     10 * time.Minute,
+            ContentType: "image/jpeg",
+            // COS 自定义元数据需使用 x-cos-meta- 前缀才会参与签名
+            Metadata: map[string]string{
+                "x-cos-meta-uid": "12345",
+            },
+        }
+        url, headers, err := att.GetPresignURL(c.Request.Context(), "images/2024/01/example.jpg", opts)
+        if err != nil {
+            c.JSON(400, gin.H{"error": err.Error()})
+            return
+        }
+
+        c.JSON(200, gin.H{
+            "message": "预签名 URL 生成成功",
+            "data": gin.H{
+                "url":     url,
+                "headers": headers,
+                "method":  "PUT",
+            },
+        })
+    })
+
+    r.Run(":8080")
+}
+```
+
 **注意事项：**
-- 当前仅 `StorageType` 为 `oss` 时实际支持预签名上传，`cos` 等存储类型后续可通过实现同一接口扩展。
+- 当前仅 `StorageType` 为 `oss` 与 `cos` 时支持预签名上传，其余存储类型返回 `remote.ErrPresignNotSupported`；新增存储类型只需实现 `remote.PresignUploader` 接口即可接入，无需修改上层方法。
 - 客户端需要使用 `PUT` 方法将文件内容上传至返回的 `url`。
 - 如果生成时指定了 `ContentType` 或 `Metadata`，返回的 `headers` 会包含对应签名头，客户端必须原样携带，否则签名校验会失败。
+- COS 仅对 `Content-Type` 等特定请求头以及 `x-cos-` 前缀的请求头参与签名，因此自定义元数据需使用 `x-cos-meta-` 前缀，未使用该前缀的 key 不会参与签名。
+- COS 预签名默认签入 Host，客户端必须使用返回的域名上传，不可改写为其他域名。
 - 预签名有效期最长不超过 7 天（604800 秒），超出会返回错误；`Expires` 为零时默认使用 10 分钟。
 - 远程客户端实例在首次调用时创建并缓存在 `Attachment` 实例中，同一实例重复调用时直接复用，无需重复创建；若运行期间修改了 `RemoteConfig`，会自动重建客户端。
+
+### 对象存在性检测
+
+预签名上传存在「客户端拿到 URL 却未真正上传」的情况，因此秒传命中时需要校验对象是否真实存在：
+
+```go
+ok, err := att.ObjectExists(ctx, "images/2024/01/example.jpg")
+```
+
+- `oss` 与 `cos` 通过 HEAD Object 低成本探测，对象不存在时返回 `(false, nil)`。
+- 不支持探测的存储类型（如 FTP/SFTP）按「存在」处理，返回 `(true, nil)`，以保持既有秒传行为。
 
 ### 使用分组管理
 
@@ -573,7 +652,7 @@ FTP 与 SFTP 的用例在测试进程内启动本地服务器，测试结束自�
 1. **零外部依赖**：服务器绑定回环地址的随机端口，不占用固定端口，不产生端口冲突。
 2. **不落磁盘**：FTP 使用内存目录树，SFTP 使用内存文件系统，测试结束后数据随进程释放。
 3. **不新增依赖**：实现全部基于项目已有依赖（标准库、`jlaffaye/ftp`、`pkg/sftp`、`golang.org/x/crypto/ssh`）。
-4. **COS / OSS 用例**：仅做预签名 URL 的本地签名计算与客户端构造，不发起任何网络请求。
+4. **COS / OSS 用例**：仅做预签名 URL 的本地签名计算、存在性探测的上下文取消处理与客户端构造，不发起任何网络请求。
 
 ### 已移除的真实测试服依赖
 
@@ -620,7 +699,8 @@ FTP 与 SFTP 的用例在测试进程内启动本地服务器，测试结束自�
 - `SetBeforeSave(fn func(a *Attachment) bool) *Attachment` - 设置保存前回调
 - `Save() *Attachment` - 保存文件
 - `ToMedia(src string, args ...interface{}) string` - 生成访问 URL
-- `GetPresignURL(ctx context.Context, remotePath string, opts *remote.PresignOptions) (string, map[string]string, error)` - 生成预签名上传 URL
+- `GetPresignURL(ctx context.Context, remotePath string, opts *remote.PresignOptions) (string, map[string]string, error)` - 生成预签名上传 URL，支持 oss 与 cos
+- `ObjectExists(ctx context.Context, remotePath string) (bool, error)` - 判断远端对象是否存在，支持 oss 与 cos
 - `HasError() bool` - 检查是否有错误
 - `Error() error` - 获取第一个错误
 - `Errors() []error` - 获取所有错误

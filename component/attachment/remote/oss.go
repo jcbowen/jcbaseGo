@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss/credentials"
@@ -247,7 +246,7 @@ func (c *OSSClient) PresignUpload(ctx context.Context, remotePath string, opts *
 	default:
 	}
 
-	expires := 10 * time.Minute
+	expires := defaultPresignExpires
 	req := &oss.PutObjectRequest{
 		Bucket: &c.bucket,
 		Key:    &remotePath,

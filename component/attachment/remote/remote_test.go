@@ -75,6 +75,61 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
+// TestPresignUploaderSupportedTypes 验证各存储类型对预签名相关接口的支持情况。
+// 仅对象存储（OSS/COS）实现 remote.PresignUploader 与 remote.ObjectExister，
+// FTP/SFTP 不支持，上层 Attachment.GetPresignURL 据此返回 remote.ErrPresignNotSupported。
+// FTP 客户端连接本地内存服务器，整个过程不访问外部网络。
+func TestPresignUploaderSupportedTypes(t *testing.T) {
+	ossClient, err := NewClient(TypeOSS, OSSConfig(jcbaseGo.OSSStruct{
+		Endpoint:        "https://oss-cn-hangzhou.aliyuncs.com",
+		AccessKeyId:     "test-access-key-id",
+		AccessKeySecret: "test-access-key-secret",
+		BucketName:      "test-bucket",
+	}))
+	if err != nil {
+		t.Fatalf("NewClient(OSS) error = %v", err)
+	}
+	defer func() { _ = ossClient.Close() }()
+
+	cosClient, err := NewClient(TypeCOS, COSConfig(jcbaseGo.COSStruct{
+		Url:       "https://test-bucket-1250000000.cos.ap-guangzhou.myqcloud.com",
+		SecretId:  "test-secret-id",
+		SecretKey: "test-secret-key",
+	}))
+	if err != nil {
+		t.Fatalf("NewClient(COS) error = %v", err)
+	}
+	defer func() { _ = cosClient.Close() }()
+
+	ftpConfig, _ := newLocalFTPConfig(t)
+	ftpClient, err := NewClient(TypeFTP, ftpConfig)
+	if err != nil {
+		t.Fatalf("NewClient(FTP) error = %v", err)
+	}
+	defer func() { _ = ftpClient.Close() }()
+
+	tests := []struct {
+		name    string
+		client  Client
+		support bool
+	}{
+		{"OSS", ossClient, true},
+		{"COS", cosClient, true},
+		{"FTP", ftpClient, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, ok := tt.client.(PresignUploader); ok != tt.support {
+				t.Errorf("%s implements PresignUploader = %v, want %v", tt.name, ok, tt.support)
+			}
+			if _, ok := tt.client.(ObjectExister); ok != tt.support {
+				t.Errorf("%s implements ObjectExister = %v, want %v", tt.name, ok, tt.support)
+			}
+		})
+	}
+}
+
 // TestWithContextTimeout 测试withContextTimeout函数
 func TestWithContextTimeout(t *testing.T) {
 	ctx := context.Background()

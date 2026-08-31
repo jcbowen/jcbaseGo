@@ -38,6 +38,10 @@ func (e *Error) Unwrap() error {
 // ErrPresignNotSupported 表示当前存储类型不支持预签名上传。
 var ErrPresignNotSupported = errors.New("current storage type does not support presigned upload")
 
+// defaultPresignExpires 预签名 URL 的默认有效期。
+// PresignOptions.Expires 为零时，各存储类型统一使用该默认值。
+const defaultPresignExpires = 10 * time.Minute
+
 // PresignOptions 定义了生成预签名 URL 的可选参数。
 // 不同存储类型对字段的支持程度可能不同，不支持的字段会被忽略。
 type PresignOptions struct {
@@ -181,8 +185,8 @@ type PresignUploader interface {
 //
 // 该接口与 PresignUploader 成对出现：预签名上传存在「客户端拿到URL却未真正上传」的情况，
 // 秒传命中时必须探测对象是否真实存在。服务端直传的存储类型（FTP/SFTP）不存在这个问题。
-// 目前 OSS 是唯一实现 PresignUploader 的类型，因此也只有它实现了本接口；
-// 若后续为 COS 等类型补充 PresignUploader，请同步实现本接口。
+// 目前 OSS 与 COS 均已实现 PresignUploader，因此两者也一并实现了本接口；
+// 若后续为其他存储类型补充 PresignUploader，请同步实现本接口。
 type ObjectExister interface {
 	// Exists 判断指定对象是否已存在于存储中。
 	// - remotePath: 对象在存储中的相对路径（Key）。
