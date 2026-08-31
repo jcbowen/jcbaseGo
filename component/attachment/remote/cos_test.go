@@ -108,8 +108,8 @@ func TestCOSClient_PresignUpload_WithHeaders(t *testing.T) {
 	if headers["Content-Type"] != "image/jpeg" {
 		t.Errorf("PresignUpload() Content-Type header = %q, want %q", headers["Content-Type"], "image/jpeg")
 	}
-	if headers["x-cos-meta-uid"] != "12345" {
-		t.Errorf("PresignUpload() x-cos-meta-uid header = %q, want %q", headers["x-cos-meta-uid"], "12345")
+	if headers["X-Cos-Meta-Uid"] != "12345" {
+		t.Errorf("PresignUpload() X-Cos-Meta-Uid header = %q, want %q", headers["X-Cos-Meta-Uid"], "12345")
 	}
 
 	// 参与签名的请求头名应出现在签名的 header-list 中
@@ -193,5 +193,142 @@ func TestCOSClient_Exists_ContextCanceled(t *testing.T) {
 	}
 	if exists {
 		t.Errorf("Exists() = true, want false when error occurred")
+	}
+}
+
+// TestCOSClient_PresignUpload_Token 验证临时密钥会追加到预签名 URL 中。
+func TestCOSClient_PresignUpload_Token(t *testing.T) {
+	client, err := NewCOSClient(COSConfig(jcbaseGo.COSStruct{
+		SecretId:  "test-secret-id",
+		SecretKey: "test-secret-key",
+		Token:     "test-session-token",
+		Region:    "ap-guangzhou",
+		Bucket:    "test-bucket-1250000000",
+		Url:       "https://test-bucket-1250000000.cos.ap-guangzhou.myqcloud.com",
+	}))
+	if err != nil {
+		t.Fatalf("NewCOSClient() error = %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	url, _, err := client.PresignUpload(context.Background(), "images/test.jpg", &PresignOptions{Expires: 10 * time.Minute})
+	if err != nil {
+		t.Fatalf("PresignUpload() error = %v", err)
+	}
+
+	if !strings.Contains(url, "x-cos-security-token=test-session-token") {
+		t.Errorf("PresignUpload() url does not contain session token")
+	}
+}
+
+// TestCOSClient_PresignUpload_AutoMetaPrefix 验证自定义元数据缺少 x-cos-meta- 前缀时会自动补齐。
+func TestCOSClient_PresignUpload_AutoMetaPrefix(t *testing.T) {
+	client := newTestCOSClient(t)
+	defer func() { _ = client.Close() }()
+
+	opts := &PresignOptions{
+		Expires: 10 * time.Minute,
+		Metadata: map[string]string{
+			"uid": "12345",
+		},
+	}
+	url, headers, err := client.PresignUpload(context.Background(), "images/test.jpg", opts)
+	if err != nil {
+		t.Fatalf("PresignUpload() error = %v", err)
+	}
+
+	if headers["X-Cos-Meta-Uid"] != "12345" {
+		t.Errorf("PresignUpload() header = %v, want X-Cos-Meta-Uid=12345", headers)
+	}
+	if !strings.Contains(url, "x-cos-meta-uid") {
+		t.Errorf("PresignUpload() url does not sign x-cos-meta-uid header")
+	}
+}
+
+// TestCOSClient_NewCOSClient_AutoURL 验证 Url 为空时可使用 Bucket 与 Region 自动构造。
+func TestCOSClient_NewCOSClient_AutoURL(t *testing.T) {
+	client, err := NewCOSClient(COSConfig(jcbaseGo.COSStruct{
+		SecretId:  "test-secret-id",
+		SecretKey: "test-secret-key",
+		Region:    "ap-guangzhou",
+		Bucket:    "test-bucket-1250000000",
+	}))
+	if err != nil {
+		t.Fatalf("NewCOSClient() error = %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	url, _, err := client.PresignUpload(context.Background(), "images/test.jpg", &PresignOptions{Expires: 10 * time.Minute})
+	if err != nil {
+		t.Fatalf("PresignUpload() error = %v", err)
+	}
+
+	if !strings.HasPrefix(url, "https://test-bucket-1250000000.cos.ap-guangzhou.myqcloud.com/") {
+		t.Errorf("PresignUpload() url = %q, want auto constructed bucket url", url)
+	}
+}
+
+// TestCOSClient_NewCOSClient_MissingURLAndRegion 验证 Url 为空且缺少 Bucket 或 Region 时报错。
+func TestCOSClient_NewCOSClient_MissingURLAndRegion(t *testing.T) {
+	_, err := NewCOSClient(COSConfig(jcbaseGo.COSStruct{
+		SecretId:  "test-secret-id",
+		SecretKey: "test-secret-key",
+		Bucket:    "test-bucket-1250000000",
+	}))
+	if err == nil {
+		t.Fatalf("NewCOSClient() expected error when url and region are empty, got nil")
+	}
+}
+
+// TestCOSClient_ContextCanceled 验证上下文取消时 Upload/Download/Delete/List 均返回错误。
+func TestCOSClient_ContextCanceled(t *testing.T) {
+	client := newTestCOSClient(t)
+	defer func() { _ = client.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	cases := []struct {
+		name string
+		op   func() error
+	}{
+		{
+			name: "Upload",
+			op: func() error {
+				return client.Upload(ctx, "canceled/upload.txt", []byte("test"))
+			},
+		},
+		{
+			name: "Download",
+			op: func() error {
+				_, err := client.Download(ctx, "canceled/download.txt")
+				return err
+			},
+		},
+		{
+			name: "Delete",
+			op: func() error {
+				return client.Delete(ctx, "canceled/delete.txt")
+			},
+		},
+		{
+			name: "List",
+			op: func() error {
+				_, err := client.List(ctx, ListOptions{})
+				return err
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.op()
+			if err == nil {
+				t.Fatalf("%s() expected error when context canceled, got nil", tc.name)
+			}
+			if !strings.Contains(err.Error(), "context canceled") {
+				t.Errorf("%s() error = %v, want context canceled", tc.name, err)
+			}
+		})
 	}
 }

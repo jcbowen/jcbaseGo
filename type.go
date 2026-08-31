@@ -116,6 +116,7 @@ type OSSStruct struct {
 type COSStruct struct {
 	SecretId  string `json:"secretId" ini:"secretId" default:""`   // 腾讯云Cos SecretId
 	SecretKey string `json:"secretKey" ini:"secretKey" default:""` // 腾讯云Cos SecretKey
+	Token     string `json:"token,omitempty" ini:"token,omitempty" default:""` // 腾讯云Cos临时密钥Token（可选，使用STS临时凭证时填写）
 	Bucket    string `json:"bucket" ini:"bucket" default:""`       // 腾讯云Cos Bucket
 	Region    string `json:"region" ini:"region" default:""`       // 腾讯云Cos Region
 	Url       string `json:"url" ini:"url" default:""`             // 腾讯云Cos Url

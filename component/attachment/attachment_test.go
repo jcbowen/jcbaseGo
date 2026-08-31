@@ -160,8 +160,8 @@ func TestAttachment_GetPresignURL_COSWithHeaders(t *testing.T) {
 	if headers["Content-Type"] != "image/jpeg" {
 		t.Errorf("GetPresignURL() Content-Type header = %q, want %q", headers["Content-Type"], "image/jpeg")
 	}
-	if headers["x-cos-meta-uid"] != "12345" {
-		t.Errorf("GetPresignURL() x-cos-meta-uid header = %q, want %q", headers["x-cos-meta-uid"], "12345")
+	if headers["X-Cos-Meta-Uid"] != "12345" {
+		t.Errorf("GetPresignURL() X-Cos-Meta-Uid header = %q, want %q", headers["X-Cos-Meta-Uid"], "12345")
 	}
 }
 

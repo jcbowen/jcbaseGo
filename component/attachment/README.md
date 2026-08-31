@@ -450,10 +450,14 @@ func main() {
             LocalDir:    "uploads",
         }
 
-        // COS 远程配置，Url 为存储桶访问域名
+        // COS 远程配置
+        // - Url 为存储桶访问域名，可省略；省略时使用 Bucket 与 Region 自动构造
+        //   https://{Bucket}.cos.{Region}.myqcloud.com
+        // - Token 为可选字段，使用 STS 临时密钥时填写
         cosConfig := jcbaseGo.COSStruct{
             SecretId:  "your-secret-id",
             SecretKey: "your-secret-key",
+            Token:     "your-session-token", // 使用临时密钥时填写，永久密钥可留空
             Region:    "ap-guangzhou",
             Bucket:    "your-bucket-1250000000",
             Url:       "https://your-bucket-1250000000.cos.ap-guangzhou.myqcloud.com",
@@ -464,7 +468,8 @@ func main() {
         opts := &remote.PresignOptions{
             Expires:     10 * time.Minute,
             ContentType: "image/jpeg",
-            // COS 自定义元数据需使用 x-cos-meta- 前缀才会参与签名
+            // COS 自定义元数据需使用 x-cos-meta- 前缀才会参与签名；
+            // 未加前缀的 key 会自动补齐为 x-cos-meta-{key}
             Metadata: map[string]string{
                 "x-cos-meta-uid": "12345",
             },
@@ -493,8 +498,9 @@ func main() {
 - 当前仅 `StorageType` 为 `oss` 与 `cos` 时支持预签名上传，其余存储类型返回 `remote.ErrPresignNotSupported`；新增存储类型只需实现 `remote.PresignUploader` 接口即可接入，无需修改上层方法。
 - 客户端需要使用 `PUT` 方法将文件内容上传至返回的 `url`。
 - 如果生成时指定了 `ContentType` 或 `Metadata`，返回的 `headers` 会包含对应签名头，客户端必须原样携带，否则签名校验会失败。
-- COS 仅对 `Content-Type` 等特定请求头以及 `x-cos-` 前缀的请求头参与签名，因此自定义元数据需使用 `x-cos-meta-` 前缀，未使用该前缀的 key 不会参与签名。
+- COS 仅对 `Content-Type` 等特定请求头以及 `x-cos-` 前缀的请求头参与签名。自定义元数据建议使用 `x-cos-meta-` 前缀；若未使用，组件会自动补齐为 `x-cos-meta-{key}`。
 - COS 预签名默认签入 Host，客户端必须使用返回的域名上传，不可改写为其他域名。
+- COS 支持使用永久密钥或 STS 临时密钥生成预签名 URL；使用临时密钥时需在 `COSStruct.Token` 中传入 SessionToken，生成的 URL 会自动携带 `x-cos-security-token`。
 - 预签名有效期最长不超过 7 天（604800 秒），超出会返回错误；`Expires` 为零时默认使用 10 分钟。
 - 远程客户端实例在首次调用时创建并缓存在 `Attachment` 实例中，同一实例重复调用时直接复用，无需重复创建；若运行期间修改了 `RemoteConfig`，会自动重建客户端。
 

@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/textproto"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/jcbowen/jcbaseGo"
@@ -16,6 +19,37 @@ import (
 // COSConfig 定义了腾讯云COS的配置参数。
 type COSConfig jcbaseGo.COSStruct
 
+// cosSignHeaders 是 COS 签名算法会主动参与签名的标准请求头集合（小写）。
+// 不在此集合且不以 x-cos- 开头的自定义元数据，需自动添加 x-cos-meta- 前缀。
+var cosSignHeaders = map[string]struct{}{
+	"host":                           {},
+	"range":                          {},
+	"x-cos-acl":                      {},
+	"x-cos-grant-read":               {},
+	"x-cos-grant-write":              {},
+	"x-cos-grant-full-control":       {},
+	"cache-control":                  {},
+	"content-disposition":            {},
+	"content-encoding":               {},
+	"content-type":                   {},
+	"content-length":                 {},
+	"content-md5":                    {},
+	"transfer-encoding":              {},
+	"expect":                         {},
+	"expires":                        {},
+	"x-cos-content-sha1":             {},
+	"x-cos-storage-class":            {},
+	"if-match":                       {},
+	"if-modified-since":              {},
+	"if-none-match":                  {},
+	"if-unmodified-since":            {},
+	"origin":                         {},
+	"access-control-request-method":  {},
+	"access-control-request-headers": {},
+	"x-cos-object-type":              {},
+	"pic-operations":                 {},
+}
+
 // COSClient 实现了腾讯云COS存储的客户端。
 // 注意：COSClient是并发安全的，因为底层COS SDK客户端本身是并发安全的。
 type COSClient struct {
@@ -23,8 +57,27 @@ type COSClient struct {
 }
 
 // NewCOSClient 创建一个新的COS客户端。
+//
+// 参数：
+//   - config COSConfig: COS 配置，Url 为空时会使用 Bucket 与 Region 自动构造
+//
+// 返回值：
+//   - *COSClient: 初始化后的 COS 客户端
+//   - error: 配置错误时返回错误
+//
+// 使用示例：
+//
+//	client, err := NewCOSClient(COSConfig{SecretId: "xxx", SecretKey: "xxx", Bucket: "bucket-1250000000", Region: "ap-guangzhou"})
 func NewCOSClient(config COSConfig) (*COSClient, error) {
-	u, err := url.Parse(config.Url)
+	bucketURL := config.Url
+	if bucketURL == "" {
+		if config.Bucket == "" || config.Region == "" {
+			return nil, &Error{Op: "NewCOSClient", Err: errors.New("cos url 为空时，bucket 与 region 必须同时填写")}
+		}
+		bucketURL = fmt.Sprintf("https://%s.cos.%s.myqcloud.com", config.Bucket, config.Region)
+	}
+
+	u, err := url.Parse(bucketURL)
 	if err != nil {
 		return nil, &Error{Op: "ParseBucketURL", Err: err}
 	}
@@ -32,8 +85,9 @@ func NewCOSClient(config COSConfig) (*COSClient, error) {
 	b := &cos.BaseURL{BucketURL: u}
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
-			SecretID:  config.SecretId,
-			SecretKey: config.SecretKey,
+			SecretID:     config.SecretId,
+			SecretKey:    config.SecretKey,
+			SessionToken: config.Token,
 		},
 	})
 
@@ -42,6 +96,12 @@ func NewCOSClient(config COSConfig) (*COSClient, error) {
 
 // Upload 实现了Client接口的Upload方法。
 func (c *COSClient) Upload(ctx context.Context, remotePath string, data []byte) error {
+	select {
+	case <-ctx.Done():
+		return &Error{Op: "Upload", Err: ctx.Err()}
+	default:
+	}
+
 	_, err := c.client.Object.Put(ctx, remotePath, bytes.NewReader(data), nil)
 	if err != nil {
 		return &Error{Op: "Upload", Err: err}
@@ -51,6 +111,12 @@ func (c *COSClient) Upload(ctx context.Context, remotePath string, data []byte) 
 
 // Download 实现了Client接口的Download方法。
 func (c *COSClient) Download(ctx context.Context, remotePath string) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, &Error{Op: "Download", Err: ctx.Err()}
+	default:
+	}
+
 	resp, err := c.client.Object.Get(ctx, remotePath, nil)
 	if err != nil {
 		return nil, &Error{Op: "Download", Err: err}
@@ -66,6 +132,12 @@ func (c *COSClient) Download(ctx context.Context, remotePath string) ([]byte, er
 
 // Delete 实现了Client接口的Delete方法。
 func (c *COSClient) Delete(ctx context.Context, remotePath string) error {
+	select {
+	case <-ctx.Done():
+		return &Error{Op: "Delete", Err: ctx.Err()}
+	default:
+	}
+
 	_, err := c.client.Object.Delete(ctx, remotePath)
 	if err != nil {
 		return &Error{Op: "Delete", Err: err}
@@ -75,6 +147,12 @@ func (c *COSClient) Delete(ctx context.Context, remotePath string) error {
 
 // List 实现了Client接口的List方法。
 func (c *COSClient) List(ctx context.Context, options ListOptions) (ListResult, error) {
+	select {
+	case <-ctx.Done():
+		return ListResult{}, &Error{Op: "List", Err: ctx.Err()}
+	default:
+	}
+
 	opt := &cos.BucketGetOptions{
 		Prefix:  options.Prefix,
 		Marker:  options.Marker,
@@ -199,25 +277,58 @@ func (c *COSClient) PresignUpload(ctx context.Context, remotePath string, opts *
 //   - *cos.PresignedURLOptions: 供 COS SDK 使用的预签名选项，恒为非 nil
 //   - map[string]string: 需要在上传请求中原样携带的已签名请求头，恒为非 nil
 //
+// 说明：
+//   - 自定义元数据若未使用 x-cos-meta- 前缀，会自动补齐该前缀，确保参与签名。
+//   - 返回的 header key 已规范化，调用方可直接设置到 HTTP 请求中。
+//
 // 使用示例：
 //
 //	opt, headers := buildCOSPresignHeader(&PresignOptions{ContentType: "image/jpeg"})
 func buildCOSPresignHeader(opts *PresignOptions) (*cos.PresignedURLOptions, map[string]string) {
-	headers := make(map[string]string)
 	signHeader := make(http.Header)
+	headers := make(map[string]string)
 	if opts == nil {
 		return &cos.PresignedURLOptions{Header: &signHeader}, headers
 	}
 
 	if opts.ContentType != "" {
-		signHeader.Set("Content-Type", opts.ContentType)
-		headers["Content-Type"] = opts.ContentType
+		key := textproto.CanonicalMIMEHeaderKey("Content-Type")
+		signHeader.Set(key, opts.ContentType)
+		headers[key] = opts.ContentType
 	}
 
 	for key, value := range opts.Metadata {
-		signHeader.Set(key, value)
-		headers[key] = value
+		signKey := cosSignHeaderKey(key)
+		if signKey == "" {
+			continue
+		}
+		signHeader.Set(signKey, value)
+		headers[signKey] = value
 	}
 
 	return &cos.PresignedURLOptions{Header: &signHeader}, headers
+}
+
+// cosSignHeaderKey 返回参与 COS 签名的 header key。
+// 不在标准签名头集合中且不以 x-cos- 开头的 key，会自动添加 x-cos-meta- 前缀。
+//
+// 参数：
+//   - key string: 原始 header key
+//
+// 返回值：
+//   - string: 处理后的 header key；空字符串表示输入非法
+func cosSignHeaderKey(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+
+	lower := strings.ToLower(key)
+	if _, ok := cosSignHeaders[lower]; ok {
+		return textproto.CanonicalMIMEHeaderKey(key)
+	}
+	if strings.HasPrefix(lower, "x-cos-") {
+		return textproto.CanonicalMIMEHeaderKey(key)
+	}
+	return textproto.CanonicalMIMEHeaderKey("x-cos-meta-" + key)
 }

@@ -22,9 +22,12 @@ func main() {
 		}
 
 		// COS 远程配置，请替换为真实配置
+		// - Url 可省略，省略时通过 Bucket 与 Region 自动构造
+		// - Token 使用 STS 临时密钥时填写，永久密钥可留空
 		cosConfig := jcbaseGo.COSStruct{
 			SecretId:  "your-secret-id",
 			SecretKey: "your-secret-key",
+			Token:     "your-session-token",
 			Region:    "ap-guangzhou",
 			Bucket:    "your-bucket-1250000000",
 			Url:       "https://your-bucket-1250000000.cos.ap-guangzhou.myqcloud.com",
@@ -37,7 +40,7 @@ func main() {
 		opts := &remote.PresignOptions{
 			Expires: 10 * time.Minute,
 			// ContentType: "image/jpeg", // 如需限制文件类型可取消注释
-			// Metadata:    map[string]string{"x-cos-meta-uid": "12345"}, // 自定义元数据需使用 x-cos-meta- 前缀
+			// Metadata:    map[string]string{"x-cos-meta-uid": "12345"}, // 自定义元数据建议使用 x-cos-meta- 前缀；未加前缀会自动补齐
 		}
 		url, headers, err := att.GetPresignURL(c.Request.Context(), "images/2024/01/example.jpg", opts)
 		if err != nil {
