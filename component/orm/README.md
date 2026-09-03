@@ -270,6 +270,46 @@ gormDB, err := gorm.Open(
 
 日志内容包含：SQL 语句、耗时、影响行数、错误信息与慢查询标记；慢查询阈值与日志级别可按需调整。
 
+#### 上下文感知模式（高并发场景推荐）
+
+上述便捷用法属于**固定 Logger 模式**：SQL 日志写入注入时指定的 Logger。由于 `gorm.DB.Config` 为共享指针，
+若在每次 HTTP 请求中调用 `SetDebuggerLogger` 传入请求级 Logger，并发请求之间会互相覆盖，导致 SQL 日志串台。
+
+上下文感知模式解决这个问题：**全局只需注入一次**，每条 SQL 执行时从 `context.Context` 中取当前请求的
+Logger（由 Debugger 中间件自动注入），取不到时回退到兜底 Logger：
+
+```go
+import (
+    "github.com/jcbowen/jcbaseGo/component/debugger"
+    "github.com/jcbowen/jcbaseGo/component/orm/mysql"
+)
+
+dbg, _ := debugger.New(&debugger.Config{Enabled: true, Level: "info"})
+
+// 初始化阶段注入一次即可，兜底建议使用主进程 Logger，
+// 使定时任务、启动迁移等无请求上下文的 SQL 也能落盘
+db.EnableContextAwareSQLLogging(dbg.GetMainLogger())
+
+// 业务代码中沿用既有写法，无需任何改动：
+//   - HTTP 请求内：db.GetDb().WithContext(c.Request.Context()).Find(...)
+//     → SQL 自动记录到该请求的调试详情
+//   - 无请求上下文：db.GetDb().Find(...)
+//     → SQL 回退写入主进程日志
+```
+
+对应关系一览：
+
+| 场景 | 推荐模式 | 说明 |
+|---|---|---|
+| 单一日志目标 / 临时打开排障 | 固定模式（`EnableSQLLogging`） | 行为与历史版本完全一致 |
+| 高并发 HTTP 服务，SQL 需归属到请求详情 | 上下文感知模式（`EnableContextAwareSQLLogging`） | 并发安全，注入一次全局生效 |
+
+注意事项：
+- WebSocket 等长连接场景，握手完成后应使用后台 context（如 `context.Background()`），
+  或调用 `debugger.ContextWithoutLogger(ctx)` 摘除请求级 Logger，避免长连接期间的 SQL
+  累积写入早已归档的请求日志；
+- 两种模式互不干扰：固定模式完全忽略 context 中的 Logger，既有调用方零感知。
+
 ## 详细功能说明
 
 ### 数据库配置

@@ -525,6 +525,35 @@ type LoggerInterface interface {
 }
 ```
 
+### Context 辅助函数（请求级 Logger 与标准 context 桥接）
+
+Debugger 中间件在处理请求时，除了把请求级 Logger 存入 `gin.Context`（键 `debugger_logger`）之外，
+还会同步注入到 `c.Request.Context()` 中。这样业务代码中沿用 GORM 惯用的
+`WithContext(c.Request.Context())` 写法，SQL 日志即可自动归属到当前请求的调试详情（需配合
+ORM 组件的上下文感知 SQL 日志模式，见 `component/orm/README.md`）。
+
+```go
+import "github.com/jcbowen/jcbaseGo/component/debugger"
+
+// 将 Logger 注入标准 context（中间件已自动完成，业务代码通常无需调用）
+ctx = debugger.ContextWithLogger(ctx, logger)
+
+// 从 context 中取 Logger，取不到时返回 NoopLogger（安全空实现）
+logger := debugger.LoggerFromContext(ctx)
+
+// 仅判断 context 中是否存在 Logger，不创建实例
+exists := debugger.HasLoggerFromContext(ctx)
+
+// 摘除 context 中的 Logger，供 WebSocket 等长连接场景使用，
+// 避免长连接期间的日志累积写入早已归档的请求日志
+ctx = debugger.ContextWithoutLogger(ctx)
+```
+
+注意事项：
+- `ContextWithLogger` 使用私有 key 类型，不会与其他包的 context key 冲突；
+- WebSocket 等长连接场景，握手完成后建议改用 `context.Background()` 或调用
+  `ContextWithoutLogger` 摘除请求级 Logger。
+
 ### 位置信息记录功能
 
 调试器组件现在支持自动记录日志打印的位置信息，包括文件名、行号和函数名。这个功能可以帮助开发者快速定位日志输出的具体位置，提高调试效率。

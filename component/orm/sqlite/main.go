@@ -26,7 +26,9 @@ type Instance struct {
 	Conf           jcbaseGo.SqlLiteStruct
 	Db             *gorm.DB
 	debug          bool                     // 是否开启调试模式
-	debuggerLogger debugger.LoggerInterface // debugger日志记录器
+	debuggerLogger debugger.LoggerInterface // debugger日志记录器（上下文感知模式下作为兜底）
+	contextAware   bool                     // 是否启用上下文感知的SQL日志模式
+	sqlLogOpts     []interface{}            // SQL日志可选参数，供后续按原配置重建
 	Errors         []error
 }
 
@@ -148,34 +150,70 @@ func (c *Instance) Debug() *Instance {
 }
 
 // GetDb 返回当前数据库连接；若已开启调试模式返回 Debug 包装的连接。
-// 调试模式优先级：debuggerLogger > debug标志
+// 调试模式优先级：contextAware > 固定debuggerLogger > debug标志
 // 这是一个只读方法，不会修改实例状态
 func (c *Instance) GetDb() *gorm.DB {
 	if c.Db == nil {
 		log.Println("Database connection is nil")
 		return nil
 	}
-	db := c.Db
+	return c.applyDebugMode(c.Db)
+}
 
-	// 调试模式优先级：debuggerLogger > debug标志
-	if c.debuggerLogger != nil && c.debuggerLogger.GetLevel() > debugger.LevelSilent {
-		// 已经通过SetDebuggerLogger或EnableSQLLogging配置过，直接返回
-		return db
+// applyDebugMode 应用调试模式配置
+func (c *Instance) applyDebugMode(db *gorm.DB) *gorm.DB {
+	if db == nil {
+		return nil
 	}
 
-	if c.debug && c.debuggerLogger == nil {
-		// 开启gorm debug模式
+	if c.contextAware {
+		return c.applySQLLogging(db)
+	}
+
+	if c.debuggerLogger != nil {
+		return c.applySQLLogging(db)
+	}
+
+	if c.debug {
 		db = db.Debug()
 	}
 
 	return db
 }
 
-// SetDebuggerLogger 设置debugger日志记录器
+// applySQLLogging 按当前模式确保GORM实例已挂载SQL日志Logger
+//
+// 仅当Logger缺失或模式不匹配时才重新注入，避免每次 GetDb 都重复替换并重复打印启用日志。
+func (c *Instance) applySQLLogging(db *gorm.DB) *gorm.DB {
+	// 已挂载且模式一致时无需重建
+	if gl, ok := db.Config.Logger.(*orm.GormDebuggerLogger); ok && gl.IsContextAware() == c.contextAware {
+		return db
+	}
+
+	if c.contextAware {
+		return orm.EnableContextAwareSQLLogging(db, c.debuggerLogger, c.sqlLogOpts...)
+	}
+
+	if c.debuggerLogger != nil && c.debuggerLogger.GetLevel() > debugger.LevelSilent {
+		return orm.EnableSQLLogging(db, c.debuggerLogger, c.sqlLogOpts...)
+	}
+
+	return db
+}
+
+// SetDebuggerLogger 设置debugger日志记录器（固定Logger模式）
+//
+// 本方法为模式A入口：所有SQL日志固定写入传入的Logger。
+// 每次调用都会替换GORM实例的Logger，高并发HTTP场景下并发调用会互相覆盖，
+// 需要按请求归属SQL日志的项目请改用 EnableContextAwareSQLLogging。
+//
 // 参数：
 //   - debuggerLogger: debugger日志记录器实例
 func (i *Instance) SetDebuggerLogger(debuggerLogger debugger.LoggerInterface) {
 	i.debuggerLogger = debuggerLogger
+	i.contextAware = false
+	i.sqlLogOpts = nil
+
 	if i.Db != nil && debuggerLogger != nil {
 		// 启用SQL日志记录
 		i.Db = orm.EnableSQLLogging(i.Db, debuggerLogger)
@@ -187,7 +225,7 @@ func (c *Instance) GetDebuggerLogger() debugger.LoggerInterface {
 	return c.debuggerLogger
 }
 
-// EnableSQLLogging 为当前数据库实例启用SQL日志记录
+// EnableSQLLogging 为当前数据库实例启用SQL日志记录（固定Logger模式）
 // 参数：
 //   - debuggerLogger: debugger日志记录器
 //   - logLevel: GORM日志级别（可选，默认logger.Info）
@@ -198,9 +236,49 @@ func (c *Instance) GetDebuggerLogger() debugger.LoggerInterface {
 func (c *Instance) EnableSQLLogging(debuggerLogger debugger.LoggerInterface, opts ...interface{}) *Instance {
 	if c.Db != nil && debuggerLogger != nil {
 		c.debuggerLogger = debuggerLogger
+		c.contextAware = false
+		c.sqlLogOpts = opts
 		c.Db = orm.EnableSQLLogging(c.Db, debuggerLogger, opts...)
 	}
 	return c
+}
+
+// EnableContextAwareSQLLogging 为当前数据库实例启用上下文感知的SQL日志记录（模式B）
+//
+// 本方法全局只需在初始化阶段调用一次：运行期每条SQL会依据 context.Context 中
+// 携带的请求级Logger路由到对应请求的日志中，并发请求之间互不覆盖。
+// 需要 debugger 中间件已开启，它会把请求级Logger自动注入 request 的 context。
+//
+// 参数：
+//   - fallbackLogger: 兜底Logger，context 中无Logger时使用；可为 nil 表示丢弃
+//     （建议传 dbg.GetMainLogger()，使定时任务等无请求上下文的SQL也能落盘）
+//   - opts: 可选参数，语义同 EnableSQLLogging（日志级别、慢查询阈值）
+//
+// 返回：
+//   - *Instance: 已启用上下文感知SQL日志的数据库实例
+//
+// 使用示例：
+//
+//	library.Sqlite.EnableContextAwareSQLLogging(dbg.GetMainLogger())
+//	library.Sqlite.EnableContextAwareSQLLogging(dbg.GetMainLogger(), debugger.LevelInfo, 100*time.Millisecond)
+func (c *Instance) EnableContextAwareSQLLogging(fallbackLogger debugger.LoggerInterface, opts ...interface{}) *Instance {
+	c.debuggerLogger = fallbackLogger
+	c.contextAware = true
+	c.sqlLogOpts = opts
+
+	if c.Db != nil {
+		c.Db = orm.EnableContextAwareSQLLogging(c.Db, fallbackLogger, opts...)
+	}
+
+	return c
+}
+
+// IsContextAware 判断当前实例是否处于上下文感知的SQL日志模式
+//
+// 返回：
+//   - bool: 上下文感知模式返回 true，固定Logger模式返回 false
+func (c *Instance) IsContextAware() bool {
+	return c.contextAware
 }
 
 // GetConf 返回当前实例的原始配置结构。

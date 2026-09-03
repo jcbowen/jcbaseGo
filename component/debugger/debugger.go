@@ -178,13 +178,21 @@ func (d *Debugger) createNormalMiddleware() gin.HandlerFunc {
 			host = c.Request.Host
 		}
 
-		c.Set("debugger_logger", d.logger.WithFields(map[string]interface{}{
+		// 构造请求级Logger：固定携带 request_id 等字段，请求结束时由 recordLoggerLogs 统一收集
+		requestLogger := d.logger.WithFields(map[string]interface{}{
 			"request_id": entry.ID,
 			"method":     c.Request.Method,
 			"url":        c.Request.URL.String(),
 			"host":       host,
 			"client_ip":  middleware.GetRealIP(c, d.config.UseCDN),
-		}))
+		})
+
+		// 设置Logger到 gin 上下文，供控制器通过 GetLoggerFromContext 获取
+		c.Set("debugger_logger", requestLogger)
+
+		// 同时注入 request 的标准 context，使 ORM 等拿不到 gin.Context 的组件
+		// 也能沿调用链取到请求级Logger，业务代码无需修改 WithContext 调用
+		c.Request = c.Request.WithContext(ContextWithLogger(c.Request.Context(), requestLogger))
 
 		// 创建自定义的ResponseWriter来捕获响应
 		writer := &responseWriter{
@@ -253,12 +261,20 @@ func (d *Debugger) createEarlyMiddleware() gin.HandlerFunc {
 		c.Set("debugger_request_id", entry.ID)
 
 		// 设置Logger到上下文，供控制器使用
-		c.Set("debugger_logger", d.logger.WithFields(map[string]interface{}{
+		// 构造请求级Logger：固定携带 request_id 等字段，请求结束时由 recordLoggerLogs 统一收集
+		requestLogger := d.logger.WithFields(map[string]interface{}{
 			"request_id": entry.ID,
 			"method":     c.Request.Method,
 			"url":        c.Request.URL.String(),
 			"client_ip":  middleware.GetRealIP(c, d.config.UseCDN),
-		}))
+		})
+
+		// 设置Logger到 gin 上下文，供控制器通过 GetLoggerFromContext 获取
+		c.Set("debugger_logger", requestLogger)
+
+		// 同时注入 request 的标准 context，使 ORM 等拿不到 gin.Context 的组件
+		// 也能沿调用链取到请求级Logger，业务代码无需修改 WithContext 调用
+		c.Request = c.Request.WithContext(ContextWithLogger(c.Request.Context(), requestLogger))
 
 		// 创建自定义的ResponseWriter来捕获响应
 		writer := &responseWriter{
@@ -327,12 +343,20 @@ func (d *Debugger) createLateMiddleware() gin.HandlerFunc {
 		c.Set("debugger_request_id", entry.ID)
 
 		// 设置Logger到上下文，供控制器使用
-		c.Set("debugger_logger", d.logger.WithFields(map[string]interface{}{
+		// 构造请求级Logger：固定携带 request_id 等字段，请求结束时由 recordLoggerLogs 统一收集
+		requestLogger := d.logger.WithFields(map[string]interface{}{
 			"request_id": entry.ID,
 			"method":     c.Request.Method,
 			"url":        c.Request.URL.String(),
 			"client_ip":  middleware.GetRealIP(c, d.config.UseCDN),
-		}))
+		})
+
+		// 设置Logger到 gin 上下文，供控制器通过 GetLoggerFromContext 获取
+		c.Set("debugger_logger", requestLogger)
+
+		// 同时注入 request 的标准 context，使 ORM 等拿不到 gin.Context 的组件
+		// 也能沿调用链取到请求级Logger，业务代码无需修改 WithContext 调用
+		c.Request = c.Request.WithContext(ContextWithLogger(c.Request.Context(), requestLogger))
 
 		// 创建自定义的ResponseWriter来捕获响应
 		writer := &responseWriter{
