@@ -54,6 +54,7 @@ type DbStruct struct {
 	Charset                                  string `json:"charset" ini:"charset" default:"utf8mb4"`                                                                 // 编码
 	TablePrefix                              string `json:"tablePrefix,omitempty" ini:"tablePrefix,omitempty" default:""`                                            // 表前缀
 	ParseTime                                string `json:"parseTime" ini:"parseTime" default:"False"`                                                               // 是否开启时间解析
+	Loc                                      string `json:"loc" ini:"loc" default:"Local"`                                                                           // 时区：Local=服务器本地时区(默认)、UTC，或 IANA 时区名(如 Asia/Shanghai)；约定“库里存 UTC”的项目须显式配置为 UTC
 	SingularTable                            bool   `json:"singularTable" ini:"singularTable" default:"true"`                                                        // 使用单数表名
 	DisableForeignKeyConstraintWhenMigrating bool   `json:"disableForeignKeyConstraintWhenMigrating" ini:"disableForeignKeyConstraintWhenMigrating" default:"false"` // 是否禁用外键约束
 }

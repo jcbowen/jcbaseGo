@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"reflect"
 	"strings"
@@ -66,15 +67,47 @@ func DefaultReconnectConfig() ReconnectConfig {
 	}
 }
 
+// defaultLoc 默认时区。保持历史行为：按服务器本地时区解析 DATETIME/TIMESTAMP。
+// 修改该默认值会直接影响所有下游项目的时间语义，只允许通过配置覆盖，不得改动此常量。
+const defaultLoc = "Local"
+
 // getDSN 拼接 Data Source Name（数据源）字符串，基于提供的 `DbStruct`。
+//
+// 时区（Loc）说明：
+//   - 留空时回退为 Local，与历史行为完全一致；
+//   - 支持 Local、UTC（大小写不敏感）以及 IANA 时区名（如 Asia/Shanghai）；
+//   - Loc 按字面时区名填写，不要预先转义（写 Asia/Shanghai，不要写 Asia%2FShanghai），
+//     转义由本函数统一负责；
+//   - 约定“数据库存 UTC”的项目必须显式配置 Loc=UTC，否则读出的时间会整体偏移一个本地时区。
 func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
 	// 拼接dsn
 	parseTime := strings.ToLower(dbConfig.ParseTime)
 	if parseTime != "false" {
 		parseTime = "true"
 	}
-	dsn = "%s:%s@%s(%s:%s)/%s?charset=%s&parseTime=%s&loc=Local"
-	dsn = fmt.Sprintf(dsn, dbConfig.Username, dbConfig.Password, dbConfig.Protocol, dbConfig.Host, dbConfig.Port, dbConfig.Dbname, dbConfig.Charset, parseTime)
+
+	loc := strings.TrimSpace(dbConfig.Loc)
+	if loc == "" {
+		loc = defaultLoc
+	}
+	switch strings.ToLower(loc) {
+	case "local":
+		loc = "Local"
+	case "utc":
+		loc = "UTC"
+	}
+	// loc 是 DSN query 的参数值，必须整体做 query 转义，不能只在包含 "/" 时转义：
+	//   - "/"：驱动从右往左定位最后一个 "/" 来切分库名，不转义会直接破坏 DSN 结构
+	//     （驱动报 "invalid DSN: did you forget to escape a param value?"）；
+	//   - "&"：会被当作参数分隔符，导致 loc 的值被静默截断；
+	//   - "%"：驱动的 url.QueryUnescape 会失败，报出难以定位的 "invalid URL escape"；
+	//   驱动解析 loc 时固定执行 url.QueryUnescape，其自身 FormatDSN 也总是 url.QueryEscape，
+	//   故此处必须无条件转义。
+	//   对 Local、UTC 及字母数字型时区名（如 PRC），QueryEscape 为恒等变换，无副作用。
+	loc = url.QueryEscape(loc)
+
+	dsn = "%s:%s@%s(%s:%s)/%s?charset=%s&parseTime=%s&loc=%s"
+	dsn = fmt.Sprintf(dsn, dbConfig.Username, dbConfig.Password, dbConfig.Protocol, dbConfig.Host, dbConfig.Port, dbConfig.Dbname, dbConfig.Charset, parseTime, loc)
 
 	return
 }
