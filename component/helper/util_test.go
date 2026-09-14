@@ -1,9 +1,9 @@
 package helper
 
 import (
-    "reflect"
-    "testing"
-    "time"
+	"reflect"
+	"testing"
+	"time"
 )
 
 // TestCheckAndSetDefault 测试 CheckAndSetDefault
@@ -72,7 +72,7 @@ func TestCheckAndSetDefault(t *testing.T) {
 		t.Fatalf("non-empty overwrite in inner happened: %+v", cfg2.Inner)
 	}
 
-	// 指针字段：库函数不处理结构体指针字段的默认值，保持零值
+	// 指针字段：非 nil 结构体指针会被递归补充默认值；nil 指针保持原样不实例化
 	cfg3 := &Cfg{PInner: &Inner{}}
 	if err := CheckAndSetDefault(cfg3); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -80,8 +80,17 @@ func TestCheckAndSetDefault(t *testing.T) {
 	if cfg3.PInner == nil {
 		t.Fatalf("PInner should not be nil after processing")
 	}
-	if cfg3.PInner.Label != "" || cfg3.PInner.Age != 0 || cfg3.PInner.Delay != 0 {
-		t.Fatalf("pointer inner should remain zero values: %+v", cfg3.PInner)
+	if cfg3.PInner.Label != "inner" || cfg3.PInner.Age != 18 || cfg3.PInner.Delay != 150*time.Millisecond {
+		t.Fatalf("pointer inner defaults failed: %+v", cfg3.PInner)
+	}
+
+	// nil 指针表达「字段不存在」，不应被自动实例化
+	cfg4 := &Cfg{}
+	if err := CheckAndSetDefault(cfg4); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg4.PInner != nil {
+		t.Fatalf("nil pointer field should stay nil: %+v", cfg4.PInner)
 	}
 
 	// 非结构体输入应当静默返回
@@ -254,15 +263,15 @@ func Test_buildDefaultValueForType_equalToDefault(t *testing.T) {
 
 // 命名整型类型默认值赋值（仅内部命名类型，避免引入循环依赖）
 func TestCheckAndSetDefault_NamedIntTypes_Internal(t *testing.T) {
-    type myInt int
-    type C1 struct {
-        Level myInt `default:"2"`
-    }
-    c1 := &C1{}
-    if err := CheckAndSetDefault(c1); err != nil {
-        t.Fatalf("unexpected error: %v", err)
-    }
-    if c1.Level != myInt(2) {
-        t.Fatalf("expected myInt Level=2, got %v", c1.Level)
-    }
+	type myInt int
+	type C1 struct {
+		Level myInt `default:"2"`
+	}
+	c1 := &C1{}
+	if err := CheckAndSetDefault(c1); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c1.Level != myInt(2) {
+		t.Fatalf("expected myInt Level=2, got %v", c1.Level)
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -977,25 +978,65 @@ func IsEmptyValue(val interface{}) bool {
 	}
 }
 
+// maxStructDefaultDepth 结构体默认值递归补充的最大层级
+// 说明：
+//   - 循环引用主要依靠指针地址登记表 visited 收敛（visited 为「当前递归路径」集合，进入登记、返回注销）；
+//   - 存在不含指针的环（例如 map[string]interface{} 通过 interface 装下自身），visited 无法识别，
+//     故仍需深度上限兜底；达到上限后不再深入，避免无限递归导致栈溢出；
+//   - 深度语义统一为「容器嵌套层数」：每深入一层 struct / map 元素 / 指针指向的 struct 都会 +1；
+//     interface 仅作拆包、不消耗深度，字段自身的 map 容器也不消耗深度（其元素才计入）；
+//   - setDefaultForStruct 与 setDefaultForStructMap 两处入口都使用 depth >= max 校验：
+//     后者的校验不可省略 —— map → interface → map 这类无指针环路完全不经过 setDefaultForStruct；
+//   - 上限为容器嵌套层数，超出后静默停止深入（不报错、不 panic）。正常配置的嵌套深度远小于该值，
+//     不要依赖「恰好多少层可用」这种由实现倒推得出的具体数字
+const maxStructDefaultDepth = 32
+
 // CheckAndSetDefault 检查结构体中的字段是否为空，如果为空则设置为默认值
 // 函数名：CheckAndSetDefault
 // 参数：i interface{} — 结构体或其指针，支持一层指针传入
 // 返回值：error — 始终返回nil；本函数不抛出解析错误，保持兼容的静默行为
 // 异常：不触发panic（除非外部传入不可寻址的值并强制Addr）
 // 使用说明：
-// - 仅对以下类型在“空值”时设置默认：string、bool、int系、float32/float64、time.Duration
-// - struct与interface字段将递归调用本函数（interface字段递归对原逻辑无实际效果，保持兼容）
-// - default标签为空时不会报错，数值/布尔解析失败会被忽略（保持原有逻辑）
+//   - 仅对以下类型在“空值”时设置默认：string、bool、int系、float32/float64、time.Duration
+//   - struct、interface、ptr 三类字段会向下递归处理，递归过程中贯通传递深度与已访问指针集合
+//   - map字段的值类型为自定义配置结构体时，会对每个元素递归补充默认值（支持结构体、结构体指针、interface承载的结构体）
+//   - 切片字段的元素为自定义配置结构体时同样递归补充默认值（支持 []Struct、[]*Struct、[]interface{}、嵌套切片与 map[string][]Struct）
+//   - 只有「配置结构体」才会被递归，判定标准为「在递归深度内，存在至少一个会被本工具作用的可导出字段」：
+//     带 default 标签的字段、切片/映射字段（无标签时会被初始化为空容器）、可能装载配置结构体的 interface 字段；
+//     因此 sync.Mutex、atomic.Value、url.URL、time.Time 这类无相关字段的第三方类型会被整体跳过，
+//     既避免对不该复制的类型做「拷贝 → 写回」（例如 map[string]sync.Mutex），也省掉无收益的遍历
+//   - nil 指针字段保持原样、不会被自动实例化（与 map 值为 nil 指针的处理一致）；
+//     若需要指针字段也带上默认值，请先显式初始化：cfg.Inner = &InnerCfg{}
+//   - 切片在递归范围内：[]SubConfig 的值元素会「拷贝 → 补充 → 写回」，[]*SubConfig 的非 nil 指针就地补充、
+//     nil 指针保持原样，[]interface{} 按实际类型分派，[]T 的嵌套切片与 map[string][]SubConfig 逐层向内；
+//     元素为基础类型的切片（[]string、[]int 等）不会被逐元素改写，仅空切片按 default 标签整体填充
+//   - 递归受环路保护：含指针的环由 visited 路径集合收敛，不含指针的环（如 map 通过 interface 装下自身）由 maxStructDefaultDepth 兜底
+//   - default标签为空时不会报错，数值/布尔解析失败会被忽略（保持原有逻辑）
+//
+// 行为变更提示（相比旧实现）：
+//   - 旧实现对指针字段完全不处理，现在非 nil 的 *Struct 字段会被递归补充默认值；
+//   - 旧实现对 interface 字段实际是空操作，现在会解引用后按实际类型（结构体 / 结构体指针 / 映射）递归补充；
+//   - 旧实现对非空 map 的元素完全不处理，现在会对命中判定条件的 map 元素递归补充，并就地写回原 map
+//     （调用方在别处共享的同一个 map 也会看到变化）。
+//
 // 使用示例：
 //
-//	type AppConfig struct {
-//	    Name    string        `json:"name" default:"myapp"`
-//	    Enabled bool          `json:"enabled" default:"true"`
-//	    Port    int           `json:"port" default:"8080"`
-//	    Timeout time.Duration `json:"timeout" default:"300ms"`
+//	type SubConfig struct {
+//	    Host string `json:"host" default:"127.0.0.1"`
+//	    Port int    `json:"port" default:"3306"`
 //	}
-//	cfg := &AppConfig{}
+//	type AppConfig struct {
+//	    Name    string               `json:"name" default:"myapp"`
+//	    Enabled bool                 `json:"enabled" default:"true"`
+//	    Port    int                  `json:"port" default:"8080"`
+//	    Timeout  time.Duration       `json:"timeout" default:"300ms"`
+//	    Clusters map[string]SubConfig `json:"clusters"`
+//	    Inner    *SubConfig          `json:"inner"`
+//	}
+//	cfg := &AppConfig{Clusters: map[string]SubConfig{"main": {}}, Inner: &SubConfig{}}
 //	_ = helper.CheckAndSetDefault(cfg)
+//	// cfg.Clusters["main"] == SubConfig{Host: "127.0.0.1", Port: 3306}
+//	// cfg.Inner           == &SubConfig{Host: "127.0.0.1", Port: 3306}
 //
 // 常见问题：如果发现默认值赋值失败，但是又没有出现报错，可以看看是不是传递的指针的指针
 func CheckAndSetDefault(i interface{}) error {
@@ -1007,9 +1048,213 @@ func CheckAndSetDefault(i interface{}) error {
 		val = val.Elem()
 	}
 
+	return setDefaultForStruct(val, 0, make(map[uintptr]struct{}))
+}
+
+// isNestedStructKind 判断字段类型是否属于需要向下递归的「结构体载体」类型
+// 函数名：isNestedStructKind
+// 参数：kind reflect.Kind — 字段的反射种类
+// 返回值：bool — 为 struct、interface 或 ptr 时返回true，表示需要递归尝试补充默认值
+// 异常：不触发panic
+// 使用说明：
+// - struct：值类型结构体，直接递归其字段
+// - interface：运行期可能装载结构体、结构体指针或映射，需要解引用后判定
+// - ptr：可能指向配置结构体，也可能指向基础类型；本函数仅做粗筛，具体判定在 setDefaultForNestedField 内完成
+// 使用示例：
+//
+//	if isNestedStructKind(field.Kind()) {
+//	    if err := setDefaultForNestedField(field, depth, visited); err != nil {
+//	        return err
+//	    }
+//	    continue
+//	}
+func isNestedStructKind(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Struct, reflect.Interface, reflect.Ptr:
+		return true
+	default:
+		return false
+	}
+}
+
+// setDefaultForNestedField 为结构体中的「结构体载体」字段递归补充默认值
+// 函数名：setDefaultForNestedField
+// 参数：
+// - field reflect.Value — 结构体中可设置的字段值，其 Kind 为 Struct、Interface 或 Ptr
+// - depth int — 当前所在结构体的递归深度
+// - visited map[uintptr]struct{} — 已递归过的指针地址集合
+// 返回值：error — 递归过程中返回的错误
+// 异常：不触发panic；以下情况直接跳过，不做任何修改
+// 使用说明：
+// - struct 字段：类型命中配置结构体判定时递归补充其字段默认值；未命中的类型（time.Time、sync.Mutex、
+// url.URL 等）整体跳过 —— 递归本来也不会改到它们，跳过可省掉无收益遍历
+// - interface 字段：解引用装载的实际值后按实际类型分派，支持结构体、结构体指针、映射
+// - ptr 字段：非 nil 且指向配置结构体时递归 Elem()；nil 指针保持原样不实例化
+// - struct / ptr 字段递归时传递 depth+1，每次深入一层容器消耗一层深度；interface 仅拆包不消耗深度
+//
+// 设计约定（重要）：
+// - nil 指针不会被自动实例化。nil 表达「字段不存在 / 未启用 / 未配置」，
+// 自动 New 会把「不存在」变成「存在且带默认值」，改变调用方语义；
+// 该约定与 setDefaultForMapValue 中 map 值为 nil 指针的处理保持一致。
+// 若调用方需要指针字段也有默认值，请先自行显式初始化：cfg.Inner = &InnerCfg{}
+//
+// 使用示例：
+//
+//	if err := setDefaultForNestedField(field, depth, visited); err != nil {
+//	    return err
+//	}
+func setDefaultForNestedField(field reflect.Value, depth int, visited map[uintptr]struct{}) error {
+	switch field.Kind() {
+	case reflect.Struct:
+		// 非配置结构体整体跳过，避免对第三方类型做无意义的递归
+		if !isConfigStructType(field.Type()) {
+			return nil
+		}
+		return setDefaultForStruct(field, depth+1, visited)
+
+	case reflect.Interface:
+		return setDefaultForInterfaceField(field, depth, visited)
+
+	case reflect.Ptr:
+		return setDefaultForPtrField(field, depth, visited)
+
+	default:
+		return nil
+	}
+}
+
+// setDefaultForInterfaceField 解引用 interface 字段装载的实际值后分派默认值补充
+// 函数名：setDefaultForInterfaceField
+// 参数：
+// - field reflect.Value — 结构体中的 interface 字段值
+// - depth int — 当前所在结构体的递归深度
+// - visited map[uintptr]struct{} — 已递归过的指针地址集合
+// 返回值：error — 递归过程中返回的错误
+// 异常：不触发panic；nil interface 或不可设置的实际值直接跳过
+// 使用说明：
+//   - interface 承载的实际值在反射中不可直接 Set，但其中若为映射（引用类型）可直接修改；
+//     若为值类型结构体，则无法就地修改，需要重新赋值回接口字段
+//   - interface 本身只是包装层，不消耗深度：内部按实际类型分派时传入的仍是 depth，
+//     由 struct / ptr / map 各自的实现决定 +1，保证与「同类型字段」路径的深度口径一致
+//   - 修复要点：原实现遇到 interface 字段直接 continue，导致接口装载的 map 永远不会进入 map 分支
+//
+// 使用示例：
+//
+//	if err := setDefaultForInterfaceField(field, depth, visited); err != nil {
+//	    return err
+//	}
+func setDefaultForInterfaceField(field reflect.Value, depth int, visited map[uintptr]struct{}) error {
+	if field.IsNil() {
+		return nil
+	}
+
+	actual := field.Elem()
+	if !actual.IsValid() {
+		return nil
+	}
+
+	// 映射、切片、结构体指针等引用类型可直接就地修改，无需写回接口字段
+	switch actual.Kind() {
+	case reflect.Map:
+		return setDefaultForStructMap(actual, depth, visited)
+	case reflect.Slice:
+		return setDefaultForSliceField(actual, depth, visited)
+	case reflect.Ptr:
+		return setDefaultForPtrField(actual, depth, visited)
+	}
+
+	// 值类型结构体无法就地修改，需要通过 setDefaultForMapValue 的拷贝写回语义处理
+	if !isConfigStructType(actual.Type()) {
+		return nil
+	}
+	newValue, changed, err := setDefaultForMapValue(actual, depth, visited)
+	if err != nil {
+		return err
+	}
+	// 注意：不能对 interface 字段调用 Type().Elem()（interface 类型没有 Elem 方法，会 panic），
+	// 直接校验新值能否赋值给接口字段本身即可
+	if !changed || !newValue.IsValid() || !newValue.Type().AssignableTo(field.Type()) {
+		return nil
+	}
+	field.Set(newValue)
+
+	return nil
+}
+
+// setDefaultForPtrField 为指针字段指向的配置结构体递归补充默认值
+// 函数名：setDefaultForPtrField
+// 参数：
+// - field reflect.Value — 结构体中的指针字段值，或接口解引用后的指针值
+// - depth int — 当前所在结构体的递归深度
+// - visited map[uintptr]struct{} — 当前递归路径上已访问的指针地址集合
+// 返回值：error — 递归过程中返回的错误
+// 异常：不触发panic
+// 使用说明：
+// - nil 指针保持原样，不自动实例化（见 setDefaultForNestedField 的设计约定）
+// - 非配置结构体指针（如 *int）直接跳过
+// - visited 语义为「当前递归路径」集合：进入时登记、函数返回时注销（defer delete），
+// 因此只用于阻断真正的环，不会把「同一指针被多个字段/map 键引用」（DAG）误判为已处理；
+// 默认值填充本身幂等，重复处理同一指针不会产生副作用
+// - 深度已耗尽时直接返回且不登记地址：否则会在 visited 中残留一条「未真正处理过」的记录，
+// 导致后续在更浅位置再次遇到该指针时被静默跳过、默认值漏填
+// - 注意：本函数对非 nil 且指向配置结构体的指针会消耗一层深度（depth+1）
+// 使用示例：
+//
+//	if err := setDefaultForPtrField(field, depth, visited); err != nil {
+//	    return err
+//	}
+func setDefaultForPtrField(field reflect.Value, depth int, visited map[uintptr]struct{}) error {
+	if field.IsNil() || !isConfigStructType(field.Type().Elem()) {
+		return nil
+	}
+
+	// 深度耗尽时不要登记地址，避免污染后续同指针的浅层引用
+	if depth >= maxStructDefaultDepth {
+		return nil
+	}
+
+	addr := field.Pointer()
+	if _, exists := visited[addr]; exists {
+		return nil
+	}
+	visited[addr] = struct{}{}
+	// 路径集合语义：本层处理完即注销，仅阻断真正的环；
+	// 同一指针被多个字段/map键引用（DAG）时会各自处理一次，默认值填充幂等，不会产生副作用
+	defer delete(visited, addr)
+
+	return setDefaultForStruct(field.Elem(), depth+1, visited)
+}
+
+// setDefaultForStruct 对结构体反射值逐字段补充默认值，并支持嵌套结构递归
+// 函数名：setDefaultForStruct
+// 参数：
+// - val reflect.Value — 已解引用到结构体的反射值；非结构体时直接返回nil
+// - depth int — 当前递归深度（语义为容器嵌套层数），达到 maxStructDefaultDepth 后停止继续深入
+// - visited map[uintptr]struct{} — 当前递归路径上已访问的指针地址集合（进入登记、返回注销）
+// 返回值：error — 始终返回nil或递归过程中返回的错误
+// 异常：不触发panic；不可设置的字段会被跳过
+// 使用说明：
+// 字段按以下三类分别处理：
+//   - time.Time 字段：特判并交给 setTimeDefault 填充 default 标签（详见该函数说明）。
+//     必须特判的原因：time.Time 的 Kind 为 Struct，若不特判会被 isNestedStructKind
+//     的 Struct 分支拦截并转入「结构体向内递归」，导致其 default 标签被静默忽略
+//   - struct / interface / ptr 字段：交给 setDefaultForNestedField 分派递归
+//   - 其余字段（string / bool / int / float / time.Duration / slice / map）：
+//     按「零值才填」的语义在此直接处理；其中 slice / map 的 default 标签
+//     对空容器还意味着「初始化为空切片 / 空映射」
+//
+// 使用示例：
+//
+//	err := setDefaultForStruct(reflect.ValueOf(cfg).Elem(), 0, make(map[uintptr]struct{}))
+func setDefaultForStruct(val reflect.Value, depth int, visited map[uintptr]struct{}) error {
 	// 不是结构体的时候直接跳过处理
 	if val.Kind() != reflect.Struct {
 		// log.Printf("%s 不是结构体，直接跳过处理", val.String())
+		return nil
+	}
+
+	// 超过递归深度上限，不再深入，避免自引用结构无限递归
+	if depth >= maxStructDefaultDepth {
 		return nil
 	}
 
@@ -1023,9 +1268,19 @@ func CheckAndSetDefault(i interface{}) error {
 			continue
 		}
 
-		// 递归处理 struct 或 interface 字段
-		if field.Kind() == reflect.Struct || field.Kind() == reflect.Interface {
-			if err := CheckAndSetDefault(field.Addr().Interface()); err != nil {
+		// time.Time 是值语义的时间类型，Kind 虽为 Struct，但语义同基础类型：
+		// 需要作为「字段本身」填充默认值，而不是作为结构体向内递归。
+		// 故必须在此特判并 continue，否则会被下面的 isNestedStructKind 的 Struct 分支拦截，
+		// 导致 default 标签被静默忽略（这正是本次要修复的问题）
+		if field.Type() == timeType {
+			setTimeDefault(field, fieldType.Tag.Get("default"))
+			continue
+		}
+
+		// 需要向下递归的字段类型统一在此处理：
+		// - struct / interface / ptr 都可能是配置结构体的载体，交由 setDefaultForNestedField 分派
+		if isNestedStructKind(field.Kind()) {
+			if err := setDefaultForNestedField(field, depth, visited); err != nil {
 				return err
 			}
 			continue
@@ -1068,22 +1323,586 @@ func CheckAndSetDefault(i interface{}) error {
 			}
 		}
 
-		// 切片：为空切片时设置默认值
-		if fieldKind == reflect.Slice && field.Len() == 0 {
-			if err := setDefaultValue(field, tag); err != nil {
-				// 静默处理错误，保持与原有逻辑兼容
+		// 切片：为空切片时按 default 标签整体填充；元素类型为配置结构体时递归补充每个元素的默认值
+		if fieldKind == reflect.Slice {
+			if field.Len() == 0 {
+				if err := setDefaultValue(field, tag); err != nil {
+					// 静默处理错误，保持与原有逻辑兼容
+				}
+			}
+			if err := setDefaultForSliceField(field, depth, visited); err != nil {
+				return err
 			}
 		}
 
-		// 映射：为空映射时设置默认值
-		if fieldKind == reflect.Map && field.Len() == 0 {
-			if err := setDefaultValue(field, tag); err != nil {
-				// 静默处理错误，保持与原有逻辑兼容
+		// 映射：为空映射时设置默认值；值类型为配置结构体时递归补充每个元素的默认值
+		if fieldKind == reflect.Map {
+			if field.Len() == 0 {
+				if err := setDefaultValue(field, tag); err != nil {
+					// 静默处理错误，保持与原有逻辑兼容
+				}
+			}
+			if err := setDefaultForStructMap(field, depth, visited); err != nil {
+				return err
 			}
 		}
 	}
 
 	return nil
+}
+
+// setTimeDefault 为 time.Time 字段填充 default 标签指定的默认值
+// 函数名：setTimeDefault
+// 参数：
+// - field reflect.Value — 可设置的 time.Time 字段值（调用方需保证其类型为 time.Time）
+// - tag string — `default` 标签文本，支持多种时间字符串格式与时间戳
+// 返回值：无（本函数不返回错误，所有失败均静默处理）
+// 异常：不触发panic
+// 使用说明：
+// - 仅当字段当前为零值（time.Time.IsZero）时才填充，已有非零值不会被覆盖，
+// 与整型/浮点/字符串「零值才填」的语义保持一致
+// - 标签为空时不做任何处理
+// - 解析失败（非法格式字符串）时静默跳过、不修改字段，
+// 与整型/浮点/time.Duration 的既有容错风格一致
+// - 解析采用 Convert.ToTime，支持 RFC3339、「2006-01-02 15:04:05」、「2006-01-02」、
+// 秒/毫秒/纳秒时间戳字符串、以及中文格式等（详见 Convert.ToTime）
+//
+// 实现要点：
+// Convert.ToTime 在解析失败时返回零值 time.Time{}，无法与「成功解析到零值」区分，
+// 因此这里用「解析结果为零值即视为失败」作为判据 —— 该判据不会误伤正常场景：
+// 一个合法的默认值本就不应解析为零值（零值时间无业务意义），
+// 且字段进入本函数前已确认为零值，即便判据有误也不会产生破坏性写入
+//
+// 使用示例：
+//
+//	type Cfg struct {
+//	    StartAt time.Time `default:"2024-01-01 00:00:00"`
+//	    EndAt   time.Time `default:"2024-12-31 23:59:59"`
+//	}
+//	cfg := &Cfg{}
+//	_ = helper.CheckAndSetDefault(cfg)
+//	// cfg.StartAt == 2024-01-01 00:00:00
+func setTimeDefault(field reflect.Value, tag string) {
+	if tag == "" || !field.IsZero() {
+		return
+	}
+
+	parsed := Convert{Value: tag}.ToTime()
+	// 解析失败返回零值，此时视为「无有效默认值」并跳过，避免写入零值污染语义
+	if parsed.IsZero() {
+		return
+	}
+
+	field.Set(reflect.ValueOf(parsed))
+}
+
+// setDefaultForStructMap 对映射中值为配置结构体的元素递归补充默认值
+// 函数名：setDefaultForStructMap
+// 参数：
+// - field reflect.Value — 可设置的映射字段值
+// - depth int — 当前递归深度（语义为容器嵌套层数）
+// - visited map[uintptr]struct{} — 当前递归路径上已访问的指针地址集合
+// 返回值：error — 递归补充默认值过程中返回的错误
+// 异常：不触发panic；nil映射或值类型非配置结构体时直接返回nil
+// 使用说明：
+//   - 支持值类型为结构体、结构体指针、interface{}（运行时为结构体）的映射
+//   - map value 在反射中不可寻址，故采用「拷贝到新实例 → 递归补充 → SetMapIndex 写回」的方式
+//   - 深度上限校验必须保留在本入口：存在不含结构体与指针的环路
+//     （map[string]interface{} 通过 interface 装下自身），该环路径为 map → interface → map，
+//     完全不经过 setDefaultForStruct，若此处不设限将无法收敛；
+//     校验条件与 setDefaultForStruct 保持一致，均为 depth >= max，两处各自针对不同入口，不存在重复扣减
+//   - 含指针环路由 visited 路径集合收敛，无指针环路由本条深度上限兜底
+//   - 注意：本层 map 的元素按 depth 处理，元素自身是容器（struct / 指针 / 内层 map）时才 +1
+//
+// 使用示例：
+//
+//	if err := setDefaultForStructMap(field, depth, visited); err != nil {
+//	    return err
+//	}
+func setDefaultForStructMap(field reflect.Value, depth int, visited map[uintptr]struct{}) error {
+	// 深度上限兜底：无指针环路（map -> interface -> map）不经过 setDefaultForStruct，必须在此拦截
+	if depth >= maxStructDefaultDepth {
+		return nil
+	}
+
+	if field.Kind() != reflect.Map || field.IsNil() || field.Len() == 0 {
+		return nil
+	}
+
+	if !mapValueMayBeConfigStruct(field.Type().Elem()) {
+		return nil
+	}
+
+	for _, key := range field.MapKeys() {
+		newValue, changed, err := setDefaultForMapValue(field.MapIndex(key), depth, visited)
+		if err != nil {
+			return err
+		}
+		// 指针类型元素已就地修改，无需写回
+		if !changed || !newValue.IsValid() {
+			continue
+		}
+		if !newValue.Type().AssignableTo(field.Type().Elem()) {
+			continue
+		}
+		field.SetMapIndex(key, newValue)
+	}
+
+	return nil
+}
+
+// setDefaultForMapValue 为映射中的单个元素递归补充默认值
+// 函数名：setDefaultForMapValue
+// 参数：
+// - mapValue reflect.Value — 映射中的元素值，反射中不可寻址
+// - depth int — 当前递归深度（语义为容器嵌套层数）
+// - visited map[uintptr]struct{} — 当前递归路径上已访问的指针地址集合
+// 返回值：
+// - reflect.Value — 补充默认值后的元素值；需要写回映射时有效
+// - bool — 是否需要调用方执行写回；结构体拷贝返回true，指针已就地修改返回false
+// - error — 递归过程中返回的错误
+// 异常：不触发panic；nil指针、非配置结构体元素均被跳过
+// 使用说明：
+// - 深度口径与「同类型的结构体字段」保持完全一致：
+// 值结构体元素按 depth+1 处理（等价于 struct 字段），指针元素交给 setDefaultForPtrField(depth)
+// 由其内部统一 +1（等价于 ptr 字段），内层 map 元素按 depth+1 处理（等价于嵌套 map）
+// - interface 只是包装层，不消耗深度，直接按原 depth 解引用后继续分派
+// 使用示例：
+//
+//	newValue, changed, err := setDefaultForMapValue(field.MapIndex(key), depth, visited)
+//	if changed && err == nil {
+//	    field.SetMapIndex(key, newValue)
+//	}
+func setDefaultForMapValue(mapValue reflect.Value, depth int, visited map[uintptr]struct{}) (reflect.Value, bool, error) {
+	switch mapValue.Kind() {
+	case reflect.Struct:
+		if !isConfigStructType(mapValue.Type()) {
+			return reflect.Value{}, false, nil
+		}
+		// map value 不可寻址，先拷贝到新实例再递归补充
+		copied := reflect.New(mapValue.Type())
+		copied.Elem().Set(mapValue)
+		if err := setDefaultForStruct(copied.Elem(), depth+1, visited); err != nil {
+			return reflect.Value{}, false, err
+		}
+		return copied.Elem(), true, nil
+
+	case reflect.Ptr:
+		// nil 指针保持原样，不自动实例化，避免改变调用方的 nil 语义
+		// 复用 setDefaultForPtrField：内部已包含 nil 判定、配置结构体判定、深度消耗与指针地址环检测
+		if err := setDefaultForPtrField(mapValue, depth, visited); err != nil {
+			return reflect.Value{}, false, err
+		}
+		return reflect.Value{}, false, nil
+
+	case reflect.Map:
+		// 内层 map 本身是引用类型，可直接修改其中的元素，无需拷贝写回
+		// depth+1 表示「进入下一层容器」，保证无指针环路（map -> interface -> map）能逐层消耗深度直至触发上限
+		if err := setDefaultForStructMap(mapValue, depth+1, visited); err != nil {
+			return reflect.Value{}, false, err
+		}
+		return reflect.Value{}, false, nil
+
+	case reflect.Slice:
+		// 映射的值类型为切片（如 map[string][]SubConfig）：切片本身是引用类型，可直接修改其元素
+		// depth+1 表示「进入下一层容器」，与 map 分支口径一致
+		if err := setDefaultForSliceField(mapValue, depth+1, visited); err != nil {
+			return reflect.Value{}, false, err
+		}
+		return reflect.Value{}, false, nil
+
+	case reflect.Interface:
+		if mapValue.IsNil() {
+			return reflect.Value{}, false, nil
+		}
+		// 接口只是包装层，本身不消耗深度；深度 +1 由解引用后的实际类型分支负责，
+		// 避免「interface -> map -> interface」这类链路上同一层被重复计数
+		return setDefaultForMapValue(mapValue.Elem(), depth, visited)
+
+	default:
+		return reflect.Value{}, false, nil
+	}
+}
+
+// configStructTypeCache 缓存 isConfigStructType 的判定结果
+// 说明：
+// - 类型在运行期不变，判定结果可永久缓存；map[string]Config 这类大映射逐个元素判定时，
+// 缓存可把「每个元素走一遍类型树」降为一次 map 查表
+// - 全局共享，使用 sync.Map 保证并发调用 CheckAndSetDefault 时的安全
+var configStructTypeCache sync.Map
+
+// timeType 预缓存 time.Time 的反射类型
+// 说明：setDefaultForStruct 需要按类型识别 time.Time 字段并单独填充其 default 标签，
+// 该判定在热路径上反复执行，预先取出可避免每字段一次 reflect.TypeOf 调用
+var timeType = reflect.TypeOf(time.Time{})
+
+// isConfigStructType 判断类型是否为需要递归补充默认值的配置结构体
+// 函数名：isConfigStructType
+// 参数：typ reflect.Type — 待判断的类型
+// 返回值：bool — 为配置结构体时返回true；基础类型、time.Time 及无 default 标签的第三方类型返回false
+// 异常：不触发panic
+// 使用说明：
+// - 判定标准不是「是不是 struct」，而是「递归范围内是否存在带 default 标签的可导出字段」，
+// 即 hasActionableField 的语义。只有这样的类型递归才有收益
+// - 该判定同时把 http.Request、http.Response 这类「含 map / interface 字段但无 default 标签」的
+// 第三方类型挡在门外，避免递归进入第三方对象、把其 nil map / nil slice 静默改写为空容器
+// - sync.Mutex、atomic.Value、url.URL 等无标签类型同样整体跳过，可避免「拷贝 → 写回」
+// 这类无意义且可能有隐患的操作（例如 map[string]sync.Mutex 不会被静默复制，
+// 反射路径绕过了 go vet 的 copylocks 检查）
+// - time.Time 是「值语义的时间类型」，需作为字段本身被填充（而非作为结构体向内递归），
+// 故此处返回 false，由 setDefaultForStruct 的特判分支单独处理
+// - 结果带类型级缓存，重复判定不会重复遍历类型树
+// 使用示例：
+//
+//	if isConfigStructType(field.Type().Elem()) {
+//	    // 对映射中的元素递归补充默认值
+//	}
+func isConfigStructType(typ reflect.Type) bool {
+	if typ == nil || typ.Kind() != reflect.Struct {
+		return false
+	}
+
+	// time.Time 不参与「结构体向内递归」，其 default 标签由 setDefaultForStruct 的特判分支处理
+	if typ == reflect.TypeOf(time.Time{}) {
+		return false
+	}
+
+	if cached, ok := configStructTypeCache.Load(typ); ok {
+		return cached.(bool)
+	}
+
+	result := hasActionableField(typ, 0, make(map[reflect.Type]struct{}))
+	configStructTypeCache.Store(typ, result)
+
+	return result
+}
+
+// hasActionableField 判断结构体类型在递归范围内是否存在带 default 标签的可导出字段
+// 函数名：hasActionableField
+// 参数：
+// - typ reflect.Type — 待判断的结构体类型
+// - depth int — 当前类型递归深度，超过 maxStructDefaultDepth 后不再深入
+// - visiting map[reflect.Type]struct{} — 当前类型递归路径上正在判定的类型，用于阻断类型层面的环
+// 返回值：bool — 存在带 default 标签的字段时返回true
+// 异常：不触发panic
+// 使用说明：
+// 判定标准收紧为「存在带 default 标签的可导出字段」：
+//   - 只有 default 标签才是「本工具会改写该字段」的可靠信号；
+//     切片/映射字段无标签时的「初始化为空容器」只作用于字段自身，
+//     不会因递归而获益，故不再作为判定依据
+//   - interface 字段同样不再作为判定依据：它虽可能在运行期装载配置结构体，
+//     但真实配置结构体的宿主必然带有 default 标签，判定自会通过；
+//     反之若宿主毫无标签，递归也无任何字段可填充，属行为中性
+//
+// 递归规则：struct 字段与「指向结构体的指针」字段继续向内判定；指针未指向结构体时不计入
+// 环保护：类型进入 visiting 后若再次被访问，视为不可作用（返回false）以阻断类型层面的环
+//
+// 收紧的收益：避免把 http.Request / http.Response 这类含 map / interface 字段的第三方类型
+// 误判为「配置结构体」，从而杜绝递归进入第三方对象、把其 nil map / nil slice
+// 静默改写为空容器的副作用（该副作用由 setDefaultValue 的空标签分支触发）
+//
+// 注意：判定收紧只影响「无 default 标签」的类型；顶层直接调用 CheckAndSetDefault 时不经过本判定，
+// 内部的 interface / map / ptr 字段递归能力不受影响
+//
+// 使用示例：
+//
+//	if hasActionableField(reflect.TypeOf(SubConfig{}), 0, make(map[reflect.Type]struct{})) {
+//	    // 该类型值得递归
+//	}
+func hasActionableField(typ reflect.Type, depth int, visiting map[reflect.Type]struct{}) bool {
+	if typ == nil || typ.Kind() != reflect.Struct {
+		return false
+	}
+
+	if depth >= maxStructDefaultDepth {
+		return false
+	}
+
+	if _, exists := visiting[typ]; exists {
+		return false
+	}
+	visiting[typ] = struct{}{}
+	defer delete(visiting, typ)
+
+	for idx := 0; idx < typ.NumField(); idx++ {
+		field := typ.Field(idx)
+
+		// 非导出字段不会被本工具改写，直接跳过
+		if field.PkgPath != "" {
+			continue
+		}
+
+		// 带 default 标签的字段一定会被作用（含空标签：切片/映射会被初始化为空容器）
+		if _, hasTag := field.Tag.Lookup("default"); hasTag {
+			return true
+		}
+
+		switch field.Type.Kind() {
+		case reflect.Struct:
+			if hasActionableField(field.Type, depth+1, visiting) {
+				return true
+			}
+
+		case reflect.Ptr:
+			elem := field.Type.Elem()
+			if elem.Kind() == reflect.Struct && hasActionableField(elem, depth+1, visiting) {
+				return true
+			}
+
+		case reflect.Slice:
+			// 切片元素可能是配置结构体（如 []SubConfig）：元素需要被递归补充时，
+			// 宿主类型也应被判为配置结构体，否则整段切片能力会被上层的类型判定挡掉
+			elem := field.Type.Elem()
+			if sliceElemMayBeConfigStruct(elem) && hasActionableFieldInType(elem, depth+1, visiting) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// hasActionableFieldInType 判断「非结构体类型」内部是否存在可作用的默认值字段
+// 函数名：hasActionableFieldInType
+// 参数：
+// - typ reflect.Type — 待判断的类型，可能是结构体、结构体指针、切片、映射或基础类型
+// - depth int — 当前类型递归深度，超过 maxStructDefaultDepth 后不再深入
+// - visiting map[reflect.Type]struct{} — 当前类型递归路径上正在判定的类型，用于阻断类型层面的环
+// 返回值：bool — 内部存在带 default 标签的字段时返回true
+// 异常：不触发panic
+// 使用说明：
+// - 本函数是 hasActionableField 的「容器类型」补充入口：hasActionableField 只接受结构体，
+// 切片 / 映射 / 结构体指针需要先剥掉容器包装才能继续向内判定
+// - 逐层剥壳后交给 hasActionableField，由其在结构体层面做实际判定并维护 visiting 环保护
+// - 基础类型、nil 类型返回 false
+//
+// 使用示例：
+//
+//	if hasActionableFieldInType(reflect.TypeOf([]SubConfig{}).Elem(), 0, make(map[reflect.Type]struct{})) {
+//	    // 切片元素值得递归
+//	}
+func hasActionableFieldInType(typ reflect.Type, depth int, visiting map[reflect.Type]struct{}) bool {
+	if typ == nil || depth >= maxStructDefaultDepth {
+		return false
+	}
+
+	switch typ.Kind() {
+	case reflect.Struct:
+		return hasActionableField(typ, depth, visiting)
+	case reflect.Ptr, reflect.Slice, reflect.Array, reflect.Map:
+		return hasActionableFieldInType(typ.Elem(), depth+1, visiting)
+	default:
+		return false
+	}
+}
+
+// setDefaultForSliceField 为切片字段逐元素递归补充默认值
+// 函数名：setDefaultForSliceField
+// 参数：
+// - field reflect.Value — 可设置的切片字段值，或 map 元素 / interface 解引用后的切片值
+// - depth int — 当前递归深度（语义为容器嵌套层数）
+// - visited map[uintptr]struct{} — 当前递归路径上已访问的指针地址集合
+// 返回值：error — 递归补充默认值过程中返回的错误
+// 异常：不触发panic；nil切片、空切片或元素类型无收益时直接返回nil
+// 使用说明：
+// - 切片元素的处理障碍与 map 值一致：反射中「切片元素」不可寻址，
+// 值类型结构体元素需「拷贝到新实例 → 递归补充 → Set 写回该下标」才能生效；
+// 指针元素因指向内存可直接修改，就地递归即可（详见 setDefaultForSliceElement）
+// - 深度上限校验必须保留在本入口：存在「切片通过 interface 装下自身」这类不含指针的环，
+// 该环路径为 slice → interface → slice，完全不经过 setDefaultForStruct，
+// 若此处不设限将无法收敛；校验条件与 setDefaultForStruct 保持一致
+// - sliceElemMayBeConfigStruct 快速跳过无收益的元素类型（基础类型、无标签第三方类型），
+// 避免对每个元素做一次无效分派
+// - 注意：本层切片的元素按 depth 处理，元素自身是容器（struct / 指针 / 内层 map / 内层切片）时才 +1
+//
+// 使用示例：
+//
+//	if err := setDefaultForSliceField(field, depth, visited); err != nil {
+//	    return err
+//	}
+func setDefaultForSliceField(field reflect.Value, depth int, visited map[uintptr]struct{}) error {
+	// 深度上限兜底：切片 ↔ interface 构成的环不经过 setDefaultForStruct，必须在此拦截
+	if depth >= maxStructDefaultDepth {
+		return nil
+	}
+
+	if field.Kind() != reflect.Slice || field.Len() == 0 {
+		return nil
+	}
+
+	if !sliceElemMayBeConfigStruct(field.Type().Elem()) {
+		return nil
+	}
+
+	for idx := 0; idx < field.Len(); idx++ {
+		newValue, changed, err := setDefaultForSliceElement(field.Index(idx), depth, visited)
+		if err != nil {
+			return err
+		}
+		// 指针类型元素已就地修改，无需写回
+		if !changed || !newValue.IsValid() {
+			continue
+		}
+		if !newValue.Type().AssignableTo(field.Type().Elem()) {
+			continue
+		}
+		// 切片元素可寻址，直接 Set 写回即可（区别于 map 的 SetMapIndex）
+		field.Index(idx).Set(newValue)
+	}
+
+	return nil
+}
+
+// setDefaultForSliceElement 为切片中的单个元素递归补充默认值
+// 函数名：setDefaultForSliceElement
+// 参数：
+// - elemValue reflect.Value — 切片中的元素值（切片元素可寻址，但值类型结构体仍需拷贝路径处理）
+// - depth int — 当前递归深度（语义为容器嵌套层数）
+// - visited map[uintptr]struct{} — 当前递归路径上已访问的指针地址集合
+// 返回值：
+// - reflect.Value — 补充默认值后的元素值；需要调用方写回时有效
+// - bool — 是否需要调用方执行写回；结构体拷贝返回true，指针已就地修改返回false
+// - error — 递归过程中返回的错误
+// 异常：不触发panic；nil指针、非配置结构体元素均被跳过
+// 使用说明：
+// - 深度口径与 setDefaultForMapValue 保持完全一致，保证「同一元素类型在不同容器下边界相同」：
+// 值结构体元素按 depth+1 处理（等价于 struct 字段），指针元素交给 setDefaultForPtrField(depth)
+// 由其内部统一 +1（等价于 ptr 字段），内层 map / 内层切片按 depth+1 处理
+// - interface 只是包装层，不消耗深度，直接按原 depth 解引用后继续分派
+// - 与 map 元素的差异：切片元素可寻址，值结构体元素理论上可直接递归，
+// 但仍走「拷贝 → 递归 → 写回」的同一路径，以与 map 保持单一实现、语义完全对齐
+//
+// 使用示例：
+//
+//	newValue, changed, err := setDefaultForSliceElement(field.Index(i), depth, visited)
+//	if changed && err == nil {
+//	    field.Index(i).Set(newValue)
+//	}
+func setDefaultForSliceElement(elemValue reflect.Value, depth int, visited map[uintptr]struct{}) (reflect.Value, bool, error) {
+	switch elemValue.Kind() {
+	case reflect.Struct:
+		if !isConfigStructType(elemValue.Type()) {
+			return reflect.Value{}, false, nil
+		}
+		// 统一走拷贝路径，与 map 元素保持单一实现
+		copied := reflect.New(elemValue.Type())
+		copied.Elem().Set(elemValue)
+		if err := setDefaultForStruct(copied.Elem(), depth+1, visited); err != nil {
+			return reflect.Value{}, false, err
+		}
+		return copied.Elem(), true, nil
+
+	case reflect.Ptr:
+		// nil 指针保持原样，不自动实例化，避免改变调用方的 nil 语义（与 map 值指针一致）
+		if err := setDefaultForPtrField(elemValue, depth, visited); err != nil {
+			return reflect.Value{}, false, err
+		}
+		return reflect.Value{}, false, nil
+
+	case reflect.Map:
+		// 映射是引用类型，可直接修改其中的元素，无需写回
+		if err := setDefaultForStructMap(elemValue, depth+1, visited); err != nil {
+			return reflect.Value{}, false, err
+		}
+		return reflect.Value{}, false, nil
+
+	case reflect.Slice:
+		// 嵌套切片（如 [][]SubConfig）：向内一层继续分派，由 setDefaultForSliceField 自行消耗深度
+		if err := setDefaultForSliceField(elemValue, depth+1, visited); err != nil {
+			return reflect.Value{}, false, err
+		}
+		return reflect.Value{}, false, nil
+
+	case reflect.Interface:
+		if elemValue.IsNil() {
+			return reflect.Value{}, false, nil
+		}
+		// 接口只是包装层，本身不消耗深度；深度 +1 由解引用后的实际类型分支负责
+		return setDefaultForSliceElement(elemValue.Elem(), depth, visited)
+
+	default:
+		return reflect.Value{}, false, nil
+	}
+}
+
+// sliceElemMayBeConfigStruct 判断切片的元素类型是否可能是配置结构体
+// 函数名：sliceElemMayBeConfigStruct
+// 参数：typ reflect.Type — 切片的元素类型，可能为结构体、结构体指针、interface{}、基础类型等
+// 返回值：bool — 可能包含配置结构体时返回true；确定不可能时返回false，用于快速跳过无收益切片
+// 异常：不触发panic
+// 使用说明：
+// - 结构体与其指针按 isConfigStructType 判定，未命中判定的第三方类型（sync.Mutex、atomic.Value 等）直接跳过，
+// 避免对 []sync.Mutex 这类切片做无收益的「拷贝 → 递归 → 写回」
+// - interface{} 静态无法判定，返回true，交由运行时的 setDefaultForSliceElement 按实际类型再次判定
+// - 嵌套切片（[][]T）与嵌套映射（[]map[string]T）继续向内判定
+// - 语义与 mapValueMayBeConfigStruct 对称，保证切片与映射的递归范围一致
+//
+// 使用示例：
+//
+//	if !sliceElemMayBeConfigStruct(field.Type().Elem()) {
+//	    return nil
+//	}
+func sliceElemMayBeConfigStruct(typ reflect.Type) bool {
+	if typ == nil {
+		return false
+	}
+
+	switch typ.Kind() {
+	case reflect.Struct:
+		return isConfigStructType(typ)
+	case reflect.Ptr:
+		return isConfigStructType(typ.Elem())
+	case reflect.Interface:
+		// 接口的静态类型无法确定是否为结构体，需交由运行时判定
+		return true
+	case reflect.Map:
+		// 元素为映射时继续向内判定（如 []map[string]SubConfig）
+		return mapValueMayBeConfigStruct(typ)
+	case reflect.Slice:
+		// 元素为嵌套切片时继续向内判定（如 [][]SubConfig）
+		return sliceElemMayBeConfigStruct(typ.Elem())
+	default:
+		return false
+	}
+}
+
+// mapValueMayBeConfigStruct 判断映射的值类型是否可能是配置结构体
+// 函数名：mapValueMayBeConfigStruct
+// 参数：typ reflect.Type — 映射的值类型，可能为结构体、结构体指针、interface{}或基础类型
+// 返回值：bool — 可能是配置结构体时返回true；确定不是时返回false，用于快速跳过无需处理的映射
+// 异常：不触发panic
+// 使用说明：
+// - 结构体与其指针按 isConfigStructType 判定，未命中判定的第三方类型（sync.Mutex、atomic.Value 等）直接跳过
+// - interface{} 静态无法判定，返回true，交由运行时的 setDefaultForMapValue 按实际类型再次判定
+// - 嵌套映射与切片值类型继续向内判定（如 map[string]map[string]Config、map[string][]Config）
+// 使用示例：
+//
+//	if !mapValueMayBeConfigStruct(field.Type().Elem()) {
+//	    return nil
+//	}
+func mapValueMayBeConfigStruct(typ reflect.Type) bool {
+	if typ == nil {
+		return false
+	}
+
+	switch typ.Kind() {
+	case reflect.Struct:
+		return isConfigStructType(typ)
+	case reflect.Ptr:
+		return isConfigStructType(typ.Elem())
+	case reflect.Interface:
+		// 接口的静态类型无法确定是否为结构体，需交由运行时判定
+		return true
+	case reflect.Map:
+		// 多层 map（如 map[string]map[string]Config）继续向内判定
+		return mapValueMayBeConfigStruct(typ.Elem())
+	case reflect.Slice:
+		// 映射的值为切片（如 map[string][]Config）时，需按切片元素继续向内判定，
+		// 否则该类型会在元素判定阶段被整段跳过，切片递归能力无法到达
+		return sliceElemMayBeConfigStruct(typ.Elem())
+	default:
+		return false
+	}
 }
 
 // CheckAndSetDefaultWithPreserveTag 按 `default` 标签设置默认值，同时保留带有 `preserve:"true"` 标签字段的原始值
