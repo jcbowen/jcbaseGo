@@ -92,6 +92,27 @@ func main() {
 }
 ```
 
+### URL / 域名转换示例
+
+```go
+config := &jcbaseGo.AttachmentStruct{
+    StorageType: "local",
+    LocalDir:    "uploads",
+    VisitDomain: "https://cdn.example.com/",
+    LocalVisitDomain: "https://localhost:8080/",
+}
+
+att := attachment.New(c, config)
+fullURL := att.ToMedia("avatar.png")
+source := att.ToSource(fullURL)
+querySource := att.ToSource(fullURL+"?v=123", false)
+// fullURL => https://cdn.example.com/uploads/avatar.png
+// source  => uploads/avatar.png
+// querySource => uploads/avatar.png?v=123
+```
+
+`ToMedia` 负责补全访问域名，`ToSource` / `RemoveDomain` 负责去除访问域名并返回相对路径。默认会自动移除 URL 中的查询参数（如 `?v=123`），如需保留则调用 `att.ToSource(url, false)`，便于在服务端存储、展示和转发时保持统一的路径格式。
+
 ### Base64 图片上传示例
 
 ```go

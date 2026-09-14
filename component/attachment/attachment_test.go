@@ -253,3 +253,27 @@ func TestAttachment_GetPresignURL_RebuildOnConfigChange(t *testing.T) {
 		t.Errorf("GetPresignURL() url should use the new bucket, url = %s", url)
 	}
 }
+
+// TestAttachment_RemoveDomain 验证可从附件 URL 中去除访问域名并得到相对路径。
+func TestAttachment_RemoveDomain(t *testing.T) {
+	att := &Attachment{
+		BaseConfig: &jcbaseGo.AttachmentStruct{
+			VisitDomain:      "https://cdn.example.com/",
+			LocalVisitDomain: "https://localhost:8080/",
+			StorageType:      "local",
+			LocalDir:         "uploads",
+		},
+	}
+
+	if got := att.ToSource("https://localhost:8080/uploads/logo.png"); got != "uploads/logo.png" {
+		t.Fatalf("ToSource() = %q, want %q", got, "uploads/logo.png")
+	}
+
+	if got := att.ToSource("https://localhost:8080/uploads/logo.png?v=123"); got != "uploads/logo.png" {
+		t.Fatalf("ToSource() = %q, want %q", got, "uploads/logo.png")
+	}
+
+	if got := att.ToSource("https://localhost:8080/uploads/logo.png?v=123", false); got != "uploads/logo.png?v=123" {
+		t.Fatalf("ToSource() = %q, want %q", got, "uploads/logo.png?v=123")
+	}
+}
