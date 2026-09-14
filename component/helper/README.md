@@ -994,6 +994,136 @@ func main() {
 - Gigabit: `Gb`, `Gbit`, `gigabit`, `gigabits`
 - Gigabyte: `Gbyte`, `gigabyte`, `gigabytes`
 
+## 结构体默认值填充（CheckAndSetDefault）
+
+`CheckAndSetDefault` 依据结构体字段上的 `default` 标签为零值字段填充默认值，适用于配置初始化的场景。
+
+```go
+type SubConfig struct {
+    Host    string        `json:"host" default:"127.0.0.1"`
+    Port    int           `json:"port" default:"3306"`
+    Timeout time.Duration `json:"timeout" default:"500ms"`
+}
+
+type AppConfig struct {
+    Name     string                   `json:"name" default:"myapp"`
+    Enabled  bool                     `json:"enabled" default:"true"`
+    Port     int                      `json:"port" default:"8080"`
+    Timeout  time.Duration            `json:"timeout" default:"300ms"`
+    StartAt  time.Time                `json:"start_at" default:"2024-01-01 00:00:00"`
+    // map 值为结构体时，每个元素都会被递归补充默认值
+    Clusters map[string]SubConfig     `json:"clusters"`
+    Shards   map[string]*SubConfig    `json:"shards"`
+    Inner    *SubConfig               `json:"inner"`
+    // 切片元素为结构体时，每个元素都会被递归补充默认值
+    Nodes    []SubConfig              `json:"nodes"`
+    NodePtrs []*SubConfig             `json:"node_ptrs"`
+    Any      interface{}              `json:"any"`
+}
+
+cfg := &AppConfig{Clusters: map[string]SubConfig{"main": {}}, Inner: &SubConfig{}, Nodes: []SubConfig{{}}}
+_ = helper.CheckAndSetDefault(cfg)
+// cfg.Clusters["main"] => SubConfig{Host: "127.0.0.1", Port: 3306, Timeout: 500ms}
+// cfg.Inner           => &SubConfig{Host: "127.0.0.1", Port: 3306, Timeout: 500ms}
+// cfg.Nodes[0]        => SubConfig{Host: "127.0.0.1", Port: 3306, Timeout: 500ms}
+// cfg.StartAt         => 2024-01-01 00:00:00
+```
+
+支持的递归场景：
+
+| 字段类型 | 处理方式 |
+| --- | --- |
+| 结构体字段 | 命中「配置结构体」判定（含 `default` 标签）时递归调用，字段内的默认值一并补充；未命中判定的类型（`http.Request`、`sync.Mutex`、`atomic.Value`、`url.URL` 等）整体跳过 |
+| 结构体指针字段 `*SubConfig` | 非 nil 时递归补充；**nil 指针保持原样，不自动实例化** |
+| `interface{}` 字段 | 解引用装载的实际值后分派：结构体、结构体指针、map、切片均递归补充；nil interface 不处理 |
+| `time.Time` 字段 | 按 `default` 标签填充（支持多种时间字符串与时间戳）；仅零值时填充，解析失败静默跳过 |
+| `map[string]SubConfig` | 元素拷贝到新实例后递归补充，再写回 map |
+| `map[string]*SubConfig` | 非 nil 指针就地递归补充；nil 指针保持原样 |
+| `map[string]interface{}` | 运行期为结构体或结构体指针时同样递归补充 |
+| `map[string]map[string]SubConfig` | 逐层向内递归补充 |
+| `map[string][]SubConfig` | 逐层向内递归补充（map → 切片 → 元素） |
+| `[]SubConfig` | 元素拷贝到新实例后递归补充，再 `Set` 写回该下标 |
+| `[]*SubConfig` | 非 nil 指针就地递归补充；**nil 指针保持原样，不自动实例化** |
+| `[]interface{}` | 逐元素解引用后按实际类型分派（结构体 / 结构体指针 / 映射 / 切片） |
+| `[][]SubConfig` | 嵌套切片逐层向内递归补充 |
+| `map[string]string` / `map[string]int` 等基础值 | 保持原逻辑，仅按 `default` 标签整体填充 |
+| `[]string` / `[]int` 等基础元素切片 | 保持原逻辑，不逐元素改写（仅空切片按 `default` 标签整体填充） |
+| `map[string]time.Time` / `[]time.Time` / `map[string]sync.Mutex` / `[]sync.Mutex` 等 | 跳过，不递归、不做拷贝写回 |
+| `*int` 等基础类型指针 | 跳过，不处理 |
+| `*time.Time` | 跳过，不处理（需在 `time.Time` 字段上使用标签） |
+
+### 配置结构体判定
+
+递归只发生在「配置结构体」上，判定标准是 **在递归深度内存在至少一个带 `default` 标签的可导出字段**。
+
+判定条件只看 `default` 标签，**不**把「有无切片 / 映射 / interface 字段」作为依据：
+
+- 切片 / 映射字段无标签时的「初始化为空容器」只作用于字段自身，递归不会带来额外收益
+- `interface` 字段虽然运行期可能装载配置结构体，但真实配置结构体的宿主必然带有 `default` 标签，判定自会通过；若宿主毫无标签，递归也无任何字段可填充，属行为中性
+
+> **切片的例外**：切片元素自身携带 `default` 标签时（如 `[]SubConfig`），宿主结构体即使不带任何标签也会被判为配置结构体 —— 否则整段切片递归能力会在进入递归前就被类型判定挡掉。判定沿切片 / 映射 / 指针逐层剥壳后，再在结构体层面按 `default` 标签判定。
+
+内层结构体、切片元素、「指向结构体的指针」字段会继续向内判定。判定结果按类型缓存，且带有环保护（类型互相引用不会栈溢出）。
+
+这条判定让以下类型整体跳过：
+
+- `sync.Mutex`、`atomic.Value`、`url.URL`、配合 `net.IP` 的包装结构体等**无标签**类型。对它们递归不可能改到任何内容，跳过可避免 `map` 值元素被无意义地「拷贝 → 递归 → 写回」（例如 `map[string]sync.Mutex` 不会再被静默复制 —— 反射路径绕过了 `go vet` 的 copylocks 检查）
+- **`http.Request`、`http.Response` 这类含切片 / 映射 / `interface` 字段但无 `default` 标签的第三方类型**。这是收紧判定的主要收益：避免递归进入第三方对象，把其 `nil` map / `nil` slice 静默改写为空容器
+
+> **注意**：判定不影响「顶层直接调用」。`CheckAndSetDefault(&cfg{})` 对传入的结构体本体直接逐字段处理，不经过本判定；`cfg` 内部的 `interface` / `map` / 指针字段递归能力也不受影响 —— 只要能进入递归，这些字段都会照常分派处理。
+
+### time.Time 字段的默认值
+
+`time.Time` 字段支持 `default` 标签，仅在字段为零值（`IsZero()`）时填充：
+
+```go
+type Cfg struct {
+    StartAt time.Time `json:"start_at" default:"2024-01-01 00:00:00"`
+    DateOnly time.Time `json:"date_only" default:"2024-06-15"`
+    ByStamp  time.Time `json:"by_stamp" default:"1704067200"`
+}
+```
+
+支持的格式由 `Convert.ToTime` 提供，包括 RFC3339 / RFC1123 等标准格式、`2006-01-02 15:04:05`、`2006-01-02`、斜杠与中文分隔格式，以及秒 / 毫秒 / 纳秒时间戳字符串。
+
+**解析失败时静默跳过**，不报错、不修改字段（与整型 / 浮点 / `time.Duration` 的容错风格一致）。
+
+### 行为变更提示（升级需回归）
+
+相比旧实现，以下字段从「完全不处理」变为「会被填充并在必要时就地改写」，升级时需要回归确认：
+
+1. **非 nil 的结构体指针字段**：旧实现不处理任何 `*Struct` 字段，现在会递归补充其内部默认值
+2. **`interface{}` 字段**：旧实现对该字段实际是空操作，现在会解引用后按实际类型递归补充
+3. **非空 map 的元素**：旧实现只处理 `len == 0` 的 map，现在会对非空 map 的元素递归补充并就地写回
+4. **`time.Time` 字段**：旧实现会静默忽略其 `default` 标签，现在会按标签填充
+5. **切片的元素**：旧的约定是「切片不在递归范围内」，`[]SubConfig`、`[]*SubConfig`、`interface{}` 承载的切片都需要调用方自行遍历；现在这些切片的元素会被递归补充默认值，无需再手动遍历
+
+第 3、5 条尤其注意：**写回是就地的**。map 的元素写回、切片元素的 `Set` 写回都会作用在原容器上，若同一个 map / 切片在别处被共享，其他持有者也会看到变化。
+
+同时，判定条件收紧带来以下**行为收窄**（仅影响无 `default` 标签的场景）：
+
+| 场景 | 变更前 | 变更后 |
+| --- | --- | --- |
+| 无标签的中间结构体内的 `nil` map / `nil` slice | 被初始化为空容器 | 保持 `nil` |
+| 无标签的中间结构体内的 map / 切片元素 | 被递归补充默认值 | 不递归 |
+| `http.Request` 等第三方类型字段 | 被判为配置结构体并递归，`nil` map 被改写 | 整体跳过 |
+
+如需上述能力，请给中间结构体加上 `default` 标签（例如 `default:""` 可让空 map / 空切片被初始化）。
+
+注意事项：
+
+1. 已有非零值的元素字段不会被覆盖，仅补充其中的零值字段
+2. map 值类型在反射中不可寻址，结构体元素通过「拷贝 → 补充 → 写回」完成，因此传递的 map 本身会被修改；切片元素可寻址，但为与 map 保持单一实现，值结构体元素同样走「拷贝 → 补充 → `Set` 写回」
+3. **nil 指针不会被自动实例化**。nil 表达「字段不存在 / 未启用 / 未配置」，自动创建会把「不存在」变成「存在且带默认值」，改变调用方语义（影响配置合并与 JSON 输出中的 `null` / `{}` 区别）。若需要指针也带上默认值，请先显式初始化：`cfg.Inner = &SubConfig{}`、`cfg.Ptrs = []*SubConfig{{}}`。该约定对结构体指针字段、map 值为 nil 指针、切片元素为 nil 指针三者一致
+4. 递归环路通过三重保护收敛，不会栈溢出：
+   - struct / interface / ptr / slice 元素递归时传递统一的 `depth` 与 `visited`，避免每经过一层值类型结构体就把计数器重置
+   - 含指针的环（如 `map[string]*Node`、`[]*Node` 指回自身）由指针地址路径集合 `visited` 收敛（进入登记、返回注销，不会把 DAG 的重复引用误判成环）
+   - 不含指针的环（如 `map[string]interface{}` 或 `[]interface{}` 通过 interface 装下自身）由递归深度上限 `maxStructDefaultDepth` 兜底
+5. `maxStructDefaultDepth` 的深度语义为「容器嵌套层数」：每深入一层 struct / map 元素 / 切片元素 / 指针指向的 struct 都会 +1；`interface` 仅作拆包不消耗深度，字段自身的 map / 切片容器也不消耗（其元素才计入）。上限取 32，超出后静默停止深入（不报错、不 panic）。**不要依赖「恰好多少层可用」这种由实现倒推得出的具体数字**，正常配置的嵌套深度远小于该值
+6. 切片元素在递归范围内，`[]SubConfig`、`[]*SubConfig`、`[][]SubConfig`、`map[string][]SubConfig` 以及 `interface{}` 承载的切片都会被自动补充默认值，无需再手动遍历。仍需注意：
+   - 元素为**基础类型**的切片（`[]string`、`[]int`、`[]time.Time` 等）不会被逐元素改写，仅空切片按 `default` 标签整体填充（注：需该字段所在的宿主结构体已进入递归）
+   - 元素为**无 `default` 标签的第三方类型**（如 `[]sync.Mutex`）会被整段跳过，不做「拷贝 → 写回」
+
 ## 高级用法
 
 ### 组合使用示例
