@@ -313,6 +313,11 @@ func (opt *Option) loadConfig() error {
 		if err := opt.readConfigFile(fileNameFull); err != nil {
 			return err
 		}
+		// 读取配置文件后再次补充默认值：配置文件中显式写出的空字符串 / 零值会被反序列化覆盖，
+		// 对于“未配置即使用默认值”的场景需要重新填充，避免用户手动把字段留空时丢失默认值
+		if err := opt.initializeConfigWithDefaults(); err != nil {
+			return err
+		}
 		// 执行配置替换规则
 		opt.applyConfigReplaceRules()
 		// 配置结构体是有可能更新升级的，所以每次运行之后，应当更新一下配置文件
@@ -361,6 +366,10 @@ func (opt *Option) loadConfig() error {
 			if err = json.Unmarshal(pureJSON, opt.ConfigData); err != nil {
 				return fmt.Errorf("JSON解析错误: %v\n原始数据: %s", err, pureJSON)
 			}
+		}
+		// 命令行JSON配置同样需要在反序列化后补充默认值
+		if err := opt.initializeConfigWithDefaults(); err != nil {
+			return err
 		}
 		// 执行配置替换规则
 		opt.applyConfigReplaceRules()
