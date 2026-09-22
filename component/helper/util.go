@@ -1652,8 +1652,12 @@ func hasActionableField(typ reflect.Type, depth int, visiting map[reflect.Type]s
 		case reflect.Slice:
 			// 切片元素可能是配置结构体（如 []SubConfig）：元素需要被递归补充时，
 			// 宿主类型也应被判为配置结构体，否则整段切片能力会被上层的类型判定挡掉
-			elem := field.Type.Elem()
-			if sliceElemMayBeConfigStruct(elem) && hasActionableFieldInType(elem, depth+1, visiting) {
+			//
+			// [环安全] 严禁在此分支经 sliceElemMayBeConfigStruct → isConfigStructType 判定：
+			// isConfigStructType 是带缓存的独立入口，会新建 visiting 并把 depth 归零，
+			// 自引用类型（T → []*T）会经该边界无限互递归直至栈溢出（进程级崩溃，无法 recover）。
+			// hasActionableFieldInType 自身支持容器逐层剥壳并贯通 visiting / depth，直接调用即可。
+			if hasActionableFieldInType(field.Type.Elem(), depth+1, visiting) {
 				return true
 			}
 		}
