@@ -101,7 +101,7 @@ var Types = map[string]*typeInfo{
 	},
 	"zip": {
 		TypeName: "压缩文件",
-		AllowExt: []string{".zip", ".rar"},
+		AllowExt: []string{".zip", ".rar", ".apk", ".7z", ".wgt"},
 		MaxSize:  500 * 1024 * 1024, // 500MB
 	},
 }
