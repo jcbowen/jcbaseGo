@@ -73,20 +73,23 @@ type typeInfo struct {
 }
 
 // Types 附件类型
+// 注意：扩展名白名单需与 PHP 主体服务（jcbase-yii2，业务层经
+// Yii::$app->params['upload']['{type}']['extensions'] 配置覆盖）保持对齐，
+// 单侧新增格式可能导致跨系统附件通道读不通。
 var Types = map[string]*typeInfo{
 	"image": {
 		TypeName: "图片",
-		AllowExt: []string{".gif", ".jpg", ".jpeg", ".bmp", ".png", ".ico"},
+		AllowExt: []string{".gif", ".jpg", ".jpeg", ".bmp", ".png", ".ico", ".webp", ".heic"},
 		MaxSize:  5 * 1024 * 1024, // 5MB
 	},
 	"voice": {
 		TypeName: "音频",
-		AllowExt: []string{".mp3", ".wma", ".wav", ".amr"},
+		AllowExt: []string{".mp3", ".wma", ".wav", ".amr", ".m4a", ".aac", ".ogg", ".flac"},
 		MaxSize:  50 * 1024 * 1024, // 50MB
 	},
 	"video": {
 		TypeName: "视频",
-		AllowExt: []string{".rm", ".rmvb", ".wmv", ".avi", ".mpg", ".mpeg", ".mp4"},
+		AllowExt: []string{".rm", ".rmvb", ".wmv", ".avi", ".mpg", ".mpeg", ".mp4", ".mov", ".mkv", ".flv", ".webm", ".3gp", ".m4v"},
 		MaxSize:  300 * 1024 * 1024, // 300MB
 	},
 	"office": {
@@ -101,7 +104,7 @@ var Types = map[string]*typeInfo{
 	},
 	"zip": {
 		TypeName: "压缩文件",
-		AllowExt: []string{".zip", ".rar", ".apk", ".7z", ".wgt"},
+		AllowExt: []string{".zip", ".rar", ".apk", ".7z", ".wgt", ".tar", ".gz", ".bz2"},
 		MaxSize:  500 * 1024 * 1024, // 500MB
 	},
 }
