@@ -261,6 +261,9 @@ func (c *Controller) indexHandler(ctx *gin.Context) {
 	// 计算每个日志条目的存储大小
 	c.calculateEntriesStorageSize(entries)
 
+	// 回填派生严重度字段（兼容历史数据）
+	c.backfillEntriesSeverity(entries)
+
 	// 获取调试器配置，用于判断是否启用主进程日志
 	config := c.debugger.GetConfig()
 
@@ -304,6 +307,9 @@ func (c *Controller) detailHandler(ctx *gin.Context) {
 	// 计算日志条目的存储大小
 	entry.StorageSize = entry.CalculateStorageSize()
 
+	// 回填派生严重度字段（兼容历史数据）
+	entry.UpdateSeverity()
+
 	// 渲染详情页面
 	c.renderTemplate(ctx, "detail.html", gin.H{
 		"Title":    "日志详情 - " + entry.ID,
@@ -325,6 +331,9 @@ func (c *Controller) logsAPIHandler(ctx *gin.Context) {
 		})
 		return
 	}
+
+	// 回填派生严重度字段（兼容历史数据）
+	c.backfillEntriesSeverity(entries)
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"data": entries,
@@ -364,6 +373,9 @@ func (c *Controller) logDetailAPIHandler(ctx *gin.Context) {
 		return
 	}
 
+	// 回填派生严重度字段（兼容历史数据）
+	entry.UpdateSeverity()
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"data": entry,
 	})
@@ -392,6 +404,9 @@ func (c *Controller) searchAPIHandler(ctx *gin.Context) {
 		})
 		return
 	}
+
+	// 回填派生严重度字段（兼容历史数据）
+	c.backfillEntriesSeverity(entries)
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"data": entries,
@@ -677,6 +692,7 @@ func (c *Controller) cleanupAPIHandler(ctx *gin.Context) {
 //   - process_name: 进程名称
 //   - process_id: 进程ID
 //   - process_status: 进程状态（running/completed/failed/error）
+//   - has_error: 是否含错误（true/false，含error级日志/error字段非空/状态码>=500）
 //   - start_time: 开始时间（ISO格式）
 //   - end_time: 结束时间（ISO格式）
 //   - url: URL路径（支持模糊匹配）
@@ -754,6 +770,11 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 	// 流式状态过滤
 	if streamingStatus := ctx.Query("streaming_status"); streamingStatus != "" {
 		filters["streaming_status"] = streamingStatus
+	}
+
+	// 含错误过滤（转换为布尔值，存储层按bool匹配派生严重度）
+	if hasError := ctx.Query("has_error"); hasError != "" {
+		filters["has_error"] = strings.ToLower(hasError) == "true"
 	}
 
 	return filters
@@ -1015,5 +1036,14 @@ func (c *Controller) GetDebugger() *Debugger {
 func (c *Controller) calculateEntriesStorageSize(entries []*LogEntry) {
 	for _, entry := range entries {
 		entry.StorageSize = entry.CalculateStorageSize()
+	}
+}
+
+// backfillEntriesSeverity 回填日志条目列表的派生严重度字段
+// 历史数据保存时未统计严重度字段，读取时统一重算，
+// 保证列表徽标、行高亮对新旧数据均生效（重算结果与写入时统计一致，操作幂等）
+func (c *Controller) backfillEntriesSeverity(entries []*LogEntry) {
+	for _, entry := range entries {
+		entry.UpdateSeverity()
 	}
 }

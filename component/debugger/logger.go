@@ -386,6 +386,11 @@ type LogEntry struct {
 	// Logger日志信息（新增）
 	LoggerLogs []LoggerLog `json:"logger_logs,omitempty"` // 通过logger记录的日志
 
+	// 派生严重度（由 UpdateSeverity 统计，用于列表直观展示与过滤）
+	HasError   bool `json:"has_error,omitempty"`   // 是否存在错误：含error级日志、HTTP状态码>=500或Error字段非空
+	ErrorCount int  `json:"error_count,omitempty"` // LoggerLogs中error级别日志数量
+	WarnCount  int  `json:"warn_count,omitempty"`  // LoggerLogs中warn级别日志数量
+
 	// 流式响应元数据（新增）
 	IsStreamingResponse bool   `json:"is_streaming_response,omitempty"` // 是否为流式响应
 	StreamingChunks     int    `json:"streaming_chunks,omitempty"`      // 流式响应分块数量
@@ -406,6 +411,67 @@ func (e *LogEntry) JSONString() string {
 // Summary 返回日志条目的摘要信息
 func (e *LogEntry) Summary() string {
 	return fmt.Sprintf("%s %s %d %s", e.Method, e.URL, e.StatusCode, e.Duration)
+}
+
+// UpdateSeverity 统计并更新日志条目的派生严重度字段
+// 扫描LoggerLogs统计error/warn级别数量，并结合HTTP状态码与Error字段判定HasError
+// 应在条目保存前调用；对历史数据也可在读取时调用补全
+//
+// 参数: 无
+//
+// 返回值: 无
+//
+// 判定规则:
+//
+//	ErrorCount: LoggerLogs中Level为error的日志数量
+//	WarnCount:  LoggerLogs中Level为warn的日志数量
+//	HasError:   ErrorCount>0 或 Error字段非空 或 HTTP记录StatusCode>=500
+//
+// 示例:
+//
+//	entry.LoggerLogs = logger.GetLogs()
+//	entry.UpdateSeverity()
+func (e *LogEntry) UpdateSeverity() {
+	errorCount := 0
+	warnCount := 0
+	for _, log := range e.LoggerLogs {
+		switch log.Level {
+		case LevelError:
+			errorCount++
+		case LevelWarn:
+			warnCount++
+		}
+	}
+	e.ErrorCount = errorCount
+	e.WarnCount = warnCount
+	e.HasError = errorCount > 0 || e.Error != "" || e.StatusCode >= 500
+}
+
+// ComputeHasError 实时判断日志条目是否含错误（不修改条目字段）
+// 与 UpdateSeverity 的判定规则一致，但直接基于原始数据现算，
+// 用于过滤历史数据（旧条目的 HasError 字段可能尚未回填）
+//
+// 参数: 无
+//
+// 返回值:
+//
+//	bool: 含error级日志、Error字段非空或HTTP状态码>=500时返回true
+//
+// 示例:
+//
+//	if entry.ComputeHasError() {
+//	    // 展示错误徽标
+//	}
+func (e *LogEntry) ComputeHasError() bool {
+	if e.HasError || e.Error != "" || e.StatusCode >= 500 {
+		return true
+	}
+	for _, log := range e.LoggerLogs {
+		if log.Level == LevelError {
+			return true
+		}
+	}
+	return false
 }
 
 // CalculateStorageSize 计算日志条目的存储大小并格式化显示
@@ -562,6 +628,9 @@ func NewProcessLogger(debugger *Debugger, processName, processType string) *Proc
 	if err := debugger.GetStorage().Save(entry); err != nil {
 		fmt.Printf("创建进程记录失败: %v\n", err)
 	}
+
+	// 登记到注册表，使 Debugger.EndProcess（仅凭processID）也能附带已收集的日志
+	debugger.registerProcessLogger(logger)
 
 	return logger
 }
@@ -842,6 +911,12 @@ func (p *ProcessLogger) EndProcess(status string) error {
 
 	// 添加logger收集的日志
 	entry.LoggerLogs = p.logger.GetLogs()
+
+	// 从注册表移除，避免与 Debugger.EndProcess 路径重复处理
+	p.debugger.takeProcessLogger(p.processID)
+
+	// 统计派生严重度（error/warn数量），供列表直观展示与过滤
+	entry.UpdateSeverity()
 
 	// 保存更新后的记录
 	if err := p.debugger.GetStorage().Save(entry); err != nil {

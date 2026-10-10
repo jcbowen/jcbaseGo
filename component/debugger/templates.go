@@ -229,6 +229,14 @@ const indexTemplate = `<!DOCTYPE html>
         .process-status-failed { background: #f5c6cb; color: #721c24; }
         .process-status-cancelled { background: #f8d7da; color: #721c24; }
         
+        /* 派生严重度样式：含error日志的行高亮与徽标 */
+        .log-row.has-error { background: #fff5f5; }
+        .log-row.has-error:hover { background: #ffecec; }
+        .status-info { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+        .severity-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; white-space: nowrap; }
+        .severity-badge-error { background: #ffedd5; color: #c2410c; }
+        .severity-badge-warn { background: #eceff1; color: #607d8b; }
+        
         /* 流式请求样式 */
         .streaming-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; display: inline-block; width: fit-content; }
         .streaming-active { background: #e8f4fd; color: #1976d2; }
@@ -457,6 +465,11 @@ const indexTemplate = `<!DOCTYPE html>
                             <option value="50">50条/页</option>
                             <option value="100">100条/页</option>
                         </select>
+                        <select name="has_error" id="filter-has_error" onchange="handleFilterChange(this)" title="按派生严重度过滤：含error级日志、error字段非空或状态码>=500">
+                            <option value="">所有错误状态</option>
+                            <option value="true">仅看含error</option>
+                            <option value="false">仅看无error</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -566,6 +579,7 @@ const indexTemplate = `<!DOCTYPE html>
                     setFilterValue('filter-process_name', 'process_name', filters.process_name);
                     setFilterValue('filter-process_id', 'process_id', filters.process_id);
                     setFilterValue('filter-process_status', 'process_status', filters.process_status);
+                    setFilterValue('filter-has_error', 'has_error', filters.has_error);
                     
                     // 所有字段赋值完成后再根据记录类型初始化Tab和分组显隐
                     updateRecordTypeUI(document.getElementById('filter-record_type').value);
@@ -699,7 +713,7 @@ const indexTemplate = `<!DOCTYPE html>
                     </div>
                     
                     {{range .Entries}}
-                    <div class="log-row">
+                    <div class="log-row{{if .HasError}} has-error{{end}}">
                         <div class="request-id"><a href="detail/{{.ID}}" title="查看详情">{{.ID}}</a></div>
                         <div class="timestamp">{{.Timestamp.Format "2006-01-02 15:04:05"}}</div>
                         <div class="duration">{{formatDuration .Duration}}</div>
@@ -718,6 +732,8 @@ const indexTemplate = `<!DOCTYPE html>
                             {{else}}
                             <span class="status-code status-{{if ge .StatusCode 200}}{{if lt .StatusCode 300}}2xx{{else if lt .StatusCode 400}}3xx{{else if lt .StatusCode 500}}4xx{{else}}5xx{{end}}{{else}}1xx{{end}}">{{.StatusCode}}</span>
                             {{end}}
+                            {{if .HasError}}<span class="severity-badge severity-badge-error" title="含 {{.ErrorCount}} 条error日志{{if .Error}}{{if .ErrorCount}}；{{end}}错误信息: {{.Error}}{{end}}">⚠{{if gt .ErrorCount 0}} {{.ErrorCount}}{{end}}</span>{{end}}
+                            {{if gt .WarnCount 0}}<span class="severity-badge severity-badge-warn" title="含 {{.WarnCount}} 条warn日志">warn {{.WarnCount}}</span>{{end}}
                         </div>
                         <div class="details">
                             {{if eq .RecordType "process"}}
@@ -792,6 +808,7 @@ const indexTemplate = `<!DOCTYPE html>
                 process_id: {{if .Filters.process_id}}'{{.Filters.process_id}}'{{else}}null{{end}},
                 process_status: {{if .Filters.process_status}}'{{.Filters.process_status}}'{{else}}null{{end}},
                 is_streaming: {{if .Filters.is_streaming}}'{{.Filters.is_streaming}}'{{else}}null{{end}},
+                has_error: {{if ne .Filters.has_error nil}}'{{.Filters.has_error}}'{{else}}null{{end}},
                 pageSize: {{if .Filters.pageSize}}'{{.Filters.pageSize}}'{{else}}null{{end}},
                 start_time: {{if .Filters.start_time}}'{{.Filters.start_time.Format "2006-01-02T15:04:05"}}'{{else}}null{{end}},
                 end_time: {{if .Filters.end_time}}'{{.Filters.end_time.Format "2006-01-02T15:04:05"}}'{{else}}null{{end}}

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -75,6 +76,13 @@ type Debugger struct {
 	controller *Controller
 	logger     LoggerInterface // 日志记录器实例
 	mainLogger LoggerInterface // 主进程日志记录器实例
+
+	// 进程日志记录器注册表：processID -> *ProcessLogger
+	// 用于通过 Debugger.EndProcess（仅凭processID）结束时补充内存中已收集的日志，
+	// 避免该路径下进程日志丢失；条目在任一路径的EndProcess时移除，
+	// 从未结束的进程会滞留注册表，与存储中running状态的记录一致
+	processLoggers  map[string]*ProcessLogger
+	processLoggerMu sync.RWMutex
 }
 
 // New 创建新的调试器实例
@@ -590,7 +598,9 @@ func (d *Debugger) recordLoggerLogs(entry *LogEntry, c *gin.Context) {
 }
 
 // saveLogEntry 保存日志条目
+// 保存前统计派生严重度字段，确保列表中可直观识别含error日志的记录
 func (d *Debugger) saveLogEntry(entry *LogEntry) {
+	entry.UpdateSeverity()
 	if err := d.storage.Save(entry); err != nil {
 		// 记录保存错误，但不影响正常请求处理
 		fmt.Printf("保存调试日志失败: %v\n", err)
@@ -1611,6 +1621,27 @@ func (d *Debugger) StartProcess(processName, processType string) ProcessLoggerIn
 	return NewProcessLogger(d, processName, processType)
 }
 
+// registerProcessLogger 将进程日志记录器登记到注册表
+// 供 Debugger.EndProcess 仅凭 processID 结束时取回其内存中收集的日志
+func (d *Debugger) registerProcessLogger(pl *ProcessLogger) {
+	d.processLoggerMu.Lock()
+	if d.processLoggers == nil {
+		d.processLoggers = make(map[string]*ProcessLogger)
+	}
+	d.processLoggers[pl.processID] = pl
+	d.processLoggerMu.Unlock()
+}
+
+// takeProcessLogger 从注册表取出并移除指定进程的日志记录器
+// 返回nil表示该进程未登记或已被此前的EndProcess取走
+func (d *Debugger) takeProcessLogger(processID string) *ProcessLogger {
+	d.processLoggerMu.Lock()
+	defer d.processLoggerMu.Unlock()
+	pl := d.processLoggers[processID]
+	delete(d.processLoggers, processID)
+	return pl
+}
+
 // GetProcessLogger 获取进程级日志记录器
 // 通过进程ID获取已存在的进程记录器，用于在进程执行过程中获取记录器实例
 // 该方法适用于需要跨函数或协程共享同一进程记录器的场景
@@ -1646,6 +1677,14 @@ func (d *Debugger) GetProcessLogger(processID string) (ProcessLoggerInterface, e
 	// 检查进程状态
 	if entry.Status != "running" {
 		return nil, fmt.Errorf("进程已结束，无法获取记录器")
+	}
+
+	// 优先返回注册表中的原始记录器，保证同一进程的日志汇聚到同一实例
+	d.processLoggerMu.RLock()
+	registered := d.processLoggers[processID]
+	d.processLoggerMu.RUnlock()
+	if registered != nil {
+		return registered, nil
 	}
 
 	// 创建进程记录器实例
@@ -1702,6 +1741,14 @@ func (d *Debugger) EndProcess(processID, status string) error {
 	entry.EndTime = time.Now()
 	entry.Duration = entry.EndTime.Sub(entry.Timestamp)
 	entry.Status = status
+
+	// 补充注册表中logger已收集的日志（该调用路径仅持有processID，不持有logger实例）
+	if pl := d.takeProcessLogger(processID); pl != nil {
+		entry.LoggerLogs = pl.logger.GetLogs()
+	}
+
+	// 统计派生严重度（error/warn数量），供列表直观展示与过滤
+	entry.UpdateSeverity()
 
 	// 保存更新后的记录
 	if err := d.storage.Save(entry); err != nil {

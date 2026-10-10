@@ -9,7 +9,7 @@
 ### 核心功能
 - ✅ **请求拦截**: 自动拦截HTTP请求并记录完整的调试信息，支持请求体大小限制和二进制数据检测
 - ✅ **多存储支持**: 支持内存、文件、数据库等多种存储方式，提供统一的Storage接口
-- ✅ **日志查询**: 支持按时间、请求路径、状态码、记录类型等条件过滤，实现真正的分页查询
+- ✅ **日志查询**: 支持按时间、请求路径、状态码、记录类型、是否含错误等条件过滤，实现真正的分页查询
 - ✅ **全文搜索**: 支持关键词搜索进程名称、URL、请求体、响应体、错误信息等内容
 - ✅ **详情查看**: 显示完整的请求和响应信息，支持HTML和JSON格式，自动计算存储大小
 - ✅ **增强型 JSON 查看器**: 详情页集成 VSCode 同款 `jsonc-parser`，支持 JSON 美化、层级折叠/展开、自动修复（注释/尾部逗号等）、原始/修复后切换、一键复制
@@ -438,6 +438,23 @@ func main() {
 在调试器Web界面中，您可以使用以下筛选选项：
 - **流式状态筛选**: 所有流式状态 / 流式请求 / 非流式请求
 - **流式活跃状态**: 活跃流式请求 / 非流式请求
+- **错误状态筛选**: 所有错误状态 / 仅看含error / 仅看无error（基于派生严重度，见下文）
+
+### 派生严重度（列表error识别）
+
+日志条目在保存时会自动统计派生严重度字段（`UpdateSeverity`），用于在列表中直观识别"虽然执行完成但含error日志"的记录：
+
+- **`has_error`**: 是否存在错误。判定规则：含error级Logger日志、`error`字段非空、或HTTP状态码 >= 500
+- **`error_count`**: Logger日志中error级别的数量
+- **`warn_count`**: Logger日志中warn级别的数量
+
+列表页展示效果：
+- 进程记录：状态（如`completed`）旁显示橙色`⚠ N`徽标（N为error数量），warn数量以灰色徽标显示
+- HTTP记录：状态码旁同样显示徽标（状态码200但含error日志时也会高亮）
+- 含error的行整行浅红色背景高亮
+- 筛选区提供"仅看含error"开关（对应`has_error`过滤参数，三种存储均支持）
+
+统计时机：HTTP中间件保存前、`ProcessLogger.EndProcess`、`Debugger.EndProcess`。历史数据在列表/详情读取时会自动现算补全，无需迁移。
 
 ## Logger功能
 
@@ -760,6 +777,8 @@ dbg.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
 // 不推荐使用字符串字面量
 dbg.EndProcess(logger.GetProcessID(), "completed")
 ```
+
+> **注意**: `StartProcess` 返回的记录器会登记到调试器内部注册表，因此无论调用 `logger.EndProcess(status)` 还是 `dbg.EndProcess(processID, status)`，Logger收集的日志都会随记录一并落库，并在保存前自动统计派生严重度字段（`has_error`/`error_count`/`warn_count`）。即使进程状态为`completed`，只要Logger中记录过error级日志，列表中也会显示error徽标并高亮该行，便于快速定位问题进程。`GetProcessLogger` 对运行中的进程返回注册表中的同一记录器实例，保证日志汇聚。
 
 #### 获取进程记录列表
 
@@ -1391,7 +1410,7 @@ filters = map[string]interface{}{
 }
 result, total, err := storage.FindAll(1, 10, filters)
 
-// 查询错误日志
+// 查询错误日志（has_error基于派生严重度：含error级日志/error字段非空/状态码>=500）
 filters = map[string]interface{}{
     "has_error": true,
 }
@@ -1883,6 +1902,11 @@ type LogEntry struct {
 
 	// Logger日志
 	LoggerLogs      []LoggerLog       `json:"logger_logs,omitempty"`     // 关联的Logger日志列表
+
+	// 派生严重度（保存时由UpdateSeverity自动统计）
+	HasError        bool              `json:"has_error,omitempty"`       // 是否存在错误：含error级日志/error字段非空/状态码>=500
+	ErrorCount      int               `json:"error_count,omitempty"`     // Logger日志中error级别数量
+	WarnCount       int               `json:"warn_count,omitempty"`      // Logger日志中warn级别数量
 }
 ```
 

@@ -459,7 +459,7 @@ func (fs *FileStorage) extractTimestampFromFilename(filePath string) (time.Time,
 //   - process_name: 进程名称包含匹配（支持模糊匹配）
 //   - process_id: 进程ID精确匹配
 //   - process_status: 进程状态精确匹配（running/completed/failed/error）
-//   - has_error: 错误状态过滤（true表示有错误，false表示无错误）
+//   - has_error: 错误状态过滤（true表示有错误，含error级日志/error字段非空/状态码>=500；false表示无错误）
 //   - min_duration: 最小持续时间过滤（大于等于指定时长）
 //   - max_duration: 最大持续时间过滤（小于等于指定时长）
 func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface{}) bool {
@@ -528,10 +528,8 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 			if !ok {
 				return false
 			}
-			if v && entry.Error == "" {
-				return false
-			}
-			if !v && entry.Error != "" {
+			// 基于派生严重度实时判断，兼容尚未统计的历史数据
+			if entry.ComputeHasError() != v {
 				return false
 			}
 		case "min_duration":

@@ -61,6 +61,11 @@ type LogEntryModel struct {
 
 	// Logger日志字段（JSON格式存储）
 	LoggerLogs string `gorm:"column:logger_logs;type:JSON" json:"logger_logs"` // 通过logger记录的日志（JSON格式）
+
+	// 派生严重度字段（由 UpdateSeverity 统计，用于列表直观展示与过滤）
+	HasError   bool `gorm:"column:has_error;type:BOOLEAN;index" json:"has_error"` // 是否存在错误
+	ErrorCount int  `gorm:"column:error_count;type:INT" json:"error_count"`       // error级别日志数量
+	WarnCount  int  `gorm:"column:warn_count;type:INT" json:"warn_count"`         // warn级别日志数量
 }
 
 // TableName 实现自定义表名
@@ -299,7 +304,7 @@ func (ds *DatabaseStorage) Cleanup(before time.Time) error {
 //   - process_name: 进程名称包含匹配（支持模糊匹配）
 //   - process_id: 进程ID精确匹配
 //   - process_status: 进程状态精确匹配（running/completed/failed/error）
-//   - has_error: 错误状态过滤（true表示有错误，false表示无错误）
+//   - has_error: 错误状态过滤（true表示有错误，含error级日志/error字段非空/状态码>=500；false表示无错误）
 //   - min_duration: 最小持续时间过滤（大于等于指定时长）
 //   - max_duration: 最大持续时间过滤（小于等于指定时长）
 func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interface{}) *gorm.DB {
@@ -354,9 +359,10 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 		case "has_error":
 			if v, ok := value.(bool); ok {
 				if v {
-					db = db.Where("error != ''")
+					// 兼容历史数据：has_error列未回填时，回退到error列与状态码判断
+					db = db.Where("has_error = ? OR error != '' OR status_code >= 500", true)
 				} else {
-					db = db.Where("error = ''")
+					db = db.Where("has_error = ? AND (error = '' OR error IS NULL) AND status_code < 500", false)
 				}
 			}
 		case "min_duration":
@@ -420,6 +426,11 @@ func (ds *DatabaseStorage) entryToModel(entry *LogEntry) (*LogEntryModel, error)
 		StreamingChunkSize:  entry.StreamingChunkSize,
 		MaxStreamingChunks:  entry.MaxStreamingChunks,
 		StreamingData:       entry.StreamingData,
+
+		// 派生严重度字段
+		HasError:   entry.HasError,
+		ErrorCount: entry.ErrorCount,
+		WarnCount:  entry.WarnCount,
 	}
 
 	// 转换JSON字段
@@ -483,6 +494,11 @@ func (ds *DatabaseStorage) modelToEntry(model *LogEntryModel) (*LogEntry, error)
 		StreamingChunkSize:  model.StreamingChunkSize,
 		MaxStreamingChunks:  model.MaxStreamingChunks,
 		StreamingData:       model.StreamingData,
+
+		// 派生严重度字段
+		HasError:   model.HasError,
+		ErrorCount: model.ErrorCount,
+		WarnCount:  model.WarnCount,
 	}
 
 	// 解析JSON字段
