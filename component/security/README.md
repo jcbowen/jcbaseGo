@@ -9,6 +9,7 @@ Security 组件是一个功能丰富的安全工具库，为 Go 应用程序提�
 ## 功能特性
 
 - **AES 加密/解密**：支持 CBC 模式的 AES 加密，自动处理密钥长度验证和 PKCS7 填充
+- **RSA 签名/验签**：SHA256withRSA（RSA2）签名与验签，兼容 PKCS1/PKCS8 与裸 base64 密钥串、文件路径三种来源
 - **SM4 国密算法**：支持 SM4 对称加密，提供 CBC 和 GCM 两种加密模式
 - **密码处理**：基于 bcrypt 的密码哈希和验证功能
 - **输入过滤**：智能输入清理，防止 SQL 注入和 XSS 攻击
@@ -363,6 +364,12 @@ fmt.Printf("IV length: %d\n", len(aes.Iv))
 - `PasswordVerify(password, hash string) bool` - 密码验证
 - `Encrypt(data, secret string, passwordBased bool, config CipherConfig) (string, error)` - 通用加密
 - `Decrypt(data, secret string, passwordBased bool, config CipherConfig) (string, error)` - 通用解密
+- `RSASign(data, privateKey string, keyFromFile bool) (string, error)` - SHA256withRSA 签名，返回 base64 签名值
+- `RSAVerify(data, sign, publicKey string, keyFromFile bool) (bool, error)` - SHA256withRSA 验签
+- `ParseRSAPrivateKey(keyBytes []byte) (*rsa.PrivateKey, error)` - 解析私钥（兼容 PKCS1/PKCS8/裸串）
+- `ParseRSAPublicKey(keyBytes []byte) (*rsa.PublicKey, error)` - 解析公钥（兼容 PKIX/PKCS1/裸串）
+- `FormatPrivateKeyPEM(rawKey string) string` - 裸私钥串包装为 PKCS1 PEM 文本
+- `FormatPublicKeyPEM(rawKey string) string` - 裸公钥串包装为 X.509 PEM 文本
 
 ## 版本历史
 
