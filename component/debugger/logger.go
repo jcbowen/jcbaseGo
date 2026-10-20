@@ -184,7 +184,7 @@ func (l *DefaultLogger) log(level LogLevel, msg any, fields ...map[string]interf
 	var fileName string
 	var line int
 	var function string
-	if l.debugger.config.EnableCallerInfo {
+	if l.debugger.isCallerInfoEnabled() {
 		// 获取调用位置信息
 		fileName, line, function = getCallerInfo()
 	}
@@ -207,7 +207,7 @@ func (l *DefaultLogger) log(level LogLevel, msg any, fields ...map[string]interf
 	// 输出包含位置信息的日志（支持IDE可点击链接）
 	// 格式：[级别] 文件名:行号 - 函数名: 消息内容
 	// 注意：文件名:行号 格式是IDEA控制台可点击链接的标准格式
-	if l.debugger.config.EnableCallerInfo {
+	if l.debugger.isCallerInfoEnabled() {
 		fmt.Printf("[%s] %s:%d - %s\n", level.String(), fileName, line, message)
 	} else {
 		fmt.Printf("[%s] %s\n", level.String(), message)
@@ -1022,7 +1022,7 @@ func (l *MainLogger) log(level LogLevel, msg any, fields ...map[string]interface
 	var fileName string
 	var line int
 	var function string
-	if l.debugger.config.EnableCallerInfo {
+	if l.debugger.isCallerInfoEnabled() {
 		// 获取调用位置信息
 		fileName, line, function = getCallerInfo()
 	}
@@ -1034,7 +1034,7 @@ func (l *MainLogger) log(level LogLevel, msg any, fields ...map[string]interface
 	l.writeLog(logLine)
 
 	// 同时输出到控制台
-	if l.debugger.config.EnableCallerInfo {
+	if l.debugger.isCallerInfoEnabled() {
 		fmt.Printf("[%s] %s:%d - %s: %s\n", level.String(), fileName, line, function, message)
 	} else {
 		fmt.Printf("[%s] %s\n", level.String(), message)
@@ -1046,7 +1046,7 @@ func (l *MainLogger) log(level LogLevel, msg any, fields ...map[string]interface
 func (l *MainLogger) formatLog(level LogLevel, message string, fileName string, line int, function string) string {
 	// 文本格式
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	if l.debugger.config.EnableCallerInfo {
+	if l.debugger.isCallerInfoEnabled() {
 		return fmt.Sprintf("%s [%s] %s:%d - %s: %s\n", timestamp, level.String(), fileName, line, function, message)
 	} else {
 		return fmt.Sprintf("%s [%s] %s\n", timestamp, level.String(), message)

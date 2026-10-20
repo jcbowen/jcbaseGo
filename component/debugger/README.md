@@ -176,6 +176,7 @@ dbg, err := debugger.NewWithCustomStorage(customStorage)
 memoryStorage, _ := debugger.NewMemoryStorage(150)
 
 // 创建调试器配置
+autoSkipStatic := true // *bool 三态：nil（未配置）默认开启；显式 false 生效关闭
 config := &debugger.Config{
 	Enabled:         true,                    // 是否启用调试器
 	Storage:         memoryStorage,           // 必须传入实例化的存储器
@@ -187,7 +188,7 @@ config := &debugger.Config{
 	// 过滤配置
 	SkipPaths:        []string{"/static", "/health"}, // 跳过的路径
 	SkipMethods:      []string{"OPTIONS"},              // 跳过的HTTP方法
-	AutoSkipStatic:   true,                              // 自动跳过静态资源请求
+	AutoSkipStatic:   &autoSkipStatic,                   // 自动跳过静态资源请求（*bool：nil默认开启，显式false关闭）
 	StaticExtensions: []string{".css", ".js", ".png"},   // 自定义静态资源扩展名
 
 	// 采样配置
@@ -1112,7 +1113,7 @@ config := &debugger.Config{
     
     // 主进程日志复用以下配置项
     Level:            debugger.LevelInfo,    // 日志级别（与主进程日志共享）
-    EnableCallerInfo: true,                  // 是否启用调用位置信息（与主进程日志共享）
+    EnableCallerInfo: &callerInfo,            // 是否启用调用位置信息（*bool：nil默认开启，显式false关闭）
 }
 ```
 
@@ -1156,6 +1157,7 @@ import (
 
 func main() {
 	// 创建调试器配置
+	callerInfo := true // *bool 三态：nil（未配置）默认开启；显式 false 生效关闭
 	config := &debugger.Config{
 		Enabled:            true,
 		EnableMainLogger:   true,                  // 启用主进程日志
@@ -1164,7 +1166,7 @@ func main() {
 		MainLogMaxSize:     100,                  // 单个文件最大100MB
 		MainLogMaxBackups:  7,                    // 保留7个备份文件
 		Level:             debugger.LevelInfo,   // 日志级别
-		EnableCallerInfo:  true,                  // 启用调用位置信息
+		EnableCallerInfo:  &callerInfo,          // 启用调用位置信息（*bool：nil默认开启，显式false关闭）
 	}
 
 	// 创建调试器实例
@@ -1951,7 +1953,7 @@ type Config struct {
 	MaxRecords            int              // 最大记录数量
 	SkipPaths             []string         // 跳过的路径
 	SkipMethods           []string         // 跳过的HTTP方法
-	AutoSkipStatic        bool             // 是否自动跳过静态资源请求
+	AutoSkipStatic        *bool            // 是否自动跳过静态资源请求（*bool 三态：nil=默认开启，显式false关闭）
 	StaticExtensions      []string         // 静态资源扩展名列表
 	SampleRate            float64          // 采样率（0-1之间）
 	Logger                LoggerInterface  // 日志记录器实例
@@ -2025,6 +2027,7 @@ func NewDatabaseStorage(db *gorm.DB, tableName string) (Storage, error) // 创�
 
 - v1.0.0: 初始版本，支持基本调试功能
 - 多服务支持: 新增`ServiceName`服务标识（Config/LogEntry/三种存储过滤与统计/`GET /api/services`接口/前端服务筛选），支持多服务共享同一存储时区分日志来源；`GenerateID`追加随机数避免同进程ID重复导致共享存储日志互相覆盖
+- AutoSkipStatic 修复: `AutoSkipStatic` 与 `EnableCallerInfo` 改为 `*bool` 三态字段——此前 bool + `default:"true"` 会被默认值机制把显式设置的 `false` 强制改回 `true`，导致"关闭自动跳过静态资源"与"关闭调用位置信息"配置失效；现未配置（nil/JSON 缺省）仍默认开启，显式 `false` 生效关闭。**破坏性变更**：Go 代码中的 `AutoSkipStatic: true/false`、`EnableCallerInfo: true/false` 字面量需改为指针（如 `&autoSkipStatic`），JSON 配置格式不变、缺省行为不变
 - 后续版本计划：支持更多存储后端、实时日志流、性能监控等
 
 ## 贡献指南

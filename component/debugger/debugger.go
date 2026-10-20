@@ -31,20 +31,29 @@ var (
 
 // Config 调试器配置结构
 type Config struct {
-	Enabled          bool          `json:"enabled" default:"true" preserve:"true"` // 是否启用调试器
-	MaxBodySize      int64         `json:"max_body_size" default:"1024"`           // 最大请求/响应体大小（KB），默认1MB
-	RetentionPeriod  time.Duration `json:"retention_period" default:"168h"`        // 日志保留期限，默认7天
-	Level            LogLevel      `json:"level" default:"3"`                      // 日志级别：LevelWarn
-	MaxRecords       int           `json:"max_records" default:"150"`              // 最大记录数量，默认150条
-	EnableCallerInfo bool          `json:"enable_caller_info" default:"true"`      // 是否启用调用位置信息，默认开启，关闭可提高高并发场景下的性能
+	Enabled         bool          `json:"enabled" default:"true" preserve:"true"` // 是否启用调试器
+	MaxBodySize     int64         `json:"max_body_size" default:"1024"`           // 最大请求/响应体大小（KB），默认1MB
+	RetentionPeriod time.Duration `json:"retention_period" default:"168h"`        // 日志保留期限，默认7天
+	Level           LogLevel      `json:"level" default:"3"`                      // 日志级别：LevelWarn
+	MaxRecords      int           `json:"max_records" default:"150"`              // 最大记录数量，默认150条
+	// EnableCallerInfo 是否启用调用位置信息（关闭可提高高并发场景下的性能）。
+	// 与 AutoSkipStatic 同理使用 *bool 三态：nil（JSON 未配置）默认开启，显式 false 生效关闭，
+	// 避免 bool + default:"true" 的默认值机制把显式设置的 false 强制改回 true 导致开关失效
+	EnableCallerInfo *bool `json:"enable_caller_info"` // 是否启用调用位置信息；nil默认开启，显式false生效关闭
 
 	// 服务标识配置
 	ServiceName string `json:"service_name" default:""` // 服务标识，用于多服务共享同一存储时区分日志来源，默认空 = 不标识
 
 	// 过滤配置
-	SkipPaths        []string `json:"skip_paths" default:""`                                                                                                               // 跳过的路径（如静态文件："/static/,/favicon.ico"）
-	SkipMethods      []string `json:"skip_methods" default:"OPTIONS"`                                                                                                      // 跳过的HTTP方法
-	AutoSkipStatic   bool     `json:"auto_skip_static" default:"true"`                                                                                                     // 是否自动跳过静态资源请求
+	SkipPaths   []string `json:"skip_paths" default:""`          // 跳过的路径（如静态文件："/static/,/favicon.ico"）
+	SkipMethods []string `json:"skip_methods" default:"OPTIONS"` // 跳过的HTTP方法
+	// AutoSkipStatic 是否自动跳过静态资源请求。
+	// 使用 *bool 表达三态语义：nil（JSON 未配置）默认开启；显式 false 生效关闭。
+	// 不用 bool + default:"true" 的原因：CheckAndSetDefault 的布尔默认值机制会把
+	// 显式设置的 false 也强制改回 true（无法区分「未配置」与「显式关闭」），导致该开关失效；
+	// 也不用 preserve:"true" 的原因：preserve 会把「JSON 未配置」（零值 false）同样按显式值保留，
+	// 使未写该键的下游配置默认行为从开启静默变为关闭。
+	AutoSkipStatic   *bool    `json:"auto_skip_static"`
 	StaticExtensions []string `json:"static_extensions" default:".css,.js,.map,.png,.jpg,.jpeg,.gif,.svg,.ico,.woff,.woff2,.ttf,.eot,.otf,.webp,.txt,.xml,.pdf,.mp4,.mp3"` // 静态资源扩展名列表
 
 	// 采样配置
@@ -112,6 +121,20 @@ func New(config *Config) (*Debugger, error) {
 	// 使用CheckAndSetDefaultWithPreserveTag方法设置默认值，并保留关键布尔字段的用户显式设置
 	if err := helper.CheckAndSetDefaultWithPreserveTag(d.config); err != nil {
 		return nil, fmt.Errorf("设置配置默认值失败: %w", err)
+	}
+
+	// *bool 三态字段归一化：nil（JSON 未配置）→ 默认开启，显式 false 保持不变。
+	// 目的：1) 保证后续读取（shouldSkip / isCallerInfoEnabled 等）无需判空；
+	// 2) 配置导出（JSON）时语义明确为 true/false 而非 null。
+	// *bool 字段不会被 CheckAndSetDefault 自动填充默认值（nil 指针不实例化的约定），
+	// 故必须在 New 中显式兜底，确保所有经 New 构造的实例这些字段始终非 nil。
+	if d.config.AutoSkipStatic == nil {
+		autoSkipStatic := true
+		d.config.AutoSkipStatic = &autoSkipStatic
+	}
+	if d.config.EnableCallerInfo == nil {
+		callerInfo := true
+		d.config.EnableCallerInfo = &callerInfo
 	}
 
 	// 如果没有传入存储实例，则使用默认的内存存储
@@ -621,6 +644,13 @@ func (d *Debugger) saveLogEntry(entry *LogEntry) {
 	}
 }
 
+// isCallerInfoEnabled 返回是否启用调用位置信息
+// EnableCallerInfo 为 *bool 三态字段（nil = 未配置，默认开启；New 已归一化为非 nil，
+// 判空仅防御绕过 New 直接构造的实例），显式 false 生效关闭
+func (d *Debugger) isCallerInfoEnabled() bool {
+	return d.config.EnableCallerInfo != nil && *d.config.EnableCallerInfo
+}
+
 // shouldSkip 检查是否应该跳过当前请求
 func (d *Debugger) shouldSkip(c *gin.Context) bool {
 	// 自动跳过debugger控制器自身的请求，避免无限循环（放在最前面提高性能）
@@ -631,8 +661,8 @@ func (d *Debugger) shouldSkip(c *gin.Context) bool {
 		}
 	}
 
-	// 自动跳过静态资源请求
-	if d.config.AutoSkipStatic && d.isStaticRequest(c) {
+	// 自动跳过静态资源请求（New 已将 nil 归一化为 &true，判空仅为防御直接构造的实例）
+	if d.config.AutoSkipStatic != nil && *d.config.AutoSkipStatic && d.isStaticRequest(c) {
 		return true
 	}
 
