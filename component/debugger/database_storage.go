@@ -21,16 +21,17 @@ type DatabaseStorage struct {
 // LogEntryModel 数据库模型结构
 // 对应数据库中的日志条目表，支持HTTP记录和进程记录
 type LogEntryModel struct {
-	ID         string    `gorm:"column:id;type:VARCHAR(64);primaryKey" json:"id"`
-	Timestamp  time.Time `gorm:"column:timestamp;type:DATETIME;index" json:"timestamp"`
-	Method     string    `gorm:"column:method;type:VARCHAR(10);index" json:"method"`
-	URL        string    `gorm:"column:url;type:TEXT" json:"url"`
-	StatusCode int       `gorm:"column:status_code;type:INT;index" json:"status_code"`
-	Duration   int64     `gorm:"column:duration;type:BIGINT" json:"duration"` // 存储纳秒数
-	ClientIP   string    `gorm:"column:client_ip;type:VARCHAR(45)" json:"client_ip"`
-	UserAgent  string    `gorm:"column:user_agent;type:TEXT" json:"user_agent"`
-	Host       string    `gorm:"column:host;type:VARCHAR(255);index" json:"host"`
-	RequestID  string    `gorm:"column:request_id;type:VARCHAR(64);index" json:"request_id"`
+	ID          string    `gorm:"column:id;type:VARCHAR(64);primaryKey" json:"id"`
+	Timestamp   time.Time `gorm:"column:timestamp;type:DATETIME;index" json:"timestamp"`
+	Method      string    `gorm:"column:method;type:VARCHAR(10);index" json:"method"`
+	URL         string    `gorm:"column:url;type:TEXT" json:"url"`
+	StatusCode  int       `gorm:"column:status_code;type:INT;index" json:"status_code"`
+	Duration    int64     `gorm:"column:duration;type:BIGINT" json:"duration"` // 存储纳秒数
+	ClientIP    string    `gorm:"column:client_ip;type:VARCHAR(45)" json:"client_ip"`
+	UserAgent   string    `gorm:"column:user_agent;type:TEXT" json:"user_agent"`
+	Host        string    `gorm:"column:host;type:VARCHAR(255);index" json:"host"`
+	RequestID   string    `gorm:"column:request_id;type:VARCHAR(64);index" json:"request_id"`
+	ServiceName string    `gorm:"column:service_name;type:VARCHAR(100);index" json:"service_name"` // 服务标识（多服务共享表时区分日志来源）
 
 	// 记录类型和进程相关字段
 	RecordType  string    `gorm:"column:record_type;type:VARCHAR(20);index" json:"record_type"` // 记录类型：http/process
@@ -304,6 +305,7 @@ func (ds *DatabaseStorage) Cleanup(before time.Time) error {
 //   - process_name: 进程名称包含匹配（支持模糊匹配）
 //   - process_id: 进程ID精确匹配
 //   - process_status: 进程状态精确匹配（running/completed/failed/error）
+//   - service_name: 服务标识精确匹配（多服务共享表时区分日志来源）
 //   - has_error: 错误状态过滤（true表示有错误，含error级日志/error字段非空/状态码>=500；false表示无错误）
 //   - min_duration: 最小持续时间过滤（大于等于指定时长）
 //   - max_duration: 最大持续时间过滤（小于等于指定时长）
@@ -355,6 +357,11 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 		case "process_status":
 			if v, ok := value.(string); ok {
 				db = db.Where("status = ?", v)
+			}
+		case "service_name":
+			// 服务标识过滤：精确匹配，与内存/文件存储保持一致
+			if v, ok := value.(string); ok {
+				db = db.Where("service_name = ?", v)
 			}
 		case "has_error":
 			if v, ok := value.(bool); ok {
@@ -408,6 +415,7 @@ func (ds *DatabaseStorage) entryToModel(entry *LogEntry) (*LogEntryModel, error)
 		UserAgent:    entry.UserAgent,
 		Host:         entry.Host,
 		RequestID:    entry.RequestID,
+		ServiceName:  entry.ServiceName,
 		RequestBody:  entry.RequestBody,
 		ResponseBody: entry.ResponseBody,
 		Error:        entry.Error,
@@ -476,6 +484,7 @@ func (ds *DatabaseStorage) modelToEntry(model *LogEntryModel) (*LogEntry, error)
 		UserAgent:    model.UserAgent,
 		Host:         model.Host,
 		RequestID:    model.RequestID,
+		ServiceName:  model.ServiceName,
 		RequestBody:  model.RequestBody,
 		ResponseBody: model.ResponseBody,
 		Error:        model.Error,
@@ -681,6 +690,29 @@ func (ds *DatabaseStorage) GetStatusCodes() (map[int]int, error) {
 	}
 
 	return statusCodes, nil
+}
+
+// GetServices 获取服务标识统计（含空标识的条目计数，调用方可自行过滤空值）
+func (ds *DatabaseStorage) GetServices() (map[string]int, error) {
+	type ServiceCount struct {
+		ServiceName string
+		Count       int
+	}
+
+	var results []ServiceCount
+	if err := ds.db.Table(ds.tableName).
+		Select("service_name, COUNT(*) as count").
+		Group("service_name").
+		Find(&results).Error; err != nil {
+		return nil, fmt.Errorf("获取服务标识统计失败: %v", err)
+	}
+
+	services := make(map[string]int)
+	for _, result := range results {
+		services[result.ServiceName] = result.Count
+	}
+
+	return services, nil
 }
 
 // Close 关闭数据库存储器

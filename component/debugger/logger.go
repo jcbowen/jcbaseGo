@@ -347,16 +347,17 @@ type MainLogger struct {
 // LogEntry 调试日志条目结构
 // 用于记录单个HTTP请求或进程的完整调试信息
 type LogEntry struct {
-	ID         string        `json:"id"`          // 日志唯一标识
-	Timestamp  time.Time     `json:"timestamp"`   // 请求/进程开始时间戳
-	Method     string        `json:"method"`      // HTTP方法（HTTP记录专用）
-	URL        string        `json:"url"`         // 请求URL（HTTP记录专用）
-	StatusCode int           `json:"status_code"` // HTTP状态码（HTTP记录专用）
-	Duration   time.Duration `json:"duration"`    // 处理耗时
-	ClientIP   string        `json:"client_ip"`   // 客户端IP（HTTP记录专用）
-	UserAgent  string        `json:"user_agent"`  // 用户代理（HTTP记录专用）
-	Host       string        `json:"host"`        // 请求域名（HTTP记录专用）
-	RequestID  string        `json:"request_id"`  // 请求ID（用于追踪）
+	ID          string        `json:"id"`                     // 日志唯一标识
+	Timestamp   time.Time     `json:"timestamp"`              // 请求/进程开始时间戳
+	Method      string        `json:"method"`                 // HTTP方法（HTTP记录专用）
+	URL         string        `json:"url"`                    // 请求URL（HTTP记录专用）
+	StatusCode  int           `json:"status_code"`            // HTTP状态码（HTTP记录专用）
+	Duration    time.Duration `json:"duration"`               // 处理耗时
+	ClientIP    string        `json:"client_ip"`              // 客户端IP（HTTP记录专用）
+	UserAgent   string        `json:"user_agent"`             // 用户代理（HTTP记录专用）
+	Host        string        `json:"host"`                   // 请求域名（HTTP记录专用）
+	RequestID   string        `json:"request_id"`             // 请求ID（用于追踪）
+	ServiceName string        `json:"service_name,omitempty"` // 服务标识（多服务共享存储时区分日志来源）
 
 	// 记录类型标识
 	RecordType string `json:"record_type" default:"http"` // 记录类型：http/process
@@ -481,7 +482,7 @@ func (e *LogEntry) CalculateStorageSize() string {
 	totalSize := 0
 
 	// 计算基本字段大小（与总存储计算保持一致）
-	totalSize += len(e.ID) + len(e.URL) + len(e.Method) + len(e.ClientIP) + len(e.UserAgent) + len(e.RequestID)
+	totalSize += len(e.ID) + len(e.URL) + len(e.Method) + len(e.ClientIP) + len(e.UserAgent) + len(e.RequestID) + len(e.ServiceName)
 
 	// 计算请求体大小
 	totalSize += len(e.RequestBody)
@@ -617,6 +618,7 @@ func NewProcessLogger(debugger *Debugger, processName, processType string) *Proc
 	entry := &LogEntry{
 		ID:          processID,
 		Timestamp:   logger.startTime,
+		ServiceName: debugger.config.ServiceName, // 携带服务标识（空值时为不标识）
 		RecordType:  "process",
 		ProcessID:   processID,
 		ProcessName: processName,

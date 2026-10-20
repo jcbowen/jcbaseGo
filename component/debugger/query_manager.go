@@ -335,31 +335,33 @@ func (qm *QueryManager) Export(format string, options QueryOptions) ([]byte, err
 // exportJSON 导出为JSON格式
 func (qm *QueryManager) exportJSON(entries []*LogEntry) ([]byte, error) {
 	type ExportEntry struct {
-		ID         string    `json:"id"`
-		Timestamp  time.Time `json:"timestamp"`
-		Method     string    `json:"method"`
-		URL        string    `json:"url"`
-		StatusCode int       `json:"status_code"`
-		Duration   string    `json:"duration"`
-		ClientIP   string    `json:"client_ip"`
-		UserAgent  string    `json:"user_agent"`
-		RequestID  string    `json:"request_id"`
-		Error      string    `json:"error,omitempty"`
+		ID          string    `json:"id"`
+		Timestamp   time.Time `json:"timestamp"`
+		Method      string    `json:"method"`
+		URL         string    `json:"url"`
+		StatusCode  int       `json:"status_code"`
+		Duration    string    `json:"duration"`
+		ClientIP    string    `json:"client_ip"`
+		UserAgent   string    `json:"user_agent"`
+		RequestID   string    `json:"request_id"`
+		ServiceName string    `json:"service_name,omitempty"` // 服务标识（多服务共享存储时区分日志来源）
+		Error       string    `json:"error,omitempty"`
 	}
 
 	exportEntries := make([]ExportEntry, len(entries))
 	for i, entry := range entries {
 		exportEntries[i] = ExportEntry{
-			ID:         entry.ID,
-			Timestamp:  entry.Timestamp,
-			Method:     entry.Method,
-			URL:        entry.URL,
-			StatusCode: entry.StatusCode,
-			Duration:   entry.Duration.String(),
-			ClientIP:   entry.ClientIP,
-			UserAgent:  entry.UserAgent,
-			RequestID:  entry.RequestID,
-			Error:      entry.Error,
+			ID:          entry.ID,
+			Timestamp:   entry.Timestamp,
+			Method:      entry.Method,
+			URL:         entry.URL,
+			StatusCode:  entry.StatusCode,
+			Duration:    entry.Duration.String(),
+			ClientIP:    entry.ClientIP,
+			UserAgent:   entry.UserAgent,
+			RequestID:   entry.RequestID,
+			ServiceName: entry.ServiceName,
+			Error:       entry.Error,
 		}
 	}
 
@@ -368,15 +370,16 @@ func (qm *QueryManager) exportJSON(entries []*LogEntry) ([]byte, error) {
 
 // exportCSV 导出为CSV格式
 func (qm *QueryManager) exportCSV(entries []*LogEntry) ([]byte, error) {
-	csvData := "ID,Timestamp,Method,URL,StatusCode,Duration,ClientIP,UserAgent,RequestID,Error\n"
+	csvData := "ID,Timestamp,Method,URL,StatusCode,Duration,ClientIP,UserAgent,RequestID,ServiceName,Error\n"
 
 	for _, entry := range entries {
 		// 转义CSV特殊字符
 		url := strings.ReplaceAll(entry.URL, "\"", "\"\"")
 		userAgent := strings.ReplaceAll(entry.UserAgent, "\"", "\"\"")
 		errorMsg := strings.ReplaceAll(entry.Error, "\"", "\"\"")
+		serviceName := strings.ReplaceAll(entry.ServiceName, "\"", "\"\"")
 
-		csvData += fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+		csvData += fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
 			entry.ID,
 			entry.Timestamp.Format(time.RFC3339),
 			entry.Method,
@@ -386,6 +389,7 @@ func (qm *QueryManager) exportCSV(entries []*LogEntry) ([]byte, error) {
 			entry.ClientIP,
 			userAgent,
 			entry.RequestID,
+			serviceName,
 			errorMsg,
 		)
 	}

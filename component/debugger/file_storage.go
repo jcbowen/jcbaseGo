@@ -523,6 +523,11 @@ func (fs *FileStorage) filterEntry(entry *LogEntry, filters map[string]interface
 			if v, ok := value.(string); !ok || entry.Status != v {
 				return false
 			}
+		case "service_name":
+			// 服务标识过滤：精确匹配，与内存/数据库存储保持一致
+			if v, ok := value.(string); !ok || entry.ServiceName != v {
+				return false
+			}
 		case "has_error":
 			v, ok := value.(bool)
 			if !ok {
@@ -907,4 +912,29 @@ func (fs *FileStorage) GetStatusCodes() (map[int]int, error) {
 	}
 
 	return statusCodes, nil
+}
+
+// GetServices 获取服务标识统计（含空标识的条目计数，调用方可自行过滤空值）
+func (fs *FileStorage) GetServices() (map[string]int, error) {
+	files, err := fs.listLogFiles()
+	if err != nil {
+		return nil, err
+	}
+
+	services := make(map[string]int)
+
+	// 遍历所有日志文件统计服务标识
+	for _, file := range files {
+		entry, err := fs.readLogFile(file)
+		if err != nil {
+			continue // 跳过读取失败的文件
+		}
+		if entry == nil {
+			continue // 跳过nil条目
+		}
+
+		services[entry.ServiceName]++
+	}
+
+	return services, nil
 }

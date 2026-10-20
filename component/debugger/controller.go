@@ -126,6 +126,9 @@ func (c *Controller) registerRoutes(useCDN bool) {
 	// 获取统计信息API
 	routerGroup.GET("/api/stats", c.statsAPIHandler)
 
+	// 获取服务标识列表API（供前端筛选下拉异步加载）
+	routerGroup.GET("/api/services", c.servicesAPIHandler)
+
 	// 清理过期日志API
 	routerGroup.POST("/api/cleanup", c.cleanupAPIHandler)
 
@@ -651,6 +654,30 @@ func (c *Controller) statsAPIHandler(ctx *gin.Context) {
 	})
 }
 
+// servicesAPIHandler 服务标识列表API处理器
+// 返回存储中已有的服务标识及条目计数（过滤空标识），供前端筛选下拉异步加载
+func (c *Controller) servicesAPIHandler(ctx *gin.Context) {
+	services, err := c.debugger.GetStorage().GetServices()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": "获取服务标识列表失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 过滤空标识（未配置ServiceName的条目不进入筛选选项）
+	result := make(map[string]int)
+	for name, count := range services {
+		if name != "" {
+			result[name] = count
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"services": result,
+	})
+}
+
 // cleanupAPIHandler 清理过期日志API处理器
 func (c *Controller) cleanupAPIHandler(ctx *gin.Context) {
 	// 计算过期时间（保留期限前的日志）
@@ -696,6 +723,7 @@ func (c *Controller) cleanupAPIHandler(ctx *gin.Context) {
 //   - start_time: 开始时间（ISO格式）
 //   - end_time: 结束时间（ISO格式）
 //   - url: URL路径（支持模糊匹配）
+//   - service_name: 服务标识（精确匹配）
 //
 // 示例:
 //
@@ -741,6 +769,11 @@ func (c *Controller) parseFilters(ctx *gin.Context) map[string]interface{} {
 	// 进程状态过滤
 	if processStatus := ctx.Query("process_status"); processStatus != "" {
 		filters["process_status"] = processStatus
+	}
+
+	// 服务标识过滤（多服务共享存储时区分日志来源）
+	if serviceName := ctx.Query("service_name"); serviceName != "" {
+		filters["service_name"] = serviceName
 	}
 
 	// 时间范围过滤

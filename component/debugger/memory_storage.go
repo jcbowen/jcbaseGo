@@ -383,6 +383,11 @@ func (ms *MemoryStorage) filterEntry(entry *LogEntry, filters map[string]interfa
 			if v, ok := value.(string); !ok || entry.Status != v {
 				return false
 			}
+		case "service_name":
+			// 服务标识过滤：精确匹配，与数据库存储保持一致
+			if v, ok := value.(string); !ok || entry.ServiceName != v {
+				return false
+			}
 		case "has_error":
 			v, ok := value.(bool)
 			if !ok {
@@ -705,6 +710,22 @@ func (ms *MemoryStorage) GetStatusCodes() (map[int]int, error) {
 	}
 
 	return statusCodes, nil
+}
+
+// GetServices 获取服务标识统计（含空标识的条目计数，调用方可自行过滤空值）
+func (ms *MemoryStorage) GetServices() (map[string]int, error) {
+	ms.mutex.RLock()
+	defer ms.mutex.RUnlock()
+
+	services := make(map[string]int)
+	for _, entry := range ms.entries {
+		if entry == nil {
+			continue
+		}
+		services[entry.ServiceName]++
+	}
+
+	return services, nil
 }
 
 // ExportAll 导出所有日志到内存（返回副本）

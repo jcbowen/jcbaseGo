@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -19,6 +20,15 @@ import (
 	"github.com/jcbowen/jcbaseGo/middleware"
 )
 
+// idRand 包内独立的随机数生成器，用于 GenerateID 生成唯一标识的随机后缀。
+// 使用 rand.New(rand.NewSource(...)) 显式播种，避免依赖全局 math/rand 状态：
+// 全局源虽在 Go 1.20+ 自动播种，但若进程内其他代码调用已废弃的 rand.Seed 会影响此处随机性。
+// rand.NewSource 返回的 *rand.Rand 非并发安全，GenerateID 会被中间件并发调用，故用互斥锁保护。
+var (
+	idRandMu sync.Mutex
+	idRand   = rand.New(rand.NewSource(time.Now().UnixNano()))
+)
+
 // Config 调试器配置结构
 type Config struct {
 	Enabled          bool          `json:"enabled" default:"true" preserve:"true"` // 是否启用调试器
@@ -27,6 +37,9 @@ type Config struct {
 	Level            LogLevel      `json:"level" default:"3"`                      // 日志级别：LevelWarn
 	MaxRecords       int           `json:"max_records" default:"150"`              // 最大记录数量，默认150条
 	EnableCallerInfo bool          `json:"enable_caller_info" default:"true"`      // 是否启用调用位置信息，默认开启，关闭可提高高并发场景下的性能
+
+	// 服务标识配置
+	ServiceName string `json:"service_name" default:""` // 服务标识，用于多服务共享同一存储时区分日志来源，默认空 = 不标识
 
 	// 过滤配置
 	SkipPaths        []string `json:"skip_paths" default:""`                                                                                                               // 跳过的路径（如静态文件："/static/,/favicon.ico"）
@@ -442,7 +455,8 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 		ClientIP:       middleware.GetRealIP(c, d.config.UseCDN),
 		UserAgent:      c.Request.UserAgent(),
 		RequestID:      c.GetHeader("X-Request-ID"),
-		RecordType:     "http", // 设置记录类型为HTTP
+		ServiceName:    d.config.ServiceName, // 携带服务标识（空值时为不标识）
+		RecordType:     "http",               // 设置记录类型为HTTP
 		RequestHeaders: helper.ExtractHeaders(c.Request.Header),
 		QueryParams:    extractQueryParams(c.Request.URL.Query()),
 	}
@@ -1496,7 +1510,9 @@ func extractQueryParams(values map[string][]string) map[string]string {
 }
 
 // GenerateID 生成唯一请求标识
-// 使用纳秒时间戳和进程ID确保唯一性，经过SM4加密后输出，密文结果不包含=字符
+// 使用纳秒时间戳、进程ID和随机数确保唯一性，经过SM4加密后输出，密文结果不包含=字符
+// 注意：Windows等平台计时器精度有限，连续调用的纳秒时间戳可能相同，
+// 纯"时间戳+进程ID"组合在同进程内会重复（如多服务共享存储时日志互相覆盖），故追加随机数保证唯一性
 func GenerateID() string {
 	// 使用纳秒时间戳的后8位作为基础
 	timestamp := time.Now().UnixNano()
@@ -1505,8 +1521,13 @@ func GenerateID() string {
 	// 添加进程ID的后2位作为额外标识，避免高并发下的重复
 	pid := os.Getpid() % 100
 
-	// 组合格式：d_时间戳后8位_进程ID后2位
-	originalID := fmt.Sprintf("d_%d_%02d", idSuffix, pid)
+	// 添加4位随机数，避免同进程内时间戳相同导致的ID重复
+	idRandMu.Lock()
+	random := idRand.Intn(10000)
+	idRandMu.Unlock()
+
+	// 组合格式：d_时间戳后8位_进程ID后2位_随机数4位
+	originalID := fmt.Sprintf("d_%d_%02d_%04d", idSuffix, pid, random)
 
 	// 使用SM4加密原始ID，确保安全性和唯一性
 	sm4Instance := security.SM4{

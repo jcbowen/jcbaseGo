@@ -29,6 +29,9 @@ type Storage interface {
 	// GetStatusCodes 获取状态码统计
 	GetStatusCodes() (map[int]int, error)
 
+	// GetServices 获取服务标识统计（多服务共享存储时用于区分日志来源）
+	GetServices() (map[string]int, error)
+
 	// Close 关闭存储
 	Close() error
 }

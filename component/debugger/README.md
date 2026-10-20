@@ -439,6 +439,7 @@ func main() {
 - **流式状态筛选**: 所有流式状态 / 流式请求 / 非流式请求
 - **流式活跃状态**: 活跃流式请求 / 非流式请求
 - **错误状态筛选**: 所有错误状态 / 仅看含error / 仅看无error（基于派生严重度，见下文）
+- **服务筛选**: 所有服务 / 指定服务标识（多服务共享存储时区分日志来源，下拉选项异步加载自`api/services`接口并附带条目计数，未配置ServiceName的历史条目不进入选项）
 
 ### 派生严重度（列表error识别）
 
@@ -1294,6 +1295,8 @@ func (s *CustomStorage) FindByID(id string) (*LogEntry, error) {
 // 实现其他接口方法...
 ```
 
+> **破坏性变更提醒**：`Storage`接口已新增`GetServices() (map[string]int, error)`方法（服务标识统计，参照GetMethods实现即可），自定义存储实现升级后需补齐该方法才能通过编译。
+
 ### 进程级调试器支持
 
 调试器组件支持进程级日志记录，适用于后台任务、批处理作业、定时任务等非HTTP进程场景。
@@ -1407,6 +1410,12 @@ result, total, err := storage.FindAll(1, 10, filters)
 // 按状态码查询
 filters = map[string]interface{}{
     "status_code": 404,
+}
+result, total, err := storage.FindAll(1, 10, filters)
+
+// 按服务标识查询（多服务共享存储时区分日志来源，三种存储均支持）
+filters = map[string]interface{}{
+    "service_name": "gateway",
 }
 result, total, err := storage.FindAll(1, 10, filters)
 
@@ -1668,6 +1677,7 @@ Gin控制器提供以下功能：
 - `GET /jcbase/debug/api/logs` - 获取日志列表（JSON格式）
 - `GET /jcbase/debug/api/logs/:id` - 获取日志详情（JSON格式）
 - `GET /jcbase/debug/api/search` - 搜索日志（JSON格式）
+- `GET /jcbase/debug/api/services` - 获取服务标识列表及条目计数（JSON格式，供前端筛选下拉异步加载）
 
 ### 示例代码
 
@@ -1776,6 +1786,25 @@ dbg, err := debugger.NewWithFileStorage("/var/log/debug_logs", 5000)  // 文件�
 dbg, err := debugger.NewProductionDebugger("/var/log/debug_logs")  // 生产环境配置
 ```
 
+### 多服务共享存储（ServiceName）
+
+多个服务（如1个Gin网关 + 多个gRPC服务）可共享同一个存储（典型场景：共用MySQL同一张`debug_logs`表），日志汇聚后通过`ServiceName`区分来源：
+
+```go
+// 各服务配置各自的标识，指向同一存储
+config := &debugger.Config{
+    Enabled:     true,
+    ServiceName: "gateway", // 各服务分别配置: gateway / order-service / ...
+    Storage:     sharedDatabaseStorage, // 各服务共享同一存储实例
+}
+dbg, err := debugger.New(config)
+```
+
+- HTTP中间件记录与进程记录（`StartProcess`/`NewProcessLogger`）都会自动携带配置的`ServiceName`，默认空 = 不标识，完全向后兼容
+- Web界面的"服务筛选"下拉与`GET /api/services`接口可按服务区分和过滤；JSON/CSV导出同步包含`service_name`字段
+- 注意：共享表场景下`MaxSize`（按全表count删最旧）与`RetentionPeriod`（全表Cleanup）按全表语义生效，接入方需按汇聚后的总量配置
+- 已有存量表时，`service_name`列由`AutoMigrate`自动补充，无需手工迁移脚本
+
 ## 性能优化建议
 
 ### 生产环境配置
@@ -1863,6 +1892,7 @@ type LogEntry struct {
 	ClientIP        string            `json:"client_ip"`   // 客户端IP
 	UserAgent       string            `json:"user_agent"`  // 用户代理
 	RequestID       string            `json:"request_id"`  // 请求ID（用于追踪）
+	ServiceName     string            `json:"service_name,omitempty"` // 服务标识（多服务共享存储时区分日志来源）
 
 	// 请求信息
 	RequestHeaders map[string]string `json:"request_headers"` // 请求头
@@ -1933,6 +1963,7 @@ type Config struct {
 	MultipartSkipFiles     bool            // 是否跳过文件内容记录
 	MultipartPreserveState bool            // 是否保持Gin上下文状态
 	MiddlewareOrder        string          // 中间件执行顺序：normal/early/late
+	ServiceName            string          // 服务标识，多服务共享同一存储时区分日志来源，默认空 = 不标识
 }
 ```
 
@@ -1949,6 +1980,7 @@ type Storage interface {
 	GetStats() (map[string]interface{}, error)
 	GetMethods() (map[string]int, error)
 	GetStatusCodes() (map[int]int, error)
+	GetServices() (map[string]int, error) // 服务标识统计（多服务共享存储时用于区分日志来源）
 	Close() error
 }
 ```
@@ -1992,6 +2024,7 @@ func NewDatabaseStorage(db *gorm.DB, tableName string) (Storage, error) // 创�
 ## 版本历史
 
 - v1.0.0: 初始版本，支持基本调试功能
+- 多服务支持: 新增`ServiceName`服务标识（Config/LogEntry/三种存储过滤与统计/`GET /api/services`接口/前端服务筛选），支持多服务共享同一存储时区分日志来源；`GenerateID`追加随机数避免同进程ID重复导致共享存储日志互相覆盖
 - 后续版本计划：支持更多存储后端、实时日志流、性能监控等
 
 ## 贡献指南

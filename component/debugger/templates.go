@@ -286,6 +286,7 @@ const indexTemplate = `<!DOCTYPE html>
         /* 列表页记录类型标签 */
         .type-badge-http { background: #f3e5f5; color: #7b1fa2; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
         .type-badge-process { background: #e8f4fd; color: #1976d2; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .service-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; background: #e0f2f1; color: #00695c; margin-left: 4px; display: inline-block; white-space: nowrap; }
         
         @media (max-width: 768px) {
             .container { padding: 10px; }
@@ -470,6 +471,9 @@ const indexTemplate = `<!DOCTYPE html>
                             <option value="true">仅看含error</option>
                             <option value="false">仅看无error</option>
                         </select>
+                        <select name="service_name" id="filter-service_name" onchange="handleFilterChange(this)" title="按服务标识过滤（多服务共享存储时区分日志来源）">
+                            <option value="">所有服务</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -580,9 +584,39 @@ const indexTemplate = `<!DOCTYPE html>
                     setFilterValue('filter-process_id', 'process_id', filters.process_id);
                     setFilterValue('filter-process_status', 'process_status', filters.process_status);
                     setFilterValue('filter-has_error', 'has_error', filters.has_error);
-                    
+                    setFilterValue('filter-service_name', 'service_name', filters.service_name);
+
+                    // 异步加载服务标识下拉选项（从存储数据中提取去重）
+                    loadServiceOptions();
+
                     // 所有字段赋值完成后再根据记录类型初始化Tab和分组显隐
                     updateRecordTypeUI(document.getElementById('filter-record_type').value);
+                }
+
+                // 异步加载服务标识下拉选项
+                // 从后端 api/services 接口获取存储中已有的服务标识（去重），填充下拉框；
+                // 加载前记录当前选中值，加载后恢复，避免覆盖用户已选的筛选条件；
+                // 加载失败时保留默认选项，不影响筛选表单其他功能
+                function loadServiceOptions() {
+                    const select = document.getElementById('filter-service_name');
+                    if (!select) return;
+                    const selected = select.value;
+                    fetch('api/services').then(function(resp) {
+                        if (!resp.ok) return null;
+                        return resp.json();
+                    }).then(function(data) {
+                        if (!data || !data.services) return;
+                        // 重建选项：默认项 + 各服务标识（附带条目计数，按名称排序）
+                        select.innerHTML = '<option value="">所有服务</option>';
+                        Object.keys(data.services).sort().forEach(function(name) {
+                            const option = document.createElement('option');
+                            option.value = name;
+                            option.textContent = name + ' (' + data.services[name] + ')';
+                            select.appendChild(option);
+                        });
+                        // 恢复用户已选的服务筛选
+                        if (selected) select.value = selected;
+                    }).catch(function() { /* 加载失败时保留默认选项 */ });
                 }
                 
                 // 更新记录类型相关UI（Tab激活状态、分组显隐），不触发提交
@@ -734,6 +768,7 @@ const indexTemplate = `<!DOCTYPE html>
                             {{end}}
                             {{if .HasError}}<span class="severity-badge severity-badge-error" title="含 {{.ErrorCount}} 条error日志{{if .Error}}{{if .ErrorCount}}；{{end}}错误信息: {{.Error}}{{end}}">⚠{{if gt .ErrorCount 0}} {{.ErrorCount}}{{end}}</span>{{end}}
                             {{if gt .WarnCount 0}}<span class="severity-badge severity-badge-warn" title="含 {{.WarnCount}} 条warn日志">warn {{.WarnCount}}</span>{{end}}
+                            {{if .ServiceName}}<span class="service-badge" title="服务标识: {{.ServiceName}}">{{.ServiceName}}</span>{{end}}
                         </div>
                         <div class="details">
                             {{if eq .RecordType "process"}}
@@ -809,6 +844,7 @@ const indexTemplate = `<!DOCTYPE html>
                 process_status: {{if .Filters.process_status}}'{{.Filters.process_status}}'{{else}}null{{end}},
                 is_streaming: {{if .Filters.is_streaming}}'{{.Filters.is_streaming}}'{{else}}null{{end}},
                 has_error: {{if ne .Filters.has_error nil}}'{{.Filters.has_error}}'{{else}}null{{end}},
+                service_name: {{if .Filters.service_name}}'{{.Filters.service_name}}'{{else}}null{{end}},
                 pageSize: {{if .Filters.pageSize}}'{{.Filters.pageSize}}'{{else}}null{{end}},
                 start_time: {{if .Filters.start_time}}'{{.Filters.start_time.Format "2006-01-02T15:04:05"}}'{{else}}null{{end}},
                 end_time: {{if .Filters.end_time}}'{{.Filters.end_time.Format "2006-01-02T15:04:05"}}'{{else}}null{{end}}
