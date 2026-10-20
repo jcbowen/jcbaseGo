@@ -38,8 +38,10 @@ type LogEntryModel struct {
 	ProcessID   string    `gorm:"column:process_id;type:VARCHAR(64);index" json:"process_id"`   // 进程唯一标识
 	ProcessName string    `gorm:"column:process_name;type:VARCHAR(255)" json:"process_name"`    // 进程名称
 	ProcessType string    `gorm:"column:process_type;type:VARCHAR(50)" json:"process_type"`     // 进程类型
-	EndTime     time.Time `gorm:"column:end_time;type:DATETIME" json:"end_time"`                // 进程结束时间
-	Status      string    `gorm:"column:status;type:VARCHAR(20);index" json:"status"`           // 进程状态
+	// EndTime 进程结束时间：指针语义（nil 落库 NULL）——HTTP 条目无结束时间，进程进行中同样为 NULL；
+	// 非指针 time.Time 的 Go 零值会写出 '0000-00-00'，被 MySQL 8 严格模式（NO_ZERO_DATE）拒绝（Error 1292）
+	EndTime *time.Time `gorm:"column:end_time;type:DATETIME" json:"end_time,omitempty"`
+	Status  string     `gorm:"column:status;type:VARCHAR(20);index" json:"status"` // 进程状态
 
 	// JSON格式存储的字段
 	RequestHeaders  string `gorm:"column:request_headers;type:JSON" json:"request_headers"`
@@ -425,7 +427,6 @@ func (ds *DatabaseStorage) entryToModel(entry *LogEntry) (*LogEntryModel, error)
 		ProcessID:   entry.ProcessID,
 		ProcessName: entry.ProcessName,
 		ProcessType: entry.ProcessType,
-		EndTime:     entry.EndTime,
 		Status:      entry.Status,
 
 		// 流式响应相关字段
@@ -459,14 +460,25 @@ func (ds *DatabaseStorage) entryToModel(entry *LogEntry) (*LogEntryModel, error)
 	}
 
 	// 转换Logger日志字段
+	// JSON 列不接受空串（Error 3140 "The document is empty"）：无日志时写 "null"，
+	// 与 json.Marshal(nil) 的结果一致，读取时 Unmarshal("null") 得到 nil，语义不变
 	if len(entry.LoggerLogs) > 0 {
 		if loggerLogs, err := json.Marshal(entry.LoggerLogs); err == nil {
 			model.LoggerLogs = string(loggerLogs)
 		}
+	} else {
+		model.LoggerLogs = "null"
 	}
 
 	// 生成URL哈希（用于快速搜索）
 	model.URLHash = ds.generateURLHash(entry.URL)
+
+	// EndTime 零值落库 NULL：Go 零值 time.Time 会写出 '0000-00-00'，
+	// MySQL 8 严格模式（NO_ZERO_DATE）下报 Error 1292 导致整条日志保存失败
+	if !entry.EndTime.IsZero() {
+		t := entry.EndTime
+		model.EndTime = &t
+	}
 
 	return model, nil
 }
@@ -494,7 +506,6 @@ func (ds *DatabaseStorage) modelToEntry(model *LogEntryModel) (*LogEntry, error)
 		ProcessID:   model.ProcessID,
 		ProcessName: model.ProcessName,
 		ProcessType: model.ProcessType,
-		EndTime:     model.EndTime,
 		Status:      model.Status,
 
 		// 流式响应相关字段
@@ -540,6 +551,11 @@ func (ds *DatabaseStorage) modelToEntry(model *LogEntryModel) (*LogEntry, error)
 		if err := json.Unmarshal([]byte(model.LoggerLogs), &entry.LoggerLogs); err != nil {
 			return nil, fmt.Errorf("解析Logger日志失败: %v", err)
 		}
+	}
+
+	// 还原进程结束时间（落库时 NULL 语义，见 LogEntryModel.EndTime 注释）
+	if model.EndTime != nil {
+		entry.EndTime = *model.EndTime
 	}
 
 	return entry, nil
