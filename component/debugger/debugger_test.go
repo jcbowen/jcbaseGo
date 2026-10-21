@@ -580,7 +580,7 @@ func TestFileUploadBinaryDataHandling(t *testing.T) {
 		Level:                  LevelInfo,
 		MaxBodySize:            1024, // 1MB
 		EnableMultipartSupport: true,
-		MultipartPreserveState: true,
+		MultipartPreserveState: boolPtr(true),
 	}
 	debugger, err := New(config)
 	assert.NoError(t, err)
@@ -827,7 +827,7 @@ func TestMultipartOptimization(t *testing.T) {
 				Enabled:                true,
 				Storage:                memoryStorage,
 				EnableMultipartSupport: tc.enableMultipartSupport,
-				MultipartPreserveState: tc.multipartPreserveState,
+				MultipartPreserveState: boolPtr(tc.multipartPreserveState),
 			}
 			debugger, err := New(config)
 			assert.NoError(t, err)
@@ -930,13 +930,13 @@ func TestMultipartStateRestoration(t *testing.T) {
 		Enabled:                true,
 		Storage:                memoryStorage,
 		EnableMultipartSupport: true,
-		MultipartPreserveState: true,
+		MultipartPreserveState: boolPtr(true),
 	}
 	debugger, err := New(config)
 	assert.NoError(t, err)
 
 	t.Logf("[DEBUG] Debugger created with EnableMultipartSupport: %v, MultipartPreserveState: %v",
-		config.EnableMultipartSupport, config.MultipartPreserveState)
+		config.EnableMultipartSupport, *config.MultipartPreserveState)
 
 	// 创建multipart表单数据
 	var body bytes.Buffer
@@ -1050,7 +1050,7 @@ func TestSafeRequestBodyExtraction(t *testing.T) {
 		Enabled:                true,
 		Storage:                memoryStorage,
 		EnableMultipartSupport: true,
-		MultipartPreserveState: true,
+		MultipartPreserveState: boolPtr(true),
 	}
 	debugger, err := New(config)
 	assert.NoError(t, err)

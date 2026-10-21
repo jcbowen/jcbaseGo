@@ -18,7 +18,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
-	"github.com/jcbowen/jcbaseGo/middleware"
 )
 
 // Controller 调试器控制器结构
@@ -32,9 +31,11 @@ type Controller struct {
 // ControllerConfig 控制器配置
 type ControllerConfig struct {
 	BasePath string `json:"base_path" default:"/jcbase/debug"` // 基础路径，默认为 "/jcbase/debug"
-	UseCDN   bool   `json:"use_cdn" default:"false"`           // 是否使用CDN，默认为 false
-	Title    string `json:"title" default:"调试器"`               // 页面标题，默认为 "调试器"
-	PageSize int    `json:"page_size" default:"20"`            // 页面大小，默认为 20
+	// UseCDN 保留字段，控制器不再读取：页面鉴权统一走 ctx.ClientIP()（尊重 gin 可信代理），
+	// 记录用的 client_ip 口径由 Debugger.Config.UseCDN 决定
+	UseCDN   bool   `json:"use_cdn" default:"false"`
+	Title    string `json:"title" default:"调试器"`    // 页面标题，默认为 "调试器"
+	PageSize int    `json:"page_size" default:"20"` // 页面大小，默认为 20
 }
 
 // Pagination 分页信息
@@ -82,14 +83,23 @@ func NewController(debugger *Debugger, router *gin.Engine, config *ControllerCon
 
 	// 如果提供了路由引擎，自动注册路由
 	if router != nil {
-		controller.registerRoutes(config.UseCDN)
+		controller.registerRoutes()
 	}
 
 	return controller
 }
 
 // registerRoutes 注册调试器页面的路由
-func (c *Controller) registerRoutes(useCDN bool) {
+// 白名单为空时默认不注册（fail-closed），详见 isWhitelistConfigured
+// 鉴权不再依赖 use_cdn 取 IP，故此处无需传入该配置
+func (c *Controller) registerRoutes() {
+	if !c.isWhitelistConfigured() {
+		log.Printf("debugger 页面路由未注册：allowed_ips 为空且 allow_empty_whitelist=false（fail-closed）。" +
+			"调试页会展示全量请求日志，公网可达时等同凭据泄露；请配置 IP 白名单，" +
+			"或确认环境可信后显式设置 allow_empty_whitelist=true 恢复旧行为")
+		return
+	}
+
 	// 创建路由组，确保基础路径以 / 开头且不含重复斜杠
 	basePath := c.basePath
 	if !strings.HasPrefix(basePath, "/") {
@@ -98,7 +108,7 @@ func (c *Controller) registerRoutes(useCDN bool) {
 	routerGroup := c.router.Group(basePath)
 
 	// 添加IP访问控制中间件
-	routerGroup.Use(c.ipAccessControlMiddleware(useCDN))
+	routerGroup.Use(c.ipAccessControlMiddleware())
 
 	// 静态资源服务（JSON 查看器依赖的 js 库等）
 	routerGroup.StaticFS("/static", getStaticFileSystem())
@@ -138,19 +148,23 @@ func (c *Controller) registerRoutes(useCDN bool) {
 
 // ipAccessControlMiddleware IP访问控制中间件
 // 检查客户端IP是否在允许的白名单中，如果配置了白名单但IP不在其中，返回403禁止访问
-func (c *Controller) ipAccessControlMiddleware(useCDN bool) gin.HandlerFunc {
+func (c *Controller) ipAccessControlMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		// 获取调试器配置
 		config := c.debugger.GetConfig()
 
-		// 如果没有配置IP白名单，允许所有访问
+		// 没有配置IP白名单：仅在调用方显式 AllowEmptyWhitelist=true 时才可能走到这里，按旧行为放行
 		if len(config.AllowedIPs) == 0 {
 			ctx.Next()
 			return
 		}
 
-		// 获取客户端IP地址
-		clientIP := middleware.GetRealIP(ctx, useCDN) // 默认不使用CDN
+		// 鉴权一律使用 ctx.ClientIP()：它只在 gin 的可信代理（SetTrustedProxies）范围内采信代理头，
+		// 而 use_cdn 走的 GetRealIPWithFilter 会无条件读 X-Real-IP/X-Forwarded-For 等可伪造头，
+		// 用它鉴权等于白名单形同虚设。useCDN 仅影响记录用的 entry.ClientIP，不参与鉴权判定。
+		// 前提：宿主应用须正确配置 SetTrustedProxies（gin 默认为「信任所有代理」，
+		// 直连公网且未设置时仍存在 XFF 伪造面，该责任在业务侧而非组件侧）
+		clientIP := ctx.ClientIP()
 
 		// 检查IP是否在白名单中
 		if c.isIPAllowed(clientIP, config.AllowedIPs) {
@@ -158,9 +172,8 @@ func (c *Controller) ipAccessControlMiddleware(useCDN bool) gin.HandlerFunc {
 			return
 		}
 
-		log.Println("debugger禁止访问")
-		headerJson, _ := json.Marshal(ctx.Request.Header)
-		log.Println("Request Header:", string(headerJson))
+		// 仅记录来源与拒绝原因：原先此处会打印整份请求头，等于把 Authorization/Cookie 原文写进进程日志
+		log.Printf("debugger 禁止访问：client_ip=%s path=%s", clientIP, ctx.Request.URL.Path)
 
 		// IP不在白名单中，返回403禁止访问
 		ctx.JSON(http.StatusForbidden, gin.H{
@@ -169,6 +182,21 @@ func (c *Controller) ipAccessControlMiddleware(useCDN bool) gin.HandlerFunc {
 		})
 		ctx.Abort()
 	}
+}
+
+// isWhitelistConfigured 判断调试器页面是否允许注册路由
+// 语义：配置了白名单即放行注册；白名单为空时由 AllowEmptyWhitelist 决定
+// （default false = fail-closed，只记日志不暴露页面；显式 true = 沿用历史行为直接暴露）
+// 绕过 New 直接构造的实例（config 为 nil）按 fail-closed 处理
+func (c *Controller) isWhitelistConfigured() bool {
+	config := c.debugger.GetConfig()
+	if config == nil {
+		return false
+	}
+	if len(config.AllowedIPs) > 0 {
+		return true
+	}
+	return config.AllowEmptyWhitelist
 }
 
 // isIPAllowed 检查IP是否在允许的白名单中
@@ -679,9 +707,18 @@ func (c *Controller) servicesAPIHandler(ctx *gin.Context) {
 }
 
 // cleanupAPIHandler 清理过期日志API处理器
+// 保留期为非正值时拒绝执行：删除条件是 timestamp < now-RetentionPeriod，
+// 保留期为 0 会退化成「删除全表」，该接口不提供清空日志的语义
 func (c *Controller) cleanupAPIHandler(ctx *gin.Context) {
-	// 计算过期时间（保留期限前的日志）
 	retentionPeriod := c.debugger.GetConfig().RetentionPeriod
+	if retentionPeriod <= 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"error": "未配置有效的日志保留期限（retention_period <= 0），已拒绝清理",
+		})
+		return
+	}
+
+	// 计算过期时间（保留期限前的日志）
 	before := time.Now().Add(-retentionPeriod)
 
 	err := c.debugger.GetStorage().Cleanup(before)
@@ -1046,7 +1083,7 @@ func getTemplateContent(templateName string) string {
 // 用于在初始化时没有传入路由组的情况
 func (c *Controller) RegisterRoutes(router *gin.Engine) {
 	c.router = router
-	c.registerRoutes(c.config.UseCDN)
+	c.registerRoutes()
 }
 
 // GetBasePath 获取基础路径

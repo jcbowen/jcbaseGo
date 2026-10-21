@@ -35,3 +35,19 @@ type Storage interface {
 	// Close 关闭存储
 	Close() error
 }
+
+// isCleanupBoundaryValid 判断过期清理时间点是否可用
+// 各存储实现的 Cleanup 删除条件都是 timestamp < before，
+// before 为零值或不早于当前时间时会命中全部记录（等同于清空日志），必须拒绝
+// 参数：
+//   - before: 清理时间点
+//
+// 返回值：
+//   - bool: true 表示可以安全执行清理
+//
+// 使用示例：
+//
+//	if !isCleanupBoundaryValid(before) { return fmt.Errorf("非法的清理时间点 %v", before) }
+func isCleanupBoundaryValid(before time.Time) bool {
+	return !before.IsZero() && before.Before(time.Now())
+}

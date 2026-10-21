@@ -20,6 +20,7 @@ func TestControllerInitialization(t *testing.T) {
 		storage, _ := NewMemoryStorage()
 		config := &Config{}
 		config.Storage = storage
+		config.AllowEmptyWhitelist = true // 用例只验证页面/接口行为，显式放开注册（默认白名单为空即 fail-closed）
 		dbg, _ := New(config)
 
 		// 创建Gin引擎并注册路由以初始化控制器
@@ -40,6 +41,7 @@ func TestControllerInitialization(t *testing.T) {
 		storage, _ := NewMemoryStorage()
 		config := &Config{}
 		config.Storage = storage
+		config.AllowEmptyWhitelist = true // 用例只验证页面/接口行为，显式放开注册（默认白名单为空即 fail-closed）
 		dbg, _ := New(config)
 
 		// 自定义控制器配置
@@ -71,6 +73,7 @@ func TestControllerInitialization(t *testing.T) {
 		storage, _ := NewMemoryStorage()
 		config := &Config{}
 		config.Storage = storage
+		config.AllowEmptyWhitelist = true // 用例只验证页面/接口行为，显式放开注册（默认白名单为空即 fail-closed）
 		dbg, _ := New(config)
 
 		// 注册路由
@@ -141,8 +144,9 @@ func TestControllerHandlers(t *testing.T) {
 
 		// 创建调试器实例（启用调试器，不跳过任何路径）
 		config := &Config{
-			Enabled:   true,
-			SkipPaths: []string{}, // 清空跳过路径，确保记录所有请求
+			Enabled:             true,
+			SkipPaths:           []string{}, // 清空跳过路径，确保记录所有请求
+			AllowEmptyWhitelist: true,       // 用例只验证页面/接口行为，显式放开注册
 		}
 		config.Storage = storage
 		dbg, _ := New(config)
@@ -174,8 +178,9 @@ func TestControllerHandlers(t *testing.T) {
 
 		// 创建调试器实例（启用调试器，不跳过任何路径）
 		config := &Config{
-			Enabled:   true,
-			SkipPaths: []string{}, // 清空跳过路径，确保记录所有请求
+			Enabled:             true,
+			SkipPaths:           []string{}, // 清空跳过路径，确保记录所有请求
+			AllowEmptyWhitelist: true,       // 用例只验证页面/接口行为，显式放开注册
 		}
 		config.Storage = storage
 		dbg, _ := New(config)
@@ -208,8 +213,9 @@ func TestControllerHandlers(t *testing.T) {
 
 		// 创建调试器实例，明确设置SkipPaths为空以确保记录所有请求
 		config := &Config{
-			Enabled:   true,
-			SkipPaths: []string{}, // 清空跳过路径，确保记录所有请求
+			Enabled:             true,
+			SkipPaths:           []string{}, // 清空跳过路径，确保记录所有请求
+			AllowEmptyWhitelist: true,       // 用例只验证页面/接口行为，显式放开注册
 		}
 		config.Storage = storage
 		dbg, _ := New(config)
@@ -237,8 +243,9 @@ func TestControllerHandlers(t *testing.T) {
 
 		// 创建调试器实例，明确设置SkipPaths为空以确保记录所有请求
 		config := &Config{
-			Enabled:   true,
-			SkipPaths: []string{}, // 清空跳过路径，确保记录所有请求
+			Enabled:             true,
+			SkipPaths:           []string{}, // 清空跳过路径，确保记录所有请求
+			AllowEmptyWhitelist: true,       // 用例只验证页面/接口行为，显式放开注册
 		}
 		config.Storage = storage
 		dbg, _ := New(config)
@@ -293,8 +300,9 @@ func TestControllerAPIHandlers(t *testing.T) {
 
 		// 创建调试器实例，明确设置SkipPaths为空以确保记录所有请求
 		config := &Config{
-			Enabled:   true,
-			SkipPaths: []string{}, // 清空跳过路径，确保记录所有请求
+			Enabled:             true,
+			SkipPaths:           []string{}, // 清空跳过路径，确保记录所有请求
+			AllowEmptyWhitelist: true,       // 用例只验证页面/接口行为，显式放开注册
 		}
 		config.Storage = storage
 		dbg, _ := New(config)
@@ -346,9 +354,10 @@ func TestControllerAPIHandlers(t *testing.T) {
 
 		// 创建调试器实例，明确设置配置参数确保测试请求被记录
 		config := &Config{
-			Enabled:    true,
-			SkipPaths:  []string{}, // 空数组确保不跳过任何路径
-			SampleRate: 1.0,        // 设置采样率为1.0，确保记录所有请求
+			Enabled:             true,
+			SkipPaths:           []string{}, // 空数组确保不跳过任何路径
+			SampleRate:          1.0,        // 设置采样率为1.0，确保记录所有请求
+			AllowEmptyWhitelist: true,       // 用例只验证页面/接口行为，显式放开注册
 		}
 		config.Storage = storage
 		dbg, _ := New(config)
@@ -390,9 +399,10 @@ func TestControllerAPIHandlers(t *testing.T) {
 
 		// 创建调试器实例，明确设置配置参数确保测试请求被记录
 		config := &Config{
-			Enabled:    true,
-			SkipPaths:  []string{}, // 空数组确保不跳过任何路径
-			SampleRate: 1.0,        // 设置采样率为1.0，确保所有请求都被记录
+			Enabled:             true,
+			SkipPaths:           []string{}, // 空数组确保不跳过任何路径
+			SampleRate:          1.0,        // 设置采样率为1.0，确保所有请求都被记录
+			AllowEmptyWhitelist: true,       // 用例只验证页面/接口行为，显式放开注册
 		}
 		config.Storage = storage
 		dbg, _ := New(config)
@@ -436,9 +446,10 @@ func TestControllerAPIHandlers(t *testing.T) {
 
 		// 创建调试器实例，明确设置配置参数确保测试请求被记录
 		config := &Config{
-			Enabled:    true,
-			SkipPaths:  []string{}, // 空数组确保不跳过任何路径
-			SampleRate: 1.0,        // 确保所有请求都被记录
+			Enabled:             true,
+			SkipPaths:           []string{}, // 空数组确保不跳过任何路径
+			SampleRate:          1.0,        // 确保所有请求都被记录
+			AllowEmptyWhitelist: true,       // 用例只验证页面/接口行为，显式放开注册
 		}
 		config.Storage = storage
 		dbg, _ := New(config)
@@ -475,6 +486,7 @@ func TestControllerTemplateRendering(t *testing.T) {
 		storage, _ := NewMemoryStorage()
 		config := &Config{}
 		config.Storage = storage
+		config.AllowEmptyWhitelist = true // 用例只验证页面/接口行为，显式放开注册（默认白名单为空即 fail-closed）
 		dbg, _ := New(config)
 
 		// 创建Gin引擎并注册路由以初始化控制器
@@ -510,6 +522,7 @@ func TestControllerTemplateRendering(t *testing.T) {
 		storage, _ := NewMemoryStorage()
 		config := &Config{}
 		config.Storage = storage
+		config.AllowEmptyWhitelist = true // 用例只验证页面/接口行为，显式放开注册（默认白名单为空即 fail-closed）
 		dbg, _ := New(config)
 
 		// 创建Gin引擎并注册路由以初始化控制器
@@ -568,8 +581,9 @@ func TestJSONViewerIntegration(t *testing.T) {
 
 	// 创建调试器实例
 	config := &Config{
-		Enabled:   true,
-		SkipPaths: []string{},
+		Enabled:             true,
+		SkipPaths:           []string{},
+		AllowEmptyWhitelist: true, // 用例只验证页面/接口行为，显式放开注册
 	}
 	config.Storage = storage
 	dbg, _ := New(config)
@@ -617,6 +631,7 @@ func TestControllerPagination(t *testing.T) {
 		storage, _ := NewMemoryStorage()
 		config := &Config{}
 		config.Storage = storage
+		config.AllowEmptyWhitelist = true // 用例只验证页面/接口行为，显式放开注册（默认白名单为空即 fail-closed）
 		dbg, _ := New(config)
 
 		// 注册路由以初始化控制器
@@ -650,6 +665,7 @@ func TestControllerPagination(t *testing.T) {
 		storage, _ := NewMemoryStorage()
 		config := &Config{}
 		config.Storage = storage
+		config.AllowEmptyWhitelist = true // 用例只验证页面/接口行为，显式放开注册（默认白名单为空即 fail-closed）
 		dbg, _ := New(config)
 
 		// 获取控制器
@@ -677,6 +693,7 @@ func TestControllerPagination(t *testing.T) {
 		storage, _ := NewMemoryStorage()
 		config := &Config{}
 		config.Storage = storage
+		config.AllowEmptyWhitelist = true // 用例只验证页面/接口行为，显式放开注册（默认白名单为空即 fail-closed）
 		dbg, _ := New(config)
 
 		// 获取控制器
@@ -715,38 +732,108 @@ func TestIPAccessControl(t *testing.T) {
 		},
 	}
 
-	t.Run("无IP限制配置-允许所有访问", func(t *testing.T) {
+	t.Run("空白名单默认fail-closed-不注册页面路由", func(t *testing.T) {
 		// 创建内存存储并添加测试数据
 		storage, _ := NewMemoryStorage()
 		for _, log := range testLogs {
 			_ = storage.Save(log)
 		}
 
-		// 创建调试器实例，不配置IP白名单
+		// 创建调试器实例，不配置IP白名单，也不显式放开
 		config := &Config{
 			Enabled:    true,
 			SkipPaths:  []string{},
 			SampleRate: 1.0,
-			AllowedIPs: []string{}, // 空数组表示不限制
+			AllowedIPs: []string{}, // 空数组 + allow_empty_whitelist=false → fail-closed
 		}
 		config.Storage = storage
 		dbg, _ := New(config)
 
-		// 创建Gin引擎和测试请求
 		router := gin.New()
 		dbg.RegisterRoutes(router)
 
-		// 使用不同IP地址的请求
+		// 路由未注册：任何来源IP都拿不到页面
 		req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
 		req.Header.Set("X-Forwarded-For", "192.168.1.100,10.0.0.1")
 		w := httptest.NewRecorder()
-
-		// 执行请求
 		router.ServeHTTP(w, req)
 
-		// 验证响应 - 应该允许访问
+		assert.Equal(t, http.StatusNotFound, w.Code, "空白名单不应暴露调试页面")
+		assert.Empty(t, router.Routes(), "fail-closed 时不应注册任何控制器路由")
+	})
+
+	t.Run("显式AllowEmptyWhitelist-沿用开放行为", func(t *testing.T) {
+		storage, _ := NewMemoryStorage()
+		for _, log := range testLogs {
+			_ = storage.Save(log)
+		}
+
+		config := &Config{
+			Enabled:             true,
+			SkipPaths:           []string{},
+			SampleRate:          1.0,
+			AllowEmptyWhitelist: true, // 调用方确认环境可信后显式放开
+		}
+		config.Storage = storage
+		dbg, _ := New(config)
+
+		router := gin.New()
+		dbg.RegisterRoutes(router)
+
+		req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
 		assert.Equal(t, http.StatusOK, w.Code)
 		assert.Contains(t, w.Body.String(), "日志列表")
+	})
+
+	t.Run("鉴权只看ClientIP-伪造头与可信代理", func(t *testing.T) {
+		storage, _ := NewMemoryStorage()
+		for _, log := range testLogs {
+			_ = storage.Save(log)
+		}
+
+		// use_cdn=true 时旧实现会用 GetRealIP 无条件采信 X-Real-IP 等头，伪造即可越过白名单；
+		// 现在鉴权统一交给 ctx.ClientIP()，代理头是否采信由宿主的 SetTrustedProxies 决定
+		config := &Config{
+			Enabled:    true,
+			SkipPaths:  []string{},
+			SampleRate: 1.0,
+			UseCDN:     true,
+			AllowedIPs: []string{"192.168.1.100"},
+		}
+		config.Storage = storage
+		dbg, _ := New(config)
+
+		t.Run("无可信代理时伪造X-Real-IP被拒", func(t *testing.T) {
+			router := gin.New()
+			assert.NoError(t, router.SetTrustedProxies(nil))
+			dbg.RegisterRoutes(router)
+
+			req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
+			req.Header.Set("X-Real-IP", "192.168.1.100") // 伪造白名单内IP
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			// ClientIP 回落到直连地址（httptest 固定为 192.0.2.1），不在白名单 → 403
+			assert.Equal(t, http.StatusForbidden, w.Code, "未受信代理转发的伪造头不应绕过白名单")
+		})
+
+		t.Run("可信代理转发的XFF正常采信", func(t *testing.T) {
+			router := gin.New()
+			// 192.0.2.1 视为站内反向代理
+			assert.NoError(t, router.SetTrustedProxies([]string{"192.0.2.0/24"}))
+			dbg.RegisterRoutes(router)
+
+			req := httptest.NewRequest("GET", "/jcbase/debug/list", nil)
+			req.Header.Set("X-Forwarded-For", "192.168.1.100")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code, "可信代理给出的真实来源IP应命中白名单")
+			assert.Contains(t, w.Body.String(), "日志列表")
+		})
 	})
 
 	t.Run("有IP限制配置-允许白名单IP访问", func(t *testing.T) {
@@ -948,8 +1035,9 @@ func TestControllerIntegration(t *testing.T) {
 
 		// 创建调试器实例，明确设置配置参数确保测试请求被记录
 		config := &Config{
-			Enabled:   true,
-			SkipPaths: []string{}, // 空数组确保不跳过任何路径
+			Enabled:             true,
+			SkipPaths:           []string{}, // 空数组确保不跳过任何路径
+			AllowEmptyWhitelist: true,       // 用例只验证页面/接口行为，显式放开注册
 		}
 		config.Storage = storage
 		dbg, _ := New(config)
@@ -1035,7 +1123,7 @@ func TestControllerReverseProxySubpath(t *testing.T) {
 		URL:        "/api/test",
 		StatusCode: 200,
 	})
-	config := &Config{Enabled: true, SkipPaths: []string{}}
+	config := &Config{Enabled: true, SkipPaths: []string{}, AllowEmptyWhitelist: true}
 	config.Storage = storage
 	dbg, _ := New(config)
 

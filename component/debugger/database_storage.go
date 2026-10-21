@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // DatabaseStorage 数据库存储器实现
@@ -16,7 +18,20 @@ type DatabaseStorage struct {
 	db        *gorm.DB // 数据库连接
 	tableName string   // 数据表名
 	maxSize   int      // 最大存储条目数
+
+	// writesSinceCheck 距上次上限检查的写入条数（原子计数）。
+	// maxSize 的裁剪按 sizeCheckEveryWrites 均摊，避免每个请求都 COUNT(*) 全表
+	writesSinceCheck int64
+
+	// logger 裁剪等内部操作的日志记录器（可选）。
+	// 经 Debugger.New 创建时自动注入实例 logger；独立创建时可通过 SetLogger 设置，
+	// 未设置时退回标准输出。应在并发写入开始前设置完毕
+	logger LoggerInterface
 }
+
+// sizeCheckEveryWrites 上限裁剪的检查频率：每写入这么多条才做一次总数统计并裁剪超额记录。
+// 因此 maxSize 是近似上限（最多晚一个检查周期收敛），换取写入路径上 COUNT(*) 的均摊成本
+const sizeCheckEveryWrites = 256
 
 // LogEntryModel 数据库模型结构
 // 对应数据库中的日志条目表，支持HTTP记录和进程记录
@@ -34,10 +49,10 @@ type LogEntryModel struct {
 	ServiceName string    `gorm:"column:service_name;type:VARCHAR(100);index" json:"service_name"` // 服务标识（多服务共享表时区分日志来源）
 
 	// 记录类型和进程相关字段
-	RecordType  string    `gorm:"column:record_type;type:VARCHAR(20);index" json:"record_type"` // 记录类型：http/process
-	ProcessID   string    `gorm:"column:process_id;type:VARCHAR(64);index" json:"process_id"`   // 进程唯一标识
-	ProcessName string    `gorm:"column:process_name;type:VARCHAR(255)" json:"process_name"`    // 进程名称
-	ProcessType string    `gorm:"column:process_type;type:VARCHAR(50)" json:"process_type"`     // 进程类型
+	RecordType  string `gorm:"column:record_type;type:VARCHAR(20);index" json:"record_type"` // 记录类型：http/process
+	ProcessID   string `gorm:"column:process_id;type:VARCHAR(64);index" json:"process_id"`   // 进程唯一标识
+	ProcessName string `gorm:"column:process_name;type:VARCHAR(255)" json:"process_name"`    // 进程名称
+	ProcessType string `gorm:"column:process_type;type:VARCHAR(50)" json:"process_type"`     // 进程类型
 	// EndTime 进程结束时间：指针语义（nil 落库 NULL）——HTTP 条目无结束时间，进程进行中同样为 NULL；
 	// 非指针 time.Time 的 Go 零值会写出 '0000-00-00'，被 MySQL 8 严格模式（NO_ZERO_DATE）拒绝（Error 1292）
 	EndTime *time.Time `gorm:"column:end_time;type:DATETIME" json:"end_time,omitempty"`
@@ -104,6 +119,41 @@ func NewDatabaseStorage(db *gorm.DB, maxSize int, tableName ...string) (*Databas
 	return ds, nil
 }
 
+// SetLogger 设置内部操作（上限裁剪等）的日志记录器
+// 经 Debugger.New 创建时会自动注入实例 logger，无需手动调用；
+// 独立创建存储器时可显式设置，未设置时错误退回标准输出。
+// 应在并发写入开始前调用（Save 路径会并发读取该字段）
+//
+// 参数：
+//   - logger: 日志记录器实例，传 nil 恢复标准输出兜底
+//
+// 返回值：
+//   - *DatabaseStorage: 支持链式调用
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	store, _ := NewDatabaseStorage(db, 1000)
+//	store.SetLogger(myLogger)
+func (ds *DatabaseStorage) SetLogger(logger LoggerInterface) *DatabaseStorage {
+	ds.logger = logger
+	return ds
+}
+
+// logError 记录内部操作错误：优先走实例 logger，未配置时退回标准输出，保证错误可见
+// 参数：
+//   - msg: 错误描述
+//
+// 返回值：无
+// 异常：不触发 panic
+func (ds *DatabaseStorage) logError(msg string) {
+	if ds.logger != nil {
+		ds.logger.Error(msg)
+		return
+	}
+	fmt.Println(msg)
+}
+
 // autoMigrate 自动迁移表结构
 func (ds *DatabaseStorage) autoMigrate() error {
 	// 创建临时模型用于迁移
@@ -114,59 +164,76 @@ func (ds *DatabaseStorage) autoMigrate() error {
 }
 
 // Save 保存日志条目到数据库
+// 以主键 upsert 一次落库：HTTP 条目用新生成的 ID 插入，
+// 进程条目以同一 ID 二次保存补全结束时间与结果，两条路径共用同一条语句，
+// 省去原先「COUNT(*) + 存在性 SELECT + Create/Save」三次往返
 func (ds *DatabaseStorage) Save(entry *LogEntry) error {
-	// 检查是否超过最大存储限制
-	if ds.maxSize > 0 {
-		// 获取当前记录总数
-		var count int64
-		if err := ds.db.Table(ds.tableName).Count(&count).Error; err != nil {
-			return fmt.Errorf("获取记录总数失败: %v", err)
-		}
-
-		// 如果超过最大限制，删除最旧的条目
-		if count >= int64(ds.maxSize) {
-			// 查找最旧的记录ID
-			var oldestModel LogEntryModel
-			result := ds.db.Table(ds.tableName).Order("timestamp ASC").First(&oldestModel)
-			if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
-				return fmt.Errorf("查找最旧记录失败: %v", result.Error)
-			}
-
-			// 删除最旧的记录
-			if result.Error == nil {
-				if err := ds.db.Table(ds.tableName).Where("id = ?", oldestModel.ID).Delete(&LogEntryModel{}).Error; err != nil {
-					return fmt.Errorf("删除最旧记录失败: %v", err)
-				}
-			}
-		}
-	}
-
 	// 转换为数据库模型
 	model, err := ds.entryToModel(entry)
 	if err != nil {
 		return fmt.Errorf("转换日志条目失败: %v", err)
 	}
 
-	// 检查记录是否已存在
-	var existingModel LogEntryModel
-	result := ds.db.Table(ds.tableName).Where("id = ?", entry.ID).First(&existingModel)
-
-	if result.Error == nil {
-		// 记录已存在，执行更新操作
-		result = ds.db.Table(ds.tableName).Where("id = ?", entry.ID).Save(model)
-	} else if result.Error == gorm.ErrRecordNotFound {
-		// 记录不存在，执行创建操作
-		result = ds.db.Table(ds.tableName).Create(model)
-	} else {
-		// 其他错误
-		return fmt.Errorf("检查记录是否存在失败: %v", result.Error)
+	// 显式指定冲突列为 id：MySQL 方言会译成 ON DUPLICATE KEY UPDATE，
+	// SQLite 等方言要求 DO UPDATE 必须带冲突目标，写上保证跨方言可用
+	if err := ds.db.Table(ds.tableName).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			UpdateAll: true,
+		}).Create(model).Error; err != nil {
+		return fmt.Errorf("保存日志条目失败: %v", err)
 	}
 
-	if result.Error != nil {
-		return fmt.Errorf("保存日志条目失败: %v", result.Error)
-	}
+	ds.trimIfNeeded()
 
 	return nil
+}
+
+// trimIfNeeded 按写入计数均摊触发上限裁剪，避免每条记录都 COUNT(*) 全表
+// 参数：无
+// 返回值：无（未配置 maxSize 或未达检查频率时直接返回）
+// 异常：不触发 panic
+func (ds *DatabaseStorage) trimIfNeeded() {
+	if ds.maxSize <= 0 {
+		return
+	}
+	if atomic.AddInt64(&ds.writesSinceCheck, 1) < sizeCheckEveryWrites {
+		return
+	}
+	atomic.StoreInt64(&ds.writesSinceCheck, 0)
+
+	ds.trimToMaxSize()
+}
+
+// trimToMaxSize 把表内记录数裁剪到 maxSize：统计总数后按时间正序删除超额的最旧记录
+// 参数：无
+// 返回值：无（失败经 logError 记录，不阻断写日志主流程）
+// 异常：不触发 panic
+func (ds *DatabaseStorage) trimToMaxSize() {
+	var count int64
+	if err := ds.db.Table(ds.tableName).Count(&count).Error; err != nil {
+		ds.logError(fmt.Sprintf("debugger 数据库存储：获取记录总数失败: %v", err))
+		return
+	}
+
+	excess := int(count) - ds.maxSize
+	if excess <= 0 {
+		return
+	}
+
+	var oldestIDs []string
+	if err := ds.db.Table(ds.tableName).Order("timestamp ASC").Limit(excess).Pluck("id", &oldestIDs).Error; err != nil {
+		ds.logError(fmt.Sprintf("debugger 数据库存储：查找最旧记录失败: %v", err))
+		return
+	}
+
+	if len(oldestIDs) == 0 {
+		return
+	}
+
+	if err := ds.db.Table(ds.tableName).Where("id IN ?", oldestIDs).Delete(&LogEntryModel{}).Error; err != nil {
+		ds.logError(fmt.Sprintf("debugger 数据库存储：删除最旧记录失败: %v", err))
+	}
 }
 
 // FindByID 根据ID查找日志条目
@@ -285,6 +352,11 @@ func (ds *DatabaseStorage) Search(keyword string, page, pageSize int, filters ma
 
 // Cleanup 清理过期日志
 func (ds *DatabaseStorage) Cleanup(before time.Time) error {
+	// 保留期配置出错时应拒绝执行，而不是按「timestamp < now」静默清空整表
+	if !isCleanupBoundaryValid(before) {
+		return fmt.Errorf("非法的清理时间点 %v：before 必须早于当前时间", before)
+	}
+
 	result := ds.db.Table(ds.tableName).Where("timestamp < ?", before).Delete(&LogEntryModel{})
 	if result.Error != nil {
 		return fmt.Errorf("清理过期日志失败: %v", result.Error)

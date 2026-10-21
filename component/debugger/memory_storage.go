@@ -258,6 +258,11 @@ func (ms *MemoryStorage) Search(keyword string, page, pageSize int, filters map[
 
 // Cleanup 清理过期日志
 func (ms *MemoryStorage) Cleanup(before time.Time) error {
+	// 与 DatabaseStorage 同口径：非法时间点会让「timestamp < before」命中全部条目
+	if !isCleanupBoundaryValid(before) {
+		return fmt.Errorf("非法的清理时间点 %v：before 必须早于当前时间", before)
+	}
+
 	ms.mutex.Lock()
 	defer ms.mutex.Unlock()
 
@@ -281,11 +286,10 @@ func (ms *MemoryStorage) Cleanup(before time.Time) error {
 		}
 	}
 
-	// 清空剩余的位置
-	for i := 0; i < ms.maxSize; i++ {
-		if i >= newCount {
-			ms.entries[(newHead+i)%ms.maxSize] = nil
-		}
+	// 保留条目被紧凑地重放到 [0, newCount) 区间，其余槽位一律清空。
+	// 旧写法按 (newHead+i) 取模从 newHead 之后开始清，会绕回下标 0 抹掉刚保留的第一条
+	for i := newCount; i < ms.maxSize; i++ {
+		ms.entries[i] = nil
 	}
 
 	// 更新头部和计数

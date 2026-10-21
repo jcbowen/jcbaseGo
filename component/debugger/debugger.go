@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jcbowen/jcbaseGo/component/helper"
@@ -34,8 +35,11 @@ type Config struct {
 	Enabled         bool          `json:"enabled" default:"true" preserve:"true"` // 是否启用调试器
 	MaxBodySize     int64         `json:"max_body_size" default:"1024"`           // 最大请求/响应体大小（KB），默认1MB
 	RetentionPeriod time.Duration `json:"retention_period" default:"168h"`        // 日志保留期限，默认7天
-	Level           LogLevel      `json:"level" default:"3"`                      // 日志级别：LevelWarn
-	MaxRecords      int           `json:"max_records" default:"150"`              // 最大记录数量，默认150条
+	// CleanupInterval 过期日志自动清理的执行间隔，默认24小时。
+	// 仅在调用方显式调用 StartPeriodicCleanup 时生效；<=0 归一化为默认值。
+	CleanupInterval time.Duration `json:"cleanup_interval" default:"24h"`
+	Level           LogLevel      `json:"level" default:"3"`         // 日志级别：LevelWarn
+	MaxRecords      int           `json:"max_records" default:"150"` // 最大记录数量，默认150条
 	// EnableCallerInfo 是否启用调用位置信息（关闭可提高高并发场景下的性能）。
 	// 与 AutoSkipStatic 同理使用 *bool 三态：nil（JSON 未配置）默认开启，显式 false 生效关闭，
 	// 避免 bool + default:"true" 的默认值机制把显式设置的 false 强制改回 true 导致开关失效
@@ -59,9 +63,24 @@ type Config struct {
 	// 采样配置
 	SampleRate float64 `json:"sample_rate" default:"1.0"` // 采样率（0-1之间），默认记录所有请求
 
+	// 凭据掩码配置
+	// HeaderMaskKeys 追加到内置默认头名集合（authorization、cookie 等）之后参与掩码，
+	// 不提供覆盖能力：默认集合按「宁可多掩」取向固化，避免下游配置写错造成明文入库
+	HeaderMaskKeys []string `json:"header_mask_keys" default:""`
+	// BodyMaskKeys 追加到内置默认字段名集合（password、token、sms_code 等）之后，
+	// 作用于查询参数与请求/响应体
+	BodyMaskKeys []string `json:"body_mask_keys" default:""`
+	// BodyMaskEnabled 是否启用凭据掩码。
+	// 与 AutoSkipStatic 同理使用 *bool 三态：nil（JSON 未配置）默认开启，显式 false 生效关闭；
+	// 关闭会让密码、验证码、令牌原文写入存储与页面，仅建议本地一次性排查时使用
+	BodyMaskEnabled *bool `json:"body_mask_enabled"`
+
 	// IP访问控制配置
-	AllowedIPs []string `json:"allowed_ips" default:""`                  // 允许访问的IP白名单，空数组表示不限制
-	UseCDN     bool     `json:"use_cdn" default:"false" preserve:"true"` // 是否使用CDN，影响真实IP获取方式
+	AllowedIPs []string `json:"allowed_ips" default:""` // 页面访问IP白名单（支持IP与CIDR）；为空时默认不注册页面路由
+	// AllowEmptyWhitelist 白名单为空时是否仍然开放调试页面（默认 false = fail-closed）。
+	// 调试页会输出全量请求日志，无白名单等于把凭据交给任意访问者；需要沿用旧行为的消费方显式置 true
+	AllowEmptyWhitelist bool `json:"allow_empty_whitelist" default:"false" preserve:"true"`
+	UseCDN              bool `json:"use_cdn" default:"false" preserve:"true"` // 是否使用CDN，仅影响记录（entry.ClientIP）的取IP方式，不参与页面鉴权
 
 	// 流式请求配置
 	EnableStreamingSupport bool  `json:"enable_streaming_support" default:"false" preserve:"true"` // 是否启用流式请求支持
@@ -70,10 +89,17 @@ type Config struct {
 	MaxStreamingMemory     int64 `json:"max_streaming_memory" default:"10485760"`                  // 流式响应最大内存使用量（字节），默认10MB，0表示无限制
 
 	// Multipart请求配置
-	EnableMultipartSupport bool  `json:"enable_multipart_support" default:"true" preserve:"true"` // 是否启用multipart请求支持
+	EnableMultipartSupport bool  `json:"enable_multipart_support" default:"true" preserve:"true"` // 是否启用multipart支持
 	MultipartMaxPartSize   int64 `json:"multipart_max_part_size" default:"64"`                    // multipart单个部分最大大小（KB），默认64KB
-	MultipartSkipFiles     bool  `json:"multipart_skip_files" default:"false" preserve:"true"`    // 是否跳过文件内容记录，只记录元数据
-	MultipartPreserveState bool  `json:"multipart_preserve_state" default:"true" preserve:"true"` // 是否保持Gin上下文状态，避免破坏后续中间件
+	// MultipartSkipFiles 是否跳过文件内容记录，只记录元数据（filename / Content-Type）。
+	// 默认开启：上传的文件字节既不该进数据库 LONGTEXT，也不该被调试日志带走；需要内容时显式置 false。
+	// 与 AutoSkipStatic 同理使用 *bool 三态：preserve 标签下的「值与默认不同即视为显式提供」
+	// 会把未配置的零值 false 当成显式关闭，导致 default:"true" 永远不生效，故只能用 *bool 表达默认开启
+	MultipartSkipFiles *bool `json:"multipart_skip_files"`
+	// MultipartPreserveState 是否保持 Gin 上下文状态，避免破坏后续中间件与业务处理。
+	// 同样必须是 *bool 三态（nil = 默认开启）：关掉该开关会走 MultipartReader 直接消费原始请求体，
+	// 之后 gin 的 ParseMultipartForm 返回 ErrMultipartAlreadyWritten，业务侧 c.FormFile 拿不到文件
+	MultipartPreserveState *bool `json:"multipart_preserve_state"`
 
 	// 中间件执行顺序配置
 	MiddlewareOrder string `json:"middleware_order" default:"normal"` // 中间件执行顺序：normal（正常）、early（优先）、late（最后）
@@ -105,7 +131,20 @@ type Debugger struct {
 	// 从未结束的进程会滞留注册表，与存储中running状态的记录一致
 	processLoggers  map[string]*ProcessLogger
 	processLoggerMu sync.RWMutex
+
+	// 自动清理协程状态：保证 StartPeriodicCleanup 幂等，并允许 stop 被重复调用
+	cleanupMu      sync.Mutex
+	cleanupRunning bool
+	cleanupStop    func()
+
+	// 凭据掩码键集合（小写归一化）：New 中一次性构建，避免每请求重复分配
+	maskSetsOnce  sync.Once
+	maskHeaderSet map[string]struct{}
+	maskBodySet   map[string]struct{}
 }
+
+// defaultCleanupInterval StartPeriodicCleanup 在 CleanupInterval 缺失或非正时使用的兜底间隔
+const defaultCleanupInterval = 24 * time.Hour
 
 // New 创建新的调试器实例
 // config: 调试器配置，如果没有传入存储实例，将使用默认的内存存储
@@ -136,6 +175,21 @@ func New(config *Config) (*Debugger, error) {
 		callerInfo := true
 		d.config.EnableCallerInfo = &callerInfo
 	}
+	if d.config.BodyMaskEnabled == nil {
+		bodyMask := true
+		d.config.BodyMaskEnabled = &bodyMask
+	}
+	if d.config.MultipartSkipFiles == nil {
+		skipFiles := true
+		d.config.MultipartSkipFiles = &skipFiles
+	}
+	if d.config.MultipartPreserveState == nil {
+		preserveState := true
+		d.config.MultipartPreserveState = &preserveState
+	}
+
+	// 构建掩码键集合（sync.Once，后续请求只读）
+	d.ensureMaskSets()
 
 	// 如果没有传入存储实例，则使用默认的内存存储
 	if d.config.Storage == nil {
@@ -157,12 +211,108 @@ func New(config *Config) (*Debugger, error) {
 		d.logger = NewDefaultLogger(d)
 	}
 
+	// 数据库存储器的裁剪错误经实例 logger 记录，避免直接写 stdout；
+	// 消费方仍可通过 (*DatabaseStorage).SetLogger 覆盖
+	if dbStore, ok := d.storage.(*DatabaseStorage); ok {
+		dbStore.SetLogger(d.logger)
+	}
+
 	// 初始化主进程日志记录器
 	if d.config.EnableMainLogger {
 		d.mainLogger = NewMainLogger(d)
 	}
 
 	return d, nil
+}
+
+// StartPeriodicCleanup 启动过期日志的自动清理：先立即执行一次（覆盖长期停机造成的积压），
+// 之后按 CleanupInterval 周期执行；返回的 stop 用于停止协程并释放定时器。
+//
+// 参数：无（全部取实例配置）
+// 返回值：
+//   - stop: 停止清理协程的函数，可安全重复调用；未启动清理时为空操作
+//
+// 异常：不触发 panic；单次清理失败仅经实例 logger 记录，不影响后续周期
+// 使用示例：
+//
+//	stop := dbg.StartPeriodicCleanup()
+//	defer stop()
+//
+// 语义约定：RetentionPeriod <= 0 表示「调用方不希望按时间清理」，此时不启动任何协程。
+// 过期清理的删除条件是 timestamp < now-RetentionPeriod，保留期为 0 会退化成「删除全表」，
+// 必须显式拒绝而不是静默执行。注意 New 会经 CheckAndSetDefault 把零值 RetentionPeriod
+// 归一化为默认 168h，所以「不清理」的权威表达是调用方不启动本方法（如业务侧
+// retention_days<=0 时跳过调用），本函数的判空用于防御绕过 New 直接构造的实例。
+// 幂等：重复调用返回同一个 stop，不会启动第二个协程。
+func (d *Debugger) StartPeriodicCleanup() (stop func()) {
+	d.cleanupMu.Lock()
+	defer d.cleanupMu.Unlock()
+
+	if d.cleanupRunning {
+		return d.cleanupStop
+	}
+
+	retention := d.config.RetentionPeriod
+	if retention <= 0 {
+		return func() {}
+	}
+
+	interval := d.config.CleanupInterval
+	if interval <= 0 {
+		interval = defaultCleanupInterval
+	}
+
+	done := make(chan struct{})
+	stopCh := make(chan struct{})
+	stopped := false
+
+	go func() {
+		defer close(done)
+
+		d.cleanupOnce(retention)
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stopCh:
+				return
+			case <-ticker.C:
+				d.cleanupOnce(retention)
+			}
+		}
+	}()
+
+	d.cleanupRunning = true
+	d.cleanupStop = func() {
+		d.cleanupMu.Lock()
+		if stopped {
+			d.cleanupMu.Unlock()
+			return
+		}
+		stopped = true
+		d.cleanupRunning = false
+		close(stopCh)
+		d.cleanupMu.Unlock()
+
+		<-done
+	}
+	return d.cleanupStop
+}
+
+// cleanupOnce 执行一次过期清理，删除 retention 之前的记录
+// 参数：
+//   - retention: 日志保留时长，必须为正值
+//
+// 返回值：无（失败仅记录，交由下一周期重试）
+// 异常：不触发 panic
+func (d *Debugger) cleanupOnce(retention time.Duration) {
+	before := time.Now().Add(-retention)
+	if err := d.storage.Cleanup(before); err != nil {
+		d.logger.Error("debugger 过期日志清理失败: " + err.Error())
+		return
+	}
 }
 
 // Middleware 创建Gin中间件
@@ -441,7 +591,7 @@ func (d *Debugger) createLateMiddleware() gin.HandlerFunc {
 // 当debugger处理multipart请求后，确保后续中间件能正常访问请求体
 func (d *Debugger) restoreMultipartRequestBody(c *gin.Context) {
 	// 只有在启用multipart支持且需要保持状态时才进行恢复
-	if !d.config.EnableMultipartSupport || !d.config.MultipartPreserveState {
+	if !d.config.EnableMultipartSupport || !d.preserveMultipartState() {
 		return
 	}
 
@@ -484,7 +634,11 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 		QueryParams:    extractQueryParams(c.Request.URL.Query()),
 	}
 
-	// 记录请求体
+	// 凭据掩码统一在条目生成处执行，保证存储、页面、导出三条下游路径都拿不到原文
+	entry.RequestHeaders = d.maskHeaders(entry.RequestHeaders)
+	entry.QueryParams = d.maskQueryParams(entry.QueryParams)
+
+	// 记录请求体；掩码已在提取路径内完成（有界正文必须先掩码再追加截断说明）
 	body, _ := d.extractRequestBody(c) // 忽略错误，因为extractRequestBody已经处理了错误情况
 	entry.RequestBody = body
 
@@ -497,13 +651,13 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 func (d *Debugger) recordResponseInfo(entry *LogEntry, writer *responseWriter, startTime time.Time) {
 	entry.StatusCode = writer.Status()
 	entry.Duration = time.Since(startTime)
-	entry.ResponseHeaders = helper.ExtractHeaders(writer.Header())
+	entry.ResponseHeaders = d.maskHeaders(helper.ExtractHeaders(writer.Header()))
 
 	// 检查是否为流式响应（只有在启用流式支持时才处理流式响应）
 	if d.config.EnableStreamingSupport && writer.isStreaming {
 		// 流式响应处理
 		entry.RecordType = "streaming" // 标记为流式请求
-		entry.ResponseBody = d.formatStreamingResponse(writer)
+		entry.ResponseBody = d.maskBody(d.formatStreamingResponse(writer), writer.Header().Get("Content-Type"))
 
 		// 记录流式响应元数据
 		entry.IsStreamingResponse = true
@@ -516,8 +670,11 @@ func (d *Debugger) recordResponseInfo(entry *LogEntry, writer *responseWriter, s
 		// 非流式响应处理
 		entry.RecordType = "http" // 标记为普通HTTP请求
 
-		// 记录响应体
+		// 记录响应体（捕获窗口已在 responseWriter.Write 中按上限截断）
 		if writer.body.Len() > 0 {
+			limit := d.bodyCaptureLimit()
+			contentType := writer.Header().Get("Content-Type")
+
 			// 检查响应头是否包含gzip压缩
 			contentEncoding := writer.Header().Get("Content-Encoding")
 
@@ -532,33 +689,109 @@ func (d *Debugger) recordResponseInfo(entry *LogEntry, writer *responseWriter, s
 							d.logger.Error("关闭gzip读取器失败" + err.Error())
 						}
 					}(reader)
-					decompressed, err := io.ReadAll(reader)
-					if err == nil {
+					// 解压同样限量：捕获窗口本身可能被截断，整包解压会放大内存占用
+					decompressed, err := io.ReadAll(io.LimitReader(reader, limit+1))
+					if err == nil || len(decompressed) > 0 {
 						// 检查解压后的数据是否为二进制
 						if isBinaryData(decompressed) {
-							entry.ResponseBody = formatBinaryData(decompressed)
+							entry.ResponseBody = capBodyText(formatBinaryData(decompressed), int64(len(decompressed)), limit)
 						} else {
-							entry.ResponseBody = string(decompressed)
+							entry.ResponseBody = d.maskAndCapText(string(decompressed), int64(len(decompressed)), limit, contentType)
 						}
 					} else {
 						// 解压缩失败，记录原始数据并添加错误标记
 						entry.ResponseBody = "[GZIP解压缩失败] " + formatBinaryData(writer.body.Bytes())
 					}
 				} else {
-					// 创建gzip读取器失败，记录原始数据
-					entry.ResponseBody = "[GZIP格式错误] " + formatBinaryData(writer.body.Bytes())
+					// 创建gzip读取器失败（含捕获窗口截断导致流不完整），记录原始数据
+					entry.ResponseBody = "[GZIP格式错误或已被截断] " + formatBinaryData(writer.body.Bytes())
 				}
 			} else {
 				// 非gzip压缩的响应，检查是否为二进制数据
 				responseBytes := writer.body.Bytes()
 				if isBinaryData(responseBytes) {
-					entry.ResponseBody = formatBinaryData(responseBytes)
+					entry.ResponseBody = capBodyText(formatBinaryData(responseBytes), writer.totalSize, limit)
 				} else {
-					entry.ResponseBody = string(responseBytes)
+					entry.ResponseBody = d.maskAndCapText(string(responseBytes), writer.totalSize, limit, contentType)
 				}
 			}
 		}
 	}
+}
+
+// maskAndCapText 响应/请求正文的统一出口：先掩码再按上限截断
+// 顺序不可颠倒：capBodyText 会在正文末尾追加截断说明，
+// 被截半的凭据值只有在位于文本末尾时才命中尾部掩码规则，说明行先附上去就匹配不到
+// 参数：
+//   - text: 原始正文
+//   - total: 原始总字节数
+//   - limit: 捕获上限字节数
+//   - contentType: 对应的 Content-Type
+//
+// 返回值：
+//   - string: 掩码并按需截断后的正文
+//
+// 异常：不触发 panic
+func (d *Debugger) maskAndCapText(text string, total, limit int64, contentType string) string {
+	return capBodyText(d.maskBody(text, contentType), total, limit)
+}
+
+// capBodyText 按捕获上限裁剪展示用正文，并在发生截断时补充大小说明
+// 参数：
+//   - text: 待裁剪的正文
+//   - total: 原始总字节数（响应取 writer.totalSize，解压场景取解压后长度）
+//   - limit: 上限字节数
+//
+// 返回值：
+//   - string: 长度不超过 limit 的正文；截断时末尾附 [Body truncated: ...]
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	entry.ResponseBody = capBodyText(string(bodyBytes), total, d.bodyCaptureLimit())
+func capBodyText(text string, total int64, limit int64) string {
+	if int64(len(text)) <= limit && total <= limit {
+		return text
+	}
+
+	captured := int64(len(text))
+	if captured > limit {
+		captured = limit
+	}
+
+	// 按字节上限切分可能把多字节字符截半，产生非法 UTF-8：MySQL 严格模式下
+	// 连 LONGTEXT 列都会以 Incorrect string value 拒绝整条写入，故回退到最近的完整 rune 边界
+	text = trimToRuneBoundary(text[:captured])
+	captured = int64(len(text))
+
+	if total < captured {
+		total = captured
+	}
+
+	return fmt.Sprintf("%s\n[Body truncated: captured %d of %d bytes, max_body_size_kb=%d]",
+		text, captured, total, limit/1024)
+}
+
+// trimToRuneBoundary 回退掉字符串末尾被截断的不完整 UTF-8 序列
+// 参数：
+//   - text: 已按字节上限切过的文本
+//
+// 返回值：
+//   - string: 末尾不含残缺 rune 的文本
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	safe := trimToRuneBoundary(body[:maxBytes])
+func trimToRuneBoundary(text string) string {
+	// 单个 rune 最长 4 字节，最多回退 3 次即可越过截半的多字节序列
+	for i := 0; i < utf8.UTFMax-1 && len(text) > 0; i++ {
+		if r, size := utf8.DecodeLastRuneInString(text); r != utf8.RuneError || size > 1 {
+			break
+		}
+		text = text[:len(text)-1]
+	}
+	return text
 }
 
 // formatStreamingResponse 格式化流式响应数据
@@ -644,6 +877,19 @@ func (d *Debugger) saveLogEntry(entry *LogEntry) {
 	}
 }
 
+// skipMultipartFileContent 返回 multipart 文件部件是否只记元数据
+// MultipartSkipFiles 为 *bool 三态（nil = 未配置，默认跳过；New 已归一化为非 nil，
+// 判空仅为防御绕过 New 直接构造的实例），显式 false 才记录文件内容
+func (d *Debugger) skipMultipartFileContent() bool {
+	return d.config.MultipartSkipFiles == nil || *d.config.MultipartSkipFiles
+}
+
+// preserveMultipartState 返回是否走「复制请求体解析 multipart」的安全路径
+// MultipartPreserveState 同样为 *bool 三态（nil = 默认开启），显式 false 才回退到旧路径
+func (d *Debugger) preserveMultipartState() bool {
+	return d.config.MultipartPreserveState == nil || *d.config.MultipartPreserveState
+}
+
 // isCallerInfoEnabled 返回是否启用调用位置信息
 // EnableCallerInfo 为 *bool 三态字段（nil = 未配置，默认开启；New 已归一化为非 nil，
 // 判空仅防御绕过 New 直接构造的实例），显式 false 生效关闭
@@ -726,62 +972,141 @@ func (d *Debugger) shouldSample() bool {
 	return time.Now().UnixNano()%100 < int64(d.config.SampleRate*100)
 }
 
+// defaultMaxBodySizeKB 与 Config.MaxBodySize 的 default 标签保持一致（KB），
+// 用于调用方传入非正值时的兜底，避免上限为 0 导致完全不记录请求体
+const defaultMaxBodySizeKB = 1024
+
+// defaultMultipartMaxPartSizeKB 与 Config.MultipartMaxPartSize 的 default 标签保持一致（KB），
+// 用于单个 multipart 部件读取量的兜底上限
+const defaultMultipartMaxPartSizeKB = 64
+
+// bodyCaptureLimit 返回请求/响应体的捕获上限（字节）
+// 参数：无（取实例配置，MaxBodySize 单位为 KB）
+// 返回值：
+//   - int64: 上限字节数，非正配置时回退为默认 1MB
+//
+// 异常：不触发 panic
+func (d *Debugger) bodyCaptureLimit() int64 {
+	if d.config.MaxBodySize <= 0 {
+		return defaultMaxBodySizeKB * 1024
+	}
+	return d.config.MaxBodySize * 1024
+}
+
+// readRequestBodyBounded 有界读取请求体
+// 最多读 limit+1 字节用于判断是否超限，其余部分不落地；已读片段与未读部分通过 MultiReader
+// 原样回灌给后续处理链，因此大文件上传、批量导入不会把整份请求体驻留在内存
+// 参数：
+//   - c: gin 上下文，函数会把 c.Request.Body 替换为回灌后的读取器
+//
+// 返回值：
+//   - []byte: 捕获到的字节，长度不超过上限
+//   - bool: 是否发生截断（真实请求体大于上限）
+//   - error: 读取错误；出错时 Body 被替换为空读取器，避免后续处理挂起
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	captured, truncated, err := d.readRequestBodyBounded(c)
+func (d *Debugger) readRequestBodyBounded(c *gin.Context) ([]byte, bool, error) {
+	limit := d.bodyCaptureLimit()
+
+	// 多读 1 字节用于区分「正好等于上限」与「超过上限」；
+	// 缓冲按实际内容增长，不像定长数组那样每请求预留一整块上限大小的内存
+	buf := &bytes.Buffer{}
+	if _, err := buf.ReadFrom(io.LimitReader(c.Request.Body, limit+1)); err != nil {
+		c.Request.Body = io.NopCloser(bytes.NewReader(nil))
+		return nil, false, err
+	}
+
+	read := int64(buf.Len())
+	truncated := read > limit
+
+	captured := buf.Bytes()
+	if truncated {
+		captured = captured[:limit]
+	}
+
+	// 已读出的字节要整体回灌，后续中间件与业务处理器才能读到完整请求体；
+	// 未读到的剩余部分仍是原 Body 的当前位置
+	c.Request.Body = io.NopCloser(io.MultiReader(bytes.NewReader(buf.Bytes()), c.Request.Body))
+
+	return captured, truncated, nil
+}
+
 // extractRequestBody 提取请求体内容
 // 优化性能：实现流式处理，避免大文件上传时的内存压力
 // 改进：避免破坏Gin上下文状态，特别是multipart请求的处理
 func (d *Debugger) extractRequestBody(c *gin.Context) (string, error) {
 	if c.Request.Body == nil {
-		fmt.Printf("[DEBUG] extractRequestBody: Request body is nil\n")
 		return "", nil
 	}
 
 	// 检查是否为multipart/form-data文件上传
 	if isMultipartFormData(c) {
-		fmt.Printf("[DEBUG] extractRequestBody: Detected multipart request, EnableMultipartSupport: %v, MultipartPreserveState: %v\n",
-			d.config.EnableMultipartSupport, d.config.MultipartPreserveState)
-
 		// 检查是否启用multipart支持
 		if !d.config.EnableMultipartSupport {
-			fmt.Printf("[DEBUG] extractRequestBody: Multipart support is disabled\n")
 			return "[Multipart request - disabled]", nil
 		}
 
-		fmt.Printf("[DEBUG] extractRequestBody: Calling extractMultipartRequestBodySafe\n")
+		contentType := c.Request.Header.Get("Content-Type")
 		// 对于multipart/form-data，使用安全的流式处理
-		return d.extractMultipartRequestBodySafe(c)
+		text, err := d.extractMultipartRequestBodySafe(c)
+		if err != nil {
+			return "", err
+		}
+		// 掩码在提取路径内完成：有界正文必须先掩码再追加截断说明，
+		// 若在条目生成处统一重掩，说明行会被当成字段值一起掩掉
+		return d.maskBody(text, contentType), nil
 	}
 
-	fmt.Printf("[DEBUG] extractRequestBody: Not multipart request, using standard processing\n")
 	// 对于其他类型，使用原有逻辑但添加大小限制
-	bodyBytes, err := io.ReadAll(c.Request.Body)
+	return d.extractBoundedBody(c)
+}
+
+// extractBoundedBody 有界提取非 multipart 的请求体
+// 捕获上限由 bodyCaptureLimit 决定，超限只记录捕获量与上限值，不把超出部分带入日志或数据库
+// 参数：
+//   - c: gin 上下文（请求体在读取后原样回灌）
+//
+// 返回值：
+//   - string: 用于展示的请求体内容或截断/错误标记
+//   - error: 恒为 nil，读取失败以标记文本形式返回，便于 createLogEntry 记录
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	body, _ := d.extractBoundedBody(c)
+func (d *Debugger) extractBoundedBody(c *gin.Context) (string, error) {
+	bodyBytes, truncated, err := d.readRequestBodyBounded(c)
 	if err != nil {
-		fmt.Printf("[DEBUG] extractRequestBody: Error reading body: %v\n", err)
-		// 恢复请求体（即使读取失败，也要尝试恢复，确保后续中间件能正常工作）
-		c.Request.Body = io.NopCloser(bytes.NewBuffer(nil))
 		// 返回错误信息，而不是空字符串，这样createLogEntry可以记录错误情况
 		return fmt.Sprintf("[Error reading request body: %v]", err), nil
 	}
 
-	fmt.Printf("[DEBUG] extractRequestBody: Read %d bytes, restoring body\n", len(bodyBytes))
-	// 恢复请求体，以便后续处理
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	contentType := c.Request.Header.Get("Content-Type")
 
-	// 限制体大小（MaxBodySize单位为KB，需要转换为字节）
-	if int64(len(bodyBytes)) > d.config.MaxBodySize*1024 {
-		fmt.Printf("[DEBUG] extractRequestBody: Body too large: %d bytes\n", len(bodyBytes))
-		return fmt.Sprintf("[Body too large: %d bytes]", len(bodyBytes)), nil
-	}
-
-	// 检查是否为二进制数据（文件上传等）
+	text := string(bodyBytes)
 	if isBinaryData(bodyBytes) {
-		fmt.Printf("[DEBUG] extractRequestBody: Body is binary data\n")
-		// 对于二进制数据，显示为十六进制格式或文件信息
-		return formatBinaryData(bodyBytes), nil
+		// 二进制数据（文件内容等）转为可读摘要，不含凭据文本
+		text = formatBinaryData(bodyBytes)
+	} else {
+		// 掩码必须在追加截断说明之前完成：被截半的凭据值只有位于文本末尾时才会命中尾部正则，
+		// 说明行一旦先附上去就再也匹配不到
+		text = d.maskBody(text, contentType)
 	}
 
-	fmt.Printf("[DEBUG] extractRequestBody: Body is text data, length: %d\n", len(bodyBytes))
-	// 对于文本数据，直接转换为字符串
-	return string(bodyBytes), nil
+	if !truncated {
+		return text, nil
+	}
+
+	// 超限部分不入库，保留上限内正文并附截断说明，避免 LONGTEXT 无界增长。
+	// 不整段丢弃正文：刚好越过上限的请求体若只剩一行说明，日志会失去排查价值
+	// captured 报告原始捕获字节数而非掩码后的文本长度：掩码把命中值替换为 ***
+	// 会缩短文本，用 len(text) 会低估实际捕获量
+	text = trimToRuneBoundary(text)
+	return fmt.Sprintf("%s\n[Body truncated: captured %d bytes, max_body_size=%d KB]",
+		text, len(bodyBytes), d.config.MaxBodySize), nil
 }
 
 // extractMultipartRequestBody 流式提取multipart/form-data请求体
@@ -825,8 +1150,19 @@ func (d *Debugger) extractMultipartRequestBody(c *gin.Context) (string, error) {
 		partName := part.FormName()
 		fileName := part.FileName()
 
+		// 文件部件默认只记元数据：连内容都不读取，避免上传字节进入调试日志与数据库
+		if fileName != "" && d.skipMultipartFileContent() {
+			fileCount++
+			result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Content-Type: %s (content not recorded)\n",
+				fileName, partName, part.Header.Get("Content-Type")))
+			continue
+		}
+
 		// 读取部分内容（限制大小，避免大文件内存占用）
-		maxPartSize := 64 * 1024 // 限制每个部分最多读取64KB
+		maxPartSize := int(d.config.MultipartMaxPartSize * 1024)
+		if maxPartSize <= 0 {
+			maxPartSize = int(defaultMultipartMaxPartSizeKB * 1024)
+		}
 		partBytes := make([]byte, maxPartSize)
 		n, err := part.Read(partBytes)
 		if err != nil && err != io.EOF {
@@ -881,7 +1217,7 @@ func (d *Debugger) extractMultipartRequestBodySafe(c *gin.Context) (string, erro
 	}
 
 	// 检查是否保持Gin上下文状态
-	if d.config.MultipartPreserveState {
+	if d.preserveMultipartState() {
 		// 方法1：通过复制请求体进行处理，避免影响原始请求
 		return d.extractMultipartWithBodyCopy(c, boundary)
 	} else {
@@ -892,25 +1228,14 @@ func (d *Debugger) extractMultipartRequestBodySafe(c *gin.Context) (string, erro
 
 // extractMultipartWithBodyCopy 通过复制请求体进行multipart处理
 // 避免破坏Gin上下文状态
+// 只解析捕获窗口内的部件：上限由 bodyCaptureLimit 决定，
+// 大文件上传不会把整份请求体读进内存，也不会把文件字节写进 stdout 日志
 func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string) (string, error) {
-	// 读取原始请求体
-	bodyBytes, err := io.ReadAll(c.Request.Body)
+	// 有界读取请求体（已读部分会回灌给后续处理链）
+	bodyBytes, truncated, err := d.readRequestBodyBounded(c)
 	if err != nil {
 		return "", err
 	}
-
-	// 调试：记录读取的请求体信息
-	if len(bodyBytes) > 0 {
-		// 只记录前100个字符避免日志过大
-		contentPreview := string(bodyBytes)
-		if len(contentPreview) > 100 {
-			contentPreview = contentPreview[:100] + "..."
-		}
-		fmt.Printf("[DEBUG] extractMultipartWithBodyCopy: Read %d bytes, content preview: %s\n", len(bodyBytes), contentPreview)
-	}
-
-	// 立即恢复请求体，确保后续中间件正常工作
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	// 使用复制的请求体进行multipart解析
 	reader := bytes.NewReader(bodyBytes)
@@ -921,11 +1246,19 @@ func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string)
 
 	var result strings.Builder
 	result.WriteString("[Multipart Form Data - Safe Processing]\n")
+	if truncated {
+		// 只解析捕获窗口内的部件，其余部分不读取也不入库
+		result.WriteString(fmt.Sprintf("  [Truncated] body exceeds max_body_size=%d KB, parts after the capture window are not recorded\n",
+			d.config.MaxBodySize))
+	}
 
 	partCount := 0
 	fileCount := 0
 	totalSize := 0
 	maxPartSize := int(d.config.MultipartMaxPartSize * 1024)
+	if maxPartSize <= 0 {
+		maxPartSize = int(defaultMultipartMaxPartSizeKB * 1024)
+	}
 
 	// 流式处理multipart的各个部分
 	for {
@@ -942,6 +1275,14 @@ func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string)
 		partName := part.FormName()
 		fileName := part.FileName()
 
+		// 文件部件默认只记元数据：连内容都不读取，避免上传字节进入调试日志与数据库
+		if fileName != "" && d.skipMultipartFileContent() {
+			fileCount++
+			result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Content-Type: %s (content not recorded)\n",
+				fileName, partName, part.Header.Get("Content-Type")))
+			continue
+		}
+
 		// 读取部分内容（限制大小，避免大文件内存占用）
 		partBytes := make([]byte, maxPartSize)
 		n, err := part.Read(partBytes)
@@ -953,34 +1294,23 @@ func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string)
 		totalSize += n
 
 		if fileName != "" {
-			// 文件上传部分
+			// 文件上传部分（显式关闭 MultipartSkipFiles 才会记录内容）
 			fileCount++
-			if d.config.MultipartSkipFiles {
-				result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Size: %d bytes, Type: %s\n",
-					fileName, partName, n, detectFileType(partBytes[:n])))
-			} else {
-				// 如果跳过文件内容，只记录元数据
-				result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Size: %d bytes\n",
-					fileName, partName, n))
-			}
+			result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Size: %d bytes, Type: %s, Content: %s\n",
+				fileName, partName, n, detectFileType(partBytes[:n]), formatPartContentPreview(partBytes[:n])))
 		} else {
 			// 文本字段部分
 			if isBinaryData(partBytes[:n]) {
 				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Type: Binary\n",
 					partName, n))
 			} else {
-				// 限制文本长度，避免显示过长
-				textContent := string(partBytes[:n])
-				if len(textContent) > 100 {
-					textContent = textContent[:100] + "..."
-				}
 				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Content: %s\n",
-					partName, n, textContent))
+					partName, n, formatPartContentPreview(partBytes[:n])))
 			}
 		}
 
 		// 检查总大小是否超过限制
-		if totalSize > int(d.config.MaxBodySize*1024) {
+		if int64(totalSize) > d.bodyCaptureLimit() {
 			result.WriteString(fmt.Sprintf("  [Truncated] Total size exceeds limit: %d bytes\n", totalSize))
 			break
 		}
@@ -990,54 +1320,39 @@ func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string)
 	return result.String(), nil
 }
 
+// formatPartContentPreview 输出 multipart 部件内容预览
+// 二进制内容不展开（避免乱码与超长文本进入日志），文本最多保留 100 字符
+// 参数：
+//   - data: 已按 MultipartMaxPartSize 截断的部件字节
+//
+// 返回值：
+//   - string: 可直接拼进日志行的一行内容
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	fmt.Sprintf("  [File] ... Content: %s", formatPartContentPreview(partBytes[:n]))
+func formatPartContentPreview(data []byte) string {
+	if isBinaryData(data) {
+		return "(binary content not displayed)"
+	}
+	text := string(data)
+	if len(text) > 100 {
+		text = trimToRuneBoundary(text[:100]) + "..."
+	}
+	return text
+}
+
 // extractRequestBodyWithSizeLimit 带大小限制的请求体提取
 // 作为multipart处理失败时的降级方案
 func (d *Debugger) extractRequestBodyWithSizeLimit(c *gin.Context) (string, error) {
-	// 读取请求体
-	bodyBytes, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		return "", err
-	}
-
-	// 恢复请求体，以便后续处理
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	// 限制体大小（MaxBodySize单位为KB，需要转换为字节）
-	if int64(len(bodyBytes)) > d.config.MaxBodySize*1024 {
-		return fmt.Sprintf("[Body too large: %d bytes]", len(bodyBytes)), nil
-	}
-
-	// 检查是否为二进制数据
-	if isBinaryData(bodyBytes) {
-		return formatBinaryData(bodyBytes), nil
-	}
-
-	return string(bodyBytes), nil
+	return d.extractBoundedBody(c)
 }
 
 // extractRequestBodyWithSizeLimitSafe 安全的带大小限制请求体提取
 // 避免破坏Gin上下文状态，通过复制请求体进行处理
 func (d *Debugger) extractRequestBodyWithSizeLimitSafe(c *gin.Context) (string, error) {
-	// 读取请求体
-	bodyBytes, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		return "", err
-	}
-
-	// 立即恢复请求体，确保后续中间件正常工作
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	// 限制体大小（MaxBodySize单位为KB，需要转换为字节）
-	if int64(len(bodyBytes)) > d.config.MaxBodySize*1024 {
-		return fmt.Sprintf("[Body too large: %d bytes]", len(bodyBytes)), nil
-	}
-
-	// 检查是否为二进制数据
-	if isBinaryData(bodyBytes) {
-		return formatBinaryData(bodyBytes), nil
-	}
-
-	return string(bodyBytes), nil
+	return d.extractBoundedBody(c)
 }
 
 // isBinaryData 检查数据是否为二进制格式
@@ -1240,8 +1555,9 @@ func formatMultipartFormData(c *gin.Context, bodyBytes []byte) string {
 		partName := part.FormName()
 		fileName := part.FileName()
 
-		// 读取部分内容
-		partBytes, err := io.ReadAll(part)
+		// 读取部分内容：整份请求体已在上游按捕获上限读入，这里再对单个部件限量，
+		// 避免个别大部件把已捕获的字节全部复制一遍
+		partBytes, err := io.ReadAll(io.LimitReader(part, defaultMultipartMaxPartSizeKB*1024))
 		if err != nil {
 			result.WriteString(fmt.Sprintf("  Error reading part content: %v\n", err))
 			continue
@@ -1281,6 +1597,7 @@ type responseWriter struct {
 	gin.ResponseWriter
 	debugger        *Debugger // 指向Debugger实例的引用
 	body            *bytes.Buffer
+	totalSize       int64 // 响应实际写出的总字节数（body 只保留到捕获上限，总数在此累计）
 	status          int
 	isStreaming     bool             // 是否为流式响应
 	streamingChunks []StreamingChunk // 流式响应分块记录
@@ -1307,7 +1624,16 @@ func (w *responseWriter) Write(b []byte) (int, error) {
 	} else {
 		// 非流式响应，使用原有逻辑
 		w.isStreaming = false // 确保禁用流式支持时标记为非流式响应
-		w.body.Write(b)
+		w.totalSize += int64(len(b))
+		// 有界捕获：响应体可能远大于 MaxBodySize（导出、附件、整页 HTML），
+		// 只保留到上限的字节，其余仅累计长度，避免整份响应在内存中驻留
+		if remaining := w.debugger.bodyCaptureLimit() - int64(w.body.Len()); remaining > 0 {
+			if int64(len(b)) <= remaining {
+				w.body.Write(b)
+			} else {
+				w.body.Write(b[:remaining])
+			}
+		}
 	}
 
 	return w.ResponseWriter.Write(b)

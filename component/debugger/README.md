@@ -195,13 +195,19 @@ config := &debugger.Config{
 	SampleRate: 1.0,                            // 采样率（0-1之间），默认1.0（记录所有请求）
 
 	// IP访问控制配置
-	AllowedIPs: []string{},                     // 允许访问的IP白名单，空数组表示不限制
+	AllowedIPs: []string{"127.0.0.1"},          // 调试页面/API 的 IP 白名单（鉴权走 ctx.ClientIP()）
+	AllowEmptyWhitelist: false,                 // 白名单为空时是否仍开放页面，默认 false（fail-closed，不注册路由）
+
+	// 凭据掩码配置（默认开启，在写入日志条目时统一替换为 ***）
+	BodyMaskEnabled:  nil,                      // *bool：nil=默认开启，显式 false 关闭
+	HeaderMaskKeys:   []string{"x-custom-auth"}, // 追加需掩码的请求/响应头（内置含 authorization/cookie/set-cookie 等）
+	BodyMaskKeys:     []string{"custom_secret"}, // 追加需掩码的请求/响应体字段名
 
 	// Multipart请求配置
 	EnableMultipartSupport: true,               // 启用multipart请求支持
 	MultipartMaxPartSize:   64,                 // multipart单个部分最大大小（KB）
-	MultipartSkipFiles:     false,              // 是否跳过文件内容记录
-	MultipartPreserveState: true,               // 保持Gin上下文状态
+	MultipartSkipFiles:     nil,                // *bool：nil=默认只记文件元数据，显式 false 才记录文件内容
+	MultipartPreserveState: nil,                // *bool：nil=默认复制请求体，保证后续 c.FormFile 可用
 
 	// 中间件执行顺序配置
 	MiddlewareOrder: "normal",                  // 中间件执行顺序：normal/early/late
@@ -248,10 +254,10 @@ config := &debugger.Config{
 
 #### 使用规则
 
-1. **无限制访问**：当`AllowedIPs`为空数组或未配置时，允许所有IP地址访问
-2. **白名单限制**：当配置了IP白名单时，只有白名单中的IP地址可以访问
-3. **CIDR支持**：支持CIDR格式的IP段配置（如`192.168.1.0/24`）
-4. **优先级检查**：支持`X-Forwarded-For`头，优先检查代理链中的第一个客户端IP
+1. **默认拒绝（fail-closed）**：`AllowedIPs`为空且`AllowEmptyWhitelist=false`时，调试页面与API路由**不注册**，访问返回404，并打印一行提示；这是为了避免「配置漏填」变成「公网全开」
+2. **显式开放**：确需无鉴权开放时，设置`AllowEmptyWhitelist: true`
+3. **白名单限制**：配置了IP白名单时，只有名单内的地址可以访问，支持CIDR格式（如`192.168.1.0/24`）
+4. **鉴权口径**：一律使用`ctx.ClientIP()`判定，与`UseCDN`（只影响日志里记录的客户端IP）无关。gin默认信任所有代理，因此反向代理场景下宿主必须调用`engine.SetTrustedProxies()`收紧可信代理，否则伪造`X-Forwarded-For`/`X-Real-IP`即可绕过白名单
 
 #### 示例配置
 
@@ -278,11 +284,12 @@ config := &debugger.Config{
     },
 }
 
-// 完全开放：不限制IP访问
+// 受控开放：明确知道风险时才使用
 config := &debugger.Config{
-    Enabled: true,
-    Storage: memoryStorage,
-    AllowedIPs: []string{},     // 空数组表示不限制
+    Enabled:             true,
+    Storage:             memoryStorage,
+    AllowedIPs:          []string{}, // 名单为空
+    AllowEmptyWhitelist: true,       // 显式开放
 }
 ```
 
@@ -297,6 +304,17 @@ config := &debugger.Config{
     "allowed_ips": ["192.168.1.100", "10.0.0.0/8"]
 }
 ```
+
+## 凭据掩码
+
+调试日志默认会把请求/响应原文入库并渲染到页面，其中可能含密码、验证码、令牌等敏感值。组件在「写入日志条目」这一唯一出口统一做键名匹配替换，因此页面、导出、存储三条下游路径都拿不到原文。
+
+- **开关**：`BodyMaskEnabled`为`*bool`三态，`nil`（不配置）= 开启，显式`false`才关闭；关闭后原文照记，仅建议在受控环境使用
+- **头部**：默认掩码`authorization`、`proxy-authorization`、`cookie`、`set-cookie`、`x-api-key`、`x-access-token`、`x-auth-token`，可用`HeaderMaskKeys`追加
+- **正文**：默认覆盖`password`/`pwd`/`old_password`一类凭据字段，以及`token`、`*_secret`、`api_key`、`session_id`、`captcha`、`sms_code`、`verify_code`、`id_card`、`phone`等；`code`这类业务状态码字段刻意不在名单内，避免把接口返回值掩成不可读
+- **形态**：正则替换、不解析重排，因此保留原始排版，且对被截断的非法JSON同样安全——正文被切成两半的凭据值，靠「尾部未闭合值」规则命中
+- **顺序**：先掩码再追加`[Body truncated: ...]`截断说明。顺序颠倒会让说明行被当成字段值一起掩掉，也会让尾部规则匹配不到
+- **二进制**：二进制正文只记摘要，不进入掩码流程
 
 ## 流式请求支持
 
@@ -1957,13 +1975,17 @@ type Config struct {
 	StaticExtensions      []string         // 静态资源扩展名列表
 	SampleRate            float64          // 采样率（0-1之间）
 	Logger                LoggerInterface  // 日志记录器实例
-	AllowedIPs            []string         // 允许访问的IP白名单
-	UseCDN                bool             // 是否使用CDN获取真实IP
+	AllowedIPs            []string         // 调试页面/API 的 IP 白名单（鉴权走 ctx.ClientIP()）
+	AllowEmptyWhitelist   bool             // 白名单为空时是否仍开放，默认 false（fail-closed 不注册路由）
+	UseCDN                bool             // 仅影响日志中记录的客户端IP，不参与鉴权
+	BodyMaskEnabled       *bool            // 凭据掩码开关（*bool 三态：nil=默认开启，显式false关闭）
+	HeaderMaskKeys        []string         // 追加需掩码的请求/响应头键名
+	BodyMaskKeys          []string         // 追加需掩码的请求/响应体字段名
 	EnableStreamingSupport bool            // 启用流式请求支持
 	EnableMultipartSupport bool            // 启用multipart请求支持
 	MultipartMaxPartSize   int64           // multipart单个部分最大大小（KB）
-	MultipartSkipFiles     bool            // 是否跳过文件内容记录
-	MultipartPreserveState bool            // 是否保持Gin上下文状态
+	MultipartSkipFiles     *bool           // 文件部件是否只记元数据（*bool 三态：nil=默认只记元数据，显式false记录内容）
+	MultipartPreserveState *bool           // 是否复制请求体以保持Gin上下文（*bool 三态：nil=默认开启）
 	MiddlewareOrder        string          // 中间件执行顺序：normal/early/late
 	ServiceName            string          // 服务标识，多服务共享同一存储时区分日志来源，默认空 = 不标识
 }
@@ -2019,8 +2041,11 @@ func NewProductionDebugger(storagePath string) (*Debugger, error)        // 创�
 
 // 存储器构造函数
 func NewMemoryStorage(maxRecords int) (Storage, error)                  // 创建内存存储器
-func NewFileStorage(path string, maxRecords int) (Storage, error)       // 创建文件存储器
-func NewDatabaseStorage(db *gorm.DB, tableName string) (Storage, error) // 创建数据库存储器
+func NewFileStorage(path string, maxRecords int) (*FileStorage, error)  // 创建文件存储器
+func NewDatabaseStorage(db *gorm.DB, maxSize int, tableName ...string) (*DatabaseStorage, error) // 创建数据库存储器
+
+// DatabaseStorage 可选链式配置：裁剪等内部操作的错误经实例 logger 记录（未设置时退回标准输出）
+func (ds *DatabaseStorage) SetLogger(logger LoggerInterface) *DatabaseStorage
 ```
 
 ## 版本历史
@@ -2028,6 +2053,14 @@ func NewDatabaseStorage(db *gorm.DB, tableName string) (Storage, error) // 创�
 - v1.0.0: 初始版本，支持基本调试功能
 - 多服务支持: 新增`ServiceName`服务标识（Config/LogEntry/三种存储过滤与统计/`GET /api/services`接口/前端服务筛选），支持多服务共享同一存储时区分日志来源；`GenerateID`追加随机数避免同进程ID重复导致共享存储日志互相覆盖
 - AutoSkipStatic 修复: `AutoSkipStatic` 与 `EnableCallerInfo` 改为 `*bool` 三态字段——此前 bool + `default:"true"` 会被默认值机制把显式设置的 `false` 强制改回 `true`，导致"关闭自动跳过静态资源"与"关闭调用位置信息"配置失效；现未配置（nil/JSON 缺省）仍默认开启，显式 `false` 生效关闭。**破坏性变更**：Go 代码中的 `AutoSkipStatic: true/false`、`EnableCallerInfo: true/false` 字面量需改为指针（如 `&autoSkipStatic`），JSON 配置格式不变、缺省行为不变
+- 安全与资源治理:
+    - 凭据掩码: 新增`BodyMaskEnabled`/`HeaderMaskKeys`/`BodyMaskKeys`，在写入日志条目时把头/查询参数/正文中的密码、令牌、验证码等替换为`***`，页面、导出、存储三条路径都不留原文；掩码先于截断说明执行，并支持被截半的值
+    - 白名单鉴权: 改为统一使用`ctx.ClientIP()`判定，`UseCDN`仅影响日志记录；反向代理场景的可信代理需宿主`SetTrustedProxies`收紧（gin 默认信任所有代理）。同时移除403拒绝时打印整份请求头（会把凭据写进进程日志）
+    - fail-closed: 新增`AllowEmptyWhitelist`（默认`false`），白名单为空时不注册调试页面与API路由并打印提示，避免配置漏填等于公网全开
+    - 请求/响应体有界捕获: 读取上限统一由`MaxBodySize`决定，已读字节通过`MultiReader`回灌，业务侧仍可读到完整请求体；截断按UTF-8 rune边界回退，避免非法字节被MySQL拒绝（1366/3140）
+    - multipart: `MultipartSkipFiles`/`MultipartPreserveState`改为`*bool`三态（默认分别为「只记文件元数据」「复制请求体」）。**破坏性变更**：Go 代码里的`MultipartSkipFiles: true/false`、`MultipartPreserveState: true/false`字面量需改为指针；JSON 配置不变。原因同`AutoSkipStatic`——`bool + default:"true" + preserve:"true"`组合下未配置的零值`false`会被视为显式`false`，默认开启永不生效；旧默认行为还会让后续`c.FormFile`报`http: multipart handled by MultipartReader`，破坏业务上传
+    - 清理与写库: `Cleanup(before)`拒绝零值与未来时间（否则等价于清全表），周期清理由宿主显式调用`StartPeriodicCleanup`（幂等、`stop`可重复调用）；`DatabaseStorage.Save`改为按主键upsert一次落库，`maxSize`裁剪按`sizeCheckEveryWrites`均摊，写入路径不再每条`COUNT(*)`，裁剪失败经实例logger记录（`Debugger.New`自动注入，独立创建时可`SetLogger`设置，未配置时退回标准输出）
+- 缺陷修复: `MemoryStorage.Cleanup`的槽位清空循环按模回绕，会抹掉刚紧凑重放到区间头部的保留条目（表现为任何一次清理都清空全表），已改为只清`[newCount, maxSize)`
 - 后续版本计划：支持更多存储后端、实时日志流、性能监控等
 
 ## 贡献指南
