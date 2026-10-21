@@ -372,11 +372,6 @@ func debugSend(email *mailer.Email) error {
 
 - `splitBase64(encoded string) string` - 将 Base64 数据分行处理
 
-## 版本历史
-
-- v1.0.0：初始版本，包含基本的邮件发送功能
-- 支持 TLS 加密、HTML 邮件和内嵌图片
-
 ## 贡献指南
 
 欢迎提交 Issue 和 Pull Request 来改进 Mailer 组件。

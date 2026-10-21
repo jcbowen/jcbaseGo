@@ -1404,11 +1404,6 @@ func BuildYii2RedisCacheKey(key string) string
 func CompareVersion(v1, v2 string) int
 ```
 
-## 版本历史
-
-- v1.0.0：初始版本，包含完整的工具函数集合
-- 支持数据类型转换、字符串处理、JSON处理、文件操作、货币计算等功能
-
 ## 性能优化建议
 
 ### 字符串处理优化

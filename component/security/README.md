@@ -371,10 +371,6 @@ fmt.Printf("IV length: %d\n", len(aes.Iv))
 - `FormatPrivateKeyPEM(rawKey string) string` - 裸私钥串包装为 PKCS1 PEM 文本
 - `FormatPublicKeyPEM(rawKey string) string` - 裸公钥串包装为 X.509 PEM 文本
 
-## 版本历史
-
-- v1.0.0：初始版本，包含 AES、SM4、密码处理和输入过滤功能
-
 ## 贡献指南
 
 欢迎提交 Issue 和 Pull Request 来改进 Security 组件。

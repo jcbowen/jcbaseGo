@@ -61,6 +61,12 @@ example/
     ├── file_storage.go        # 文件存储示例
     ├── controller_usage.go    # 控制器使用示例
     └── config_examples.go     # 配置示例
+├── message/                    # 消息提示组件示例
+│   └── main.go
+├── php/                        # PHP 集成示例
+│   └── README.md               # PHP 集成说明（含多个子示例）
+└── time_field_migration/       # 时间字段迁移示例
+    └── README.md               # 时间字段迁移说明
 ```
 
 ## 运行示例
@@ -107,6 +113,9 @@ go run example/redis/main.go
 # 运行数据验证示例
 go run example/validator/main.go
 
+# 运行消息提示示例
+go run example/message/main.go
+
 # 运行附件上传示例
 go run example/attachment/upload/main.go
 
@@ -147,6 +156,9 @@ go run example/debugger/config_examples.go
 - **redis**: Redis 缓存操作示例
 - **validator**: 数据验证功能示例
 - **attachment**: 文件上传和管理示例
+- **message**: 消息提示组件示例
+- **php**: PHP 集成示例，涵盖基础调用、自定义函数、JSON、数学计算、序列化、字符串等场景
+- **time_field_migration**: 时间字段迁移示例，演示字符串/时间/混合类型字段的迁移方案
 
 ## 注意事项
 

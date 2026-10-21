@@ -2048,21 +2048,6 @@ func NewDatabaseStorage(db *gorm.DB, maxSize int, tableName ...string) (*Databas
 func (ds *DatabaseStorage) SetLogger(logger LoggerInterface) *DatabaseStorage
 ```
 
-## 版本历史
-
-- v1.0.0: 初始版本，支持基本调试功能
-- 多服务支持: 新增`ServiceName`服务标识（Config/LogEntry/三种存储过滤与统计/`GET /api/services`接口/前端服务筛选），支持多服务共享同一存储时区分日志来源；`GenerateID`追加随机数避免同进程ID重复导致共享存储日志互相覆盖
-- AutoSkipStatic 修复: `AutoSkipStatic` 与 `EnableCallerInfo` 改为 `*bool` 三态字段——此前 bool + `default:"true"` 会被默认值机制把显式设置的 `false` 强制改回 `true`，导致"关闭自动跳过静态资源"与"关闭调用位置信息"配置失效；现未配置（nil/JSON 缺省）仍默认开启，显式 `false` 生效关闭。**破坏性变更**：Go 代码中的 `AutoSkipStatic: true/false`、`EnableCallerInfo: true/false` 字面量需改为指针（如 `&autoSkipStatic`），JSON 配置格式不变、缺省行为不变
-- 安全与资源治理:
-    - 凭据掩码: 新增`BodyMaskEnabled`/`HeaderMaskKeys`/`BodyMaskKeys`，在写入日志条目时把头/查询参数/正文中的密码、令牌、验证码等替换为`***`，页面、导出、存储三条路径都不留原文；掩码先于截断说明执行，并支持被截半的值
-    - 白名单鉴权: 改为统一使用`ctx.ClientIP()`判定，`UseCDN`仅影响日志记录；反向代理场景的可信代理需宿主`SetTrustedProxies`收紧（gin 默认信任所有代理）。同时移除403拒绝时打印整份请求头（会把凭据写进进程日志）
-    - fail-closed: 新增`AllowEmptyWhitelist`（默认`false`），白名单为空时不注册调试页面与API路由并打印提示，避免配置漏填等于公网全开
-    - 请求/响应体有界捕获: 读取上限统一由`MaxBodySize`决定，已读字节通过`MultiReader`回灌，业务侧仍可读到完整请求体；截断按UTF-8 rune边界回退，避免非法字节被MySQL拒绝（1366/3140）
-    - multipart: `MultipartSkipFiles`/`MultipartPreserveState`改为`*bool`三态（默认分别为「只记文件元数据」「复制请求体」）。**破坏性变更**：Go 代码里的`MultipartSkipFiles: true/false`、`MultipartPreserveState: true/false`字面量需改为指针；JSON 配置不变。原因同`AutoSkipStatic`——`bool + default:"true" + preserve:"true"`组合下未配置的零值`false`会被视为显式`false`，默认开启永不生效；旧默认行为还会让后续`c.FormFile`报`http: multipart handled by MultipartReader`，破坏业务上传
-    - 清理与写库: `Cleanup(before)`拒绝零值与未来时间（否则等价于清全表），周期清理由宿主显式调用`StartPeriodicCleanup`（幂等、`stop`可重复调用）；`DatabaseStorage.Save`改为按主键upsert一次落库，`maxSize`裁剪按`sizeCheckEveryWrites`均摊，写入路径不再每条`COUNT(*)`，裁剪失败经实例logger记录（`Debugger.New`自动注入，独立创建时可`SetLogger`设置，未配置时退回标准输出）
-- 缺陷修复: `MemoryStorage.Cleanup`的槽位清空循环按模回绕，会抹掉刚紧凑重放到区间头部的保留条目（表现为任何一次清理都清空全表），已改为只清`[newCount, maxSize)`
-- 后续版本计划：支持更多存储后端、实时日志流、性能监控等
-
 ## 贡献指南
 
 欢迎提交Issue和Pull Request来改进这个组件。

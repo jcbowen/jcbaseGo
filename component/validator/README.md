@@ -687,11 +687,6 @@ func IsChineseIDCard(idCard string) bool
 **返回值：**
 - `bool`：如果是有效的身份证号码返回true，否则返回false
 
-## 版本历史
-
-- v1.0.0：初始版本，包含基本的验证功能
-- 支持手机号、邮箱、URL、IP地址、端口、身份证号码验证
-
 ## 贡献指南
 
 欢迎提交 Issue 和 Pull Request 来改进 Validator 组件。

@@ -595,12 +595,6 @@ Redis 实例的主要结构体
 - `WithPrefix(prefix string) CacheOption` - 设置键前缀
 - `WithExpire(expire time.Duration) CacheOption` - 设置默认过期时间
 
-## 版本历史
-
-- v1.0.0：初始版本，包含基本的 Redis 操作和缓存管理功能
-- 支持多种数据类型的操作
-- 提供缓存管理器功能
-
 ## 贡献指南
 
 欢迎提交 Issue 和 Pull Request 来改进 Redis 组件。

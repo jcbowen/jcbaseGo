@@ -22,6 +22,10 @@
 - **📍 IP地址处理**: IP验证、地理位置查询
 - **🔑 SSH密钥管理**: SSH密钥生成、获取和管理
 - **📏 单位转换**: 长度、重量、时间等单位转换
+- **🚦 限流组件**: 基于 Redis 有序集合的滑动窗口限流，内置本地内存降级
+- **🔄 数据序列化**: 响应数据递归序列化，支持时间格式化与 ID 加密
+- **❄️ 雪花算法**: 分布式唯一 ID 生成
+- **🌏 时区工具**: 数据库存 UTC、前端展示北京时间的格式化与解析
 
 ## 📦 安装
 
@@ -33,7 +37,7 @@ go get github.com/jcbowen/jcbaseGo
 
 ### 依赖要求
 
-- **Go**: 1.23.0+ (推荐 1.23.4+)
+- **Go**: 1.26.0+
 - **MySQL**: 5.7+ 或 8.0+ (可选，用于数据库功能)
 - **SQLite**: 3.x (可选，用于轻量级数据库)
 - **Redis**: 6.0+ (可选，用于缓存功能)
@@ -163,7 +167,9 @@ jcbaseGo/
 │   ├── validator/              # 数据验证示例
 │   ├── attachment/             # 附件管理示例
 │   ├── debugger/               # 调试器组件示例
-│   └── php/                    # PHP 集成示例
+│   ├── message/                # 消息提示组件示例
+│   ├── php/                    # PHP 集成示例
+│   └── time_field_migration/   # 时间字段迁移示例
 ├── middleware/                 # 🔗 中间件集合
 │   ├── main.go                 # 通用中间件
 │   └── response.go             # 统一 JSON 响应与数据序列化
@@ -185,7 +191,6 @@ import (
     "github.com/jcbowen/jcbaseGo/component/orm/base"
     "github.com/jcbowen/jcbaseGo/component/orm/mysql"
     "github.com/jcbowen/jcbaseGo/component/trait/crud"
-    "officeAutomation/library"
 )
 
 // User 用户模型
@@ -249,13 +254,13 @@ func (uc *UserController) CheckInit(ctx any) *crud.Context {
     // 确认crud上下文对象是否为*crud.Context类型
     if crudCtx, ok = ctx.(*crud.Context); ok {
         // 根据运行模式设置调试标识（示例用 Gin 模式）
-        crudCtx.Debug = library.Mode == "debug"
+        crudCtx.Debug = gin.Mode() == gin.DebugMode
     } else if ginCtx, ok := ctx.(*gin.Context); ok {
         // 传入的是 *gin.Context 时，构建一个新的 CRUD 上下文
         crudCtx = crud.NewContext(&crud.NewContextOpt{
             ActionName: "custom",
             GinContext: ginCtx,
-            Debug:      library.Mode == "debug",
+            Debug:      gin.Mode() == gin.DebugMode,
         })
     }
 
@@ -1450,6 +1455,9 @@ go run example/attachment/upload/main.go
 
 # PHP 集成示例
 go run example/php/basic/main.go
+
+# 消息提示示例
+go run example/message/main.go
 
 # 工具函数示例
 go run example/helper/convert/main.go
