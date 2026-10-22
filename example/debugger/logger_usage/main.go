@@ -40,7 +40,9 @@ func main() {
 
 		logger.Info("处理根路径请求", map[string]interface{}{
 			"method": c.Request.Method,
-			"url":    c.Request.URL.String(),
+			// 业务日志只记路径：查询串可能含凭据原文，组件掩码只覆盖入库条目，
+			// 不覆盖这里自行传入的业务字段，直接记 URL.String() 会绕过掩码
+			"url": c.Request.URL.Path,
 		})
 
 		c.JSON(http.StatusOK, gin.H{
@@ -58,10 +60,11 @@ func main() {
 	r.GET("/api/users", func(c *gin.Context) {
 		logger := debugger.GetLoggerFromContext(c)
 
+		// 查询参数只记非敏感的具体键：URL.Query() 全量映射会把查询串原文写进业务日志，
+		// 组件掩码不覆盖业务字段；入库条目的 query_params 已由中间件统一掩码
 		logger.Info("开始处理用户列表请求", map[string]interface{}{
-			"query_params": c.Request.URL.Query(),
-			"page":         c.Query("page"),
-			"limit":        c.Query("limit"),
+			"page":  c.Query("page"),
+			"limit": c.Query("limit"),
 		})
 
 		// 模拟数据库查询

@@ -312,6 +312,7 @@ config := &debugger.Config{
 - **开关**：`BodyMaskEnabled`为`*bool`三态，`nil`（不配置）= 开启，显式`false`才关闭；关闭后原文照记，仅建议在受控环境使用
 - **头部**：默认掩码`authorization`、`proxy-authorization`、`cookie`、`set-cookie`、`x-api-key`、`x-access-token`、`x-auth-token`，可用`HeaderMaskKeys`追加
 - **正文**：默认覆盖`password`/`pwd`/`old_password`一类凭据字段，以及`token`、`*_secret`、`api_key`、`session_id`、`captcha`、`sms_code`、`verify_code`、`id_card`、`phone`等；`code`这类业务状态码字段刻意不在名单内，避免把接口返回值掩成不可读
+- **查询串**：URL 列与请求级 logger 的`url`字段走同一套键名匹配（与正文共用`BodyMaskKeys`），命中参数的值替换为`***`——GET 类凭据（如短信验证码接口）的敏感值只体现在查询串上，若只掩码 query_params 映射，同一份原文仍会留在 url 列，明文检索即可命中
 - **形态**：正则替换、不解析重排，因此保留原始排版，且对被截断的非法JSON同样安全——正文被切成两半的凭据值，靠「尾部未闭合值」规则命中
 - **顺序**：先掩码再追加`[Body truncated: ...]`截断说明。顺序颠倒会让说明行被当成字段值一起掩掉，也会让尾部规则匹配不到
 - **二进制**：二进制正文只记摘要，不进入掩码流程

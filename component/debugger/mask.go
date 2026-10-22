@@ -175,6 +175,35 @@ func (d *Debugger) maskQueryParams(params map[string]string) map[string]string {
 	return params
 }
 
+// safeURL 生成可入库的请求 URL：命中掩码键的查询参数值替换为占位
+// URL 列与请求级 logger 的 url 字段必须走本函数：GET 请求的凭据只体现在查询串上，
+// 仅掩码 QueryParams 映射会让同一份原文留在 url 列和 logger_logs 里，检索明文即可命中
+// 参数：
+//   - u: 原始请求 URL（不修改入参）
+//
+// 返回值：
+//   - string: 掩码后的 URL；掩码关闭、无查询串或无命中时与 u.String() 完全一致
+//
+// 异常：不触发 panic；u 为 nil 时返回空串
+// 使用示例：
+//
+//	entry.URL = d.safeURL(c.Request.URL)
+func (d *Debugger) safeURL(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if u.RawQuery == "" || !d.maskEnabled() || len(d.maskBodySet) == 0 {
+		return u.String()
+	}
+	masked := maskFormPairs(d.maskBodySet, u.RawQuery)
+	if masked == u.RawQuery {
+		return u.String()
+	}
+	clone := *u
+	clone.RawQuery = masked
+	return clone.String()
+}
+
 // maskBody 按内容类型掩码请求/响应体文本
 // 调用时机必须在追加截断说明之前：捕获窗口按上限截断时凭据值可能被截半残留，
 // 未闭合值只有在位于文本末尾时才会命中掩码规则，说明行先附上去就再也匹配不到

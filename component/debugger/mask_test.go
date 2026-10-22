@@ -3,6 +3,7 @@ package debugger
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -263,4 +264,71 @@ func TestMaskDisabledKeepsRawEndToEnd(t *testing.T) {
 	assert.Len(t, entries, 1)
 	assert.Contains(t, entries[0].RequestBody, "hunter2")
 	assert.Contains(t, entries[0].ResponseBody, "eyJhb")
+}
+
+// TestSafeURLMasksQueryCredentials url 列必须与 query_params 同步掩码
+// GET 类凭据接口（如短信验证码）的密码/手机号只出现在查询串上：
+// 若仅掩码 query_params，同一份原文会以 url 与 logger_logs 两条路径留在表里，明文检索即可命中
+// 参数：
+//   - t: 测试上下文
+//
+// 返回值：无
+// 异常：掩码后仍含凭据原文、或正常参数被误掩时断言失败
+// 使用示例：
+//
+//	go test ./component/debugger/ -run TestSafeURL
+func TestSafeURLMasksQueryCredentials(t *testing.T) {
+	u, err := url.Parse("/api/sms/code?phone=13800138000&password=hunter2&scene=login&page=2")
+	assert.NoError(t, err)
+
+	d := newMaskTester(t, nil)
+	masked := d.safeURL(u)
+	assert.NotContains(t, masked, "13800138000")
+	assert.NotContains(t, masked, "hunter2")
+	assert.Contains(t, masked, "scene=login", "非敏感参数应原样保留，页面仍可按参数排查")
+	assert.Contains(t, masked, "page=2")
+	assert.Contains(t, masked, "phone="+maskPlaceholder)
+
+	// 入参不被就地修改：调用方的 c.Request.URL 还要继续参与路由与业务
+	assert.Equal(t, "phone=13800138000&password=hunter2&scene=login&page=2", u.RawQuery)
+
+	// 无命中与空查询串都走原样返回分支
+	plain, err := url.Parse("/api/products?page=1")
+	assert.NoError(t, err)
+	assert.Equal(t, "/api/products?page=1", d.safeURL(plain))
+	assert.Equal(t, "/api/products", d.safeURL(&url.URL{Path: "/api/products"}))
+	assert.Equal(t, "", d.safeURL(nil))
+
+	// 显式关闭掩码（本地一次性排查）时保留原文
+	off := false
+	disabled := newMaskTester(t, &Config{BodyMaskEnabled: &off})
+	assert.Equal(t, u.String(), disabled.safeURL(u))
+}
+
+// TestSafeURLThroughMiddlewareEndToEnd 中间件产出的条目里 url 字段不得含凭据原文
+// 覆盖真实调用路径：createLogEntry 与请求级 logger 都取 safeURL
+func TestSafeURLThroughMiddlewareEndToEnd(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	storage, err := NewMemoryStorage(100)
+	assert.NoError(t, err)
+	dbg, err := New(&Config{Enabled: true, SampleRate: 1.0, MaxRecords: 100, Storage: storage})
+	assert.NoError(t, err)
+
+	router := gin.New()
+	router.Use(dbg.Middleware())
+	router.GET("/api/sms/code", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "message": "success"})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sms/code?phone=13800138000&password=hunter2&page=1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	entries, _, err := storage.FindAll(1, 10, nil)
+	assert.NoError(t, err)
+	assert.Len(t, entries, 1)
+	assert.NotContains(t, entries[0].URL, "13800138000")
+	assert.NotContains(t, entries[0].URL, "hunter2")
+	assert.Contains(t, entries[0].URL, "page=1")
 }

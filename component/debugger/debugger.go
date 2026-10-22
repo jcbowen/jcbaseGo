@@ -376,7 +376,7 @@ func (d *Debugger) createNormalMiddleware() gin.HandlerFunc {
 		requestLogger := d.logger.WithFields(map[string]interface{}{
 			"request_id": entry.ID,
 			"method":     c.Request.Method,
-			"url":        c.Request.URL.String(),
+			"url":        d.safeURL(c.Request.URL),
 			"host":       host,
 			"client_ip":  middleware.GetRealIP(c, d.config.UseCDN),
 		})
@@ -459,7 +459,7 @@ func (d *Debugger) createEarlyMiddleware() gin.HandlerFunc {
 		requestLogger := d.logger.WithFields(map[string]interface{}{
 			"request_id": entry.ID,
 			"method":     c.Request.Method,
-			"url":        c.Request.URL.String(),
+			"url":        d.safeURL(c.Request.URL),
 			"client_ip":  middleware.GetRealIP(c, d.config.UseCDN),
 		})
 
@@ -541,7 +541,7 @@ func (d *Debugger) createLateMiddleware() gin.HandlerFunc {
 		requestLogger := d.logger.WithFields(map[string]interface{}{
 			"request_id": entry.ID,
 			"method":     c.Request.Method,
-			"url":        c.Request.URL.String(),
+			"url":        d.safeURL(c.Request.URL),
 			"client_ip":  middleware.GetRealIP(c, d.config.UseCDN),
 		})
 
@@ -617,7 +617,7 @@ func (d *Debugger) createLogEntry(c *gin.Context, startTime time.Time) *LogEntry
 		ID:        GenerateID(),
 		Timestamp: startTime,
 		Method:    c.Request.Method,
-		URL:       c.Request.URL.String(),
+		URL:       d.safeURL(c.Request.URL),
 		Host: func() string {
 			h := c.Request.Header.Get("X-Forwarded-Host")
 			if h == "" {
