@@ -97,8 +97,10 @@ type Config struct {
 	// 会把未配置的零值 false 当成显式关闭，导致 default:"true" 永远不生效，故只能用 *bool 表达默认开启
 	MultipartSkipFiles *bool `json:"multipart_skip_files"`
 	// MultipartPreserveState 是否保持 Gin 上下文状态，避免破坏后续中间件与业务处理。
-	// 同样必须是 *bool 三态（nil = 默认开启）：关掉该开关会走 MultipartReader 直接消费原始请求体，
-	// 之后 gin 的 ParseMultipartForm 返回 ErrMultipartAlreadyWritten，业务侧 c.FormFile 拿不到文件
+	// 同样必须是 *bool 三态（nil = 默认开启）：开启时复制一份请求体来解析，原文通过
+	// MultiReader 在读取处就回灌给后续处理链；关掉则走 MultipartReader 直接消费原始请求体，
+	// 之后 gin 的 ParseMultipartForm 返回 ErrMultipartAlreadyWritten，业务侧 c.FormFile 拿不到文件。
+	// 两种路径都不做事后「恢复」：回灌已在读取处完成，真被消耗掉的流也无法复原
 	MultipartPreserveState *bool `json:"multipart_preserve_state"`
 
 	// 中间件执行顺序配置
@@ -406,9 +408,6 @@ func (d *Debugger) createNormalMiddleware() gin.HandlerFunc {
 		// 记录响应信息
 		d.recordResponseInfo(entry, writer, startTime)
 
-		// 恢复multipart请求体状态（如果适用）
-		d.restoreMultipartRequestBody(c)
-
 		// 记录会话数据（如果存在）
 		d.recordSessionData(entry, c)
 
@@ -487,9 +486,6 @@ func (d *Debugger) createEarlyMiddleware() gin.HandlerFunc {
 
 		// 记录响应信息
 		d.recordResponseInfo(entry, writer, startTime)
-
-		// 恢复multipart请求体状态（如果适用）
-		d.restoreMultipartRequestBody(c)
 
 		// 记录会话数据（如果存在）
 		d.recordSessionData(entry, c)
@@ -570,9 +566,6 @@ func (d *Debugger) createLateMiddleware() gin.HandlerFunc {
 		// 记录响应信息
 		d.recordResponseInfo(entry, writer, startTime)
 
-		// 恢复multipart请求体状态（如果适用）
-		d.restoreMultipartRequestBody(c)
-
 		// 记录会话数据（如果存在）
 		d.recordSessionData(entry, c)
 
@@ -584,30 +577,6 @@ func (d *Debugger) createLateMiddleware() gin.HandlerFunc {
 
 		// 保存日志条目
 		d.saveLogEntry(entry)
-	}
-}
-
-// restoreMultipartRequestBody 恢复multipart请求体状态
-// 当debugger处理multipart请求后，确保后续中间件能正常访问请求体
-func (d *Debugger) restoreMultipartRequestBody(c *gin.Context) {
-	// 只有在启用multipart支持且需要保持状态时才进行恢复
-	if !d.config.EnableMultipartSupport || !d.preserveMultipartState() {
-		return
-	}
-
-	// 检查是否为multipart请求
-	if !isMultipartFormData(c) {
-		return
-	}
-
-	// 重新设置multipart reader，确保Gin能正确解析
-	contentType := c.Request.Header.Get("Content-Type")
-	boundary := extractBoundary(contentType)
-	if boundary != "" {
-		// 重置Gin的multipart状态
-		c.Request.MultipartForm = nil
-		// 强制Gin重新解析multipart表单
-		c.Request.ParseMultipartForm(32 << 20) // 32MB
 	}
 }
 

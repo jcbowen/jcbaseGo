@@ -1258,6 +1258,9 @@ if err != nil {
 - **text/xml**: XML 格式数据解析（支持微信开放平台等场景）
 - **application/xml**: XML 格式数据解析
 
+> SetGPC 读取请求体后会把原文回灌，业务 handler 仍可再次 `c.GetRawData()` 取完整字节做验签或原文哈希；
+> 超过 10MB 的请求体只回灌不解析（`GPC["data"]` 为空并记录日志），multipart 走解析后的表单与文件句柄。
+
 #### 使用示例
 ```go
 import "github.com/jcbowen/jcbaseGo/middleware"
@@ -1267,14 +1270,15 @@ func main() {
     
     // 使用中间件
     base := middleware.Base{}
-    r.Use(base.Cors())      // 跨域支持
-    r.Use(base.RealIP())    // 真实 IP 获取
-    r.Use(base.SetGPC())    // 请求参数解析
+    r.Use(base.Cors())              // 跨域支持
+    r.Use(base.SetRealIP(true))     // 真实 IP 获取，参数表示是否走 CDN/代理
+    r.Use(base.SetGPC(r))           // 请求参数解析，传入引擎以读取 MaxMultipartMemory
     
     // 路由定义
     r.POST("/api/wechat", func(c *gin.Context) {
         // 自动解析 XML 请求体（微信开放平台格式）
-        formData := c.MustGet("formData").(map[string]any)
+        gpc := c.MustGet("GPC").(map[string]map[string]any)
+        formData := gpc["data"]
         
         // 获取微信消息参数
         toUserName := formData["ToUserName"].(string)

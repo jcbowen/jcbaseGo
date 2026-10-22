@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -139,7 +140,20 @@ func GetRealIPWithFilter(c *gin.Context, useCDN bool, whitelist, blacklist []str
 	return
 }
 
-// SetGPC 设置响应头
+// SetGPC 把 query、cookie、header 与请求体参数汇总到上下文的 "GPC" 键
+// 请求体按 Content-Type 分派解析，读到的字节一律回灌，业务 handler 仍可重复读取原始请求体
+// 参数：
+//   - e: gin 引擎，取用其 MaxMultipartMemory 作为 multipart 的内存上限
+//
+// 返回值：
+//   - gin.HandlerFunc: 注册到引擎的中间件
+//
+// 异常：不触发 panic；请求体解析失败只记录日志并给出空的 data，GPC 结构始终完整写入
+// 使用示例：
+//
+//	base := middleware.Base{}
+//	e := gin.Default()
+//	e.Use(base.SetGPC(e))
 func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var err error
@@ -154,21 +168,7 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 		}
 
 		// 获取query
-		queryParams := c.Request.URL.Query()
-		for key, values := range queryParams {
-			if len(values) > 0 {
-				if strings.HasSuffix(key, "[]") {
-					cleanKey := strings.TrimSuffix(key, "[]")
-					GPC["query"][cleanKey] = values
-				} else {
-					//if len(values) > 1 {
-					//	GPC["query"][key] = values
-					//} else {
-					GPC["query"][key] = values[0]
-					//}
-				}
-			}
-		}
+		mergeValues(GPC["query"], c.Request.URL.Query())
 
 		// 获取Cookies
 		for _, cookie := range c.Request.Cookies() {
@@ -182,114 +182,19 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 			}
 		}
 
-		// 不是根目录也不是web目录的情况才输出为json格式
 		formDataMap := make(map[string]any)
 
-		// 获取请求数据并解析
+		// 获取请求数据并解析；每个分支都把请求体原文回灌给后续处理链，业务侧仍可读到完整字节
 		switch c.ContentType() {
 		case "application/json":
-			if c.Request.ContentLength > 0 {
-				// 读取原始数据，避免消耗body
-				bodyData, err := c.GetRawData()
-				if err != nil {
-					log.Println("GetRawData error:", err)
-					break
-				}
-
-				// 重置body，确保后续处理可以读取
-				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyData))
-
-				err = json.Unmarshal(bodyData, &formDataMap)
-			}
+			formDataMap, err = parseJSONData(c)
 		case "application/x-www-form-urlencoded":
-			err = c.Request.ParseForm()
-			if err == nil {
-				for key, values := range c.Request.PostForm {
-					if len(values) > 0 {
-						if strings.HasSuffix(key, "[]") {
-							cleanKey := strings.TrimSuffix(key, "[]")
-							formDataMap[cleanKey] = values
-						} else {
-							//if len(values) > 1 {
-							//	formDataMap[key] = values
-							//} else {
-							formDataMap[key] = values[0]
-							//}
-						}
-					}
-				}
-			}
+			formDataMap, err = parseFormData(c)
 		case "multipart/form-data":
-			err = c.Request.ParseMultipartForm(e.MaxMultipartMemory)
-			if err == nil {
-				for key, values := range c.Request.MultipartForm.Value {
-					if len(values) > 0 {
-						if strings.HasSuffix(key, "[]") {
-							cleanKey := strings.TrimSuffix(key, "[]")
-							formDataMap[cleanKey] = values
-						} else {
-							//if len(values) > 1 {
-							//	formDataMap[key] = values
-							//} else {
-							formDataMap[key] = values[0]
-							//}
-						}
-					}
-				}
-
-				// 处理文件上传字段
-				for key := range c.Request.MultipartForm.File {
-					formDataMap[key], _ = c.FormFile(key)
-				}
-			}
+			formDataMap, err = parseMultipartData(c, e.MaxMultipartMemory)
 		case "text/xml", "application/xml":
 			// 支持微信开放平台等XML格式请求
-			if c.Request.ContentLength > 0 {
-				// 读取原始数据，避免消耗body
-				bodyData, err := c.GetRawData()
-				if err != nil {
-					log.Println("GetRawData error:", err)
-					break
-				}
-
-				// 重置body，确保后续处理可以读取
-				c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyData))
-
-				result := make(map[string]any)
-				decoder := xml.NewDecoder(bytes.NewReader(bodyData))
-
-				// 解析XML到通用的map结构
-				for {
-					token, err := decoder.Token()
-					if err == io.EOF {
-						break
-					}
-					if err != nil {
-						log.Println("XML token error:", err)
-						break
-					}
-
-					switch se := token.(type) {
-					case xml.StartElement:
-						// 处理开始元素，跳过根元素
-						if se.Name.Local == "xml" {
-							continue
-						}
-
-						// 读取元素内容作为字符串
-						var content string
-						err = decoder.DecodeElement(&content, &se)
-						if err != nil {
-							log.Println("XML decode error:", err)
-							continue
-						}
-
-						// 将元素名和内容添加到结果中
-						result[se.Name.Local] = content
-					}
-				}
-				formDataMap = result
-			}
+			formDataMap, err = parseXMLData(c)
 		default:
 			if c.ContentType() != "" {
 				log.Println("Unsupported Content-Type：", c.ContentType())
@@ -300,13 +205,10 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 			}*/
 		}
 
+		// 解析失败只降级为空参数并记录日志：GPC 必须完整写入，否则下游 c.MustGet("GPC") 会 panic；
+		// 提前 return 拦不住业务 handler（gin 引擎层会继续走链），只会留下缺 key 的上下文
 		if err != nil {
 			log.Println("GPC error:", err)
-			//c.AbortWithStatusJSON(http.StatusOK, jcbaseGo.Result{
-			//	Code: errcode.BadRequest,
-			//	Msg:  err.Error(),
-			//})
-			return
 		}
 
 		GPC["data"] = formDataMap
@@ -329,4 +231,215 @@ func (b Base) SetGPC(e *gin.Engine) gin.HandlerFunc {
 		// 处理请求
 		c.Next()
 	}
+}
+
+// gpcBodyParseLimit 是 SetGPC 解析请求体的字节上限，对齐 net/http parsePostForm 的 10MB 事实标准
+// 超限的请求体只回灌不解析，避免大 POST 把整份 body 常驻内存
+const gpcBodyParseLimit = int64(10 << 20)
+
+// readBody 有界读取请求体原文，并把读到的字节原样回灌给后续处理链
+// 参数：
+//   - c: gin 上下文，c.Request.Body 会被替换成「已读片段 + 未读残余」的组合读取器
+//
+// 返回值：
+//   - []byte: 请求体字节；空请求体或超过 gpcBodyParseLimit 时返回 nil（超限会记录日志）
+//   - error: 读取错误；出错时已读片段同样完成回灌，不会让下游挂起
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	body, err := readBody(c)
+func readBody(c *gin.Context) ([]byte, error) {
+	if c.Request.Body == nil {
+		return nil, nil
+	}
+
+	// 多读 1 字节用于区分「正好等于上限」与「超过上限」
+	buf := &bytes.Buffer{}
+	_, readErr := buf.ReadFrom(io.LimitReader(c.Request.Body, gpcBodyParseLimit+1))
+
+	// 先回灌再判断：已读片段与未读残余都要还给后续处理链，验签、原文哈希这类
+	// 场景依赖完整字节，出错路径同样不能吞掉
+	c.Request.Body = io.NopCloser(io.MultiReader(bytes.NewReader(buf.Bytes()), c.Request.Body))
+
+	if readErr != nil {
+		return nil, readErr
+	}
+
+	size := buf.Len()
+	if size == 0 {
+		return nil, nil
+	}
+	if int64(size) > gpcBodyParseLimit {
+		log.Printf("GPC: 请求体超过解析上限 %d 字节，只回灌不解析", gpcBodyParseLimit)
+		return nil, nil
+	}
+
+	return buf.Bytes(), nil
+}
+
+// mergeValues 按 jcbaseGo 的参数约定把多值参数写入目标 map
+// 键名以 [] 结尾时保留完整数组并去掉后缀，其余只取首个值；空值键跳过
+// 参数：
+//   - dst: 目标 map，即 GPC 的 query 或 data 分区
+//   - src: 多值参数集合，query 传 url.Values，multipart 传 MultipartForm.Value
+//
+// 返回值：无
+// 异常：不触发 panic
+// 使用示例：
+//
+//	mergeValues(GPC["query"], c.Request.URL.Query())
+func mergeValues(dst map[string]any, src map[string][]string) {
+	for key, values := range src {
+		if len(values) == 0 {
+			continue
+		}
+		if strings.HasSuffix(key, "[]") {
+			dst[strings.TrimSuffix(key, "[]")] = values
+			continue
+		}
+		dst[key] = values[0]
+	}
+}
+
+// parseJSONData 解析 application/json 请求体，读取后回灌原文
+// 参数：
+//   - c: gin 上下文
+//
+// 返回值：
+//   - map[string]any: 解析出的参数；失败时为空 map
+//   - error: 读取或反序列化错误；非对象 JSON（数组、标量）会返回类型错误
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	formDataMap, err = parseJSONData(c)
+func parseJSONData(c *gin.Context) (map[string]any, error) {
+	data := make(map[string]any)
+
+	body, err := readBody(c)
+	if err != nil || len(body) == 0 {
+		return data, err
+	}
+
+	if err := json.Unmarshal(body, &data); err != nil {
+		return data, err
+	}
+	return data, nil
+}
+
+// parseFormData 解析 application/x-www-form-urlencoded 请求体，读取后回灌原文
+// 自行解析原文而不用 Request.ParseForm：后者会把 body 读干且不留下可回灌的字节
+// 参数：
+//   - c: gin 上下文
+//
+// 返回值：
+//   - map[string]any: 解析出的参数；失败时为空 map
+//   - error: 读取或 URL 解码错误，例如坏转义 a=%%zz
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	formDataMap, err = parseFormData(c)
+func parseFormData(c *gin.Context) (map[string]any, error) {
+	data := make(map[string]any)
+
+	body, err := readBody(c)
+	if err != nil || len(body) == 0 {
+		return data, err
+	}
+
+	values, err := url.ParseQuery(string(body))
+	if err != nil {
+		return data, err
+	}
+	mergeValues(data, values)
+	return data, nil
+}
+
+// parseMultipartData 解析 multipart/form-data 请求体
+// 文本字段按 [] 约定展开，文件字段取 *multipart.FileHeader；不做原文回灌——
+// 回灌需要整块缓冲上传文件，而 c.FormFile/MultipartForm 走的是已解析状态，换不到收益
+// 参数：
+//   - c: gin 上下文
+//   - maxMemory: multipart 的内存上限，通常传 gin.Engine.MaxMultipartMemory
+//
+// 返回值：
+//   - map[string]any: 解析出的参数；失败时为空 map
+//   - error: 解析错误，例如 boundary 不匹配
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	formDataMap, err = parseMultipartData(c, e.MaxMultipartMemory)
+func parseMultipartData(c *gin.Context, maxMemory int64) (map[string]any, error) {
+	data := make(map[string]any)
+
+	if err := c.Request.ParseMultipartForm(maxMemory); err != nil {
+		return data, err
+	}
+	if c.Request.MultipartForm == nil {
+		return data, nil
+	}
+
+	mergeValues(data, c.Request.MultipartForm.Value)
+
+	// 处理文件上传字段
+	for key := range c.Request.MultipartForm.File {
+		data[key], _ = c.FormFile(key)
+	}
+	return data, nil
+}
+
+// parseXMLData 解析 text/xml 与 application/xml 请求体，读取后回灌原文
+// 支持微信开放平台等场景，按元素名扁平化为字符串 map；嵌套元素只能取到空文本，属既有约定
+// 参数：
+//   - c: gin 上下文
+//
+// 返回值：
+//   - map[string]any: 元素名到文本内容的 map；解析中断时返回已取到的部分
+//   - error: 读取错误；XML 自身的 token/decode 错误只记日志，不向上抛
+//
+// 异常：不触发 panic
+// 使用示例：
+//
+//	formDataMap, err = parseXMLData(c)
+func parseXMLData(c *gin.Context) (map[string]any, error) {
+	result := make(map[string]any)
+
+	body, err := readBody(c)
+	if err != nil || len(body) == 0 {
+		return result, err
+	}
+
+	decoder := xml.NewDecoder(bytes.NewReader(body))
+
+	// 解析XML到通用的map结构
+	for {
+		token, tokenErr := decoder.Token()
+		if tokenErr == io.EOF {
+			break
+		}
+		if tokenErr != nil {
+			log.Println("XML token error:", tokenErr)
+			break
+		}
+
+		se, ok := token.(xml.StartElement)
+		if !ok || se.Name.Local == "xml" {
+			continue
+		}
+
+		// 读取元素内容作为字符串
+		var content string
+		if decodeErr := decoder.DecodeElement(&content, &se); decodeErr != nil {
+			log.Println("XML decode error:", decodeErr)
+			continue
+		}
+
+		// 将元素名和内容添加到结果中
+		result[se.Name.Local] = content
+	}
+
+	return result, nil
 }

@@ -1007,12 +1007,6 @@ func TestMultipartStateRestoration(t *testing.T) {
 	assert.Contains(t, result, "value1", "createLogEntry应该已经提取了value1值")
 	assert.Contains(t, result, "value2", "createLogEntry应该已经提取了value2值")
 
-	// 在真实的中间件使用场景中，restoreMultipartRequestBody应该在请求处理完成后被调用
-	// 这里我们模拟完整的中间件执行流程：
-	// 1. createLogEntry记录请求（会读取并恢复请求体）
-	// 2. 后续中间件处理请求（可以正常访问请求体）
-	// 3. 请求处理完成后调用restoreMultipartRequestBody恢复multipart状态
-
 	// 模拟后续中间件处理请求（验证请求体可以正常访问）
 	if c.Request.Body != nil {
 		// 保存原始请求体内容用于后续验证
@@ -1033,13 +1027,6 @@ func TestMultipartStateRestoration(t *testing.T) {
 		assert.Contains(t, string(originalBodyBytes), "value1", "后续中间件读取的请求体应该包含value1值")
 		assert.Contains(t, string(originalBodyBytes), "value2", "后续中间件读取的请求体应该包含value2值")
 	}
-
-	// 模拟请求处理完成后恢复multipart状态
-	debugger.restoreMultipartRequestBody(c)
-
-	// 验证multipart状态已正确恢复
-	// 这里我们主要验证Gin的multipart状态是否正确重置，而不是再次读取请求体
-	t.Logf("restoreMultipartRequestBody执行完成，multipart状态已恢复")
 }
 
 // TestSafeRequestBodyExtraction 测试安全的请求体提取方法
