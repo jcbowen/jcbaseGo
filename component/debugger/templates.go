@@ -243,13 +243,14 @@ const indexTemplate = `<!DOCTYPE html>
         .streaming-inactive { background: #f8f9fa; color: #666; }
         
         .process-details { display: flex; flex-direction: column; gap: 4px; }
-        .process-name { font-weight: 600; color: #2c3e50; }
-        .process-type { color: #666; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; }
+        .process-name { font-weight: 600; color: #2c3e50; word-break: break-all; overflow-wrap: anywhere; }
+        .process-type { color: #666; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; word-break: break-all; overflow-wrap: anywhere; }
         
+        .details { min-width: 0; overflow: hidden; }
         .http-details { display: flex; flex-direction: column; gap: 4px; }
         .http-method-detail { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; text-align: center; display: inline-block; width: fit-content; }
         .url { color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .client-ip { color: #666; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; }
+        .client-ip { color: #666; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; word-break: break-all; overflow-wrap: anywhere; }
         
         .duration { color: #666; font-size: 12px; }
         .request-id a { color: #3498db; text-decoration: none; font-weight: 600; }
@@ -783,8 +784,8 @@ const indexTemplate = `<!DOCTYPE html>
 							{{else}}
 							<div class="streaming-badge streaming-inactive" title="非流式请求">-</div>
 							{{end}}
-                                {{if .ClientIP}}<div class="client-ip">{{.ClientIP}}</div>{{end}}
-                                {{if .Host}}<div class="client-ip" title="域名">{{.Host}}</div>{{end}}
+                                {{if .ClientIP}}<div class="client-ip" title="客户端IP: {{.ClientIP}}">{{.ClientIP}}</div>{{end}}
+                                {{if .Host}}<div class="client-ip" title="域名: {{.Host}}">{{.Host}}</div>{{end}}
                             </div>
                             {{end}}
                         </div>
