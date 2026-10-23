@@ -179,14 +179,46 @@ func TestMaskBodyExtraBodyKeys(t *testing.T) {
 	assert.Contains(t, masked, `"keep":"v2"`)
 }
 
-// TestBuildMaskKeySetNormalization 掩码键集合应小写归一化并忽略空白项
+// TestMaskBodyKeyExclusions 排除列表从「内置 + 追加」并集中减去键，放行被误伤的业务字段
+func TestMaskBodyKeyExclusions(t *testing.T) {
+	d := newMaskTester(t, &Config{
+		BodyMaskKeys:          []string{"inner_secret"},
+		BodyMaskKeyExclusions: []string{" Phone ", "INNER_SECRET"},
+	})
+
+	masked := d.maskBody(`{"phone":"13800138000","inner_secret":"v1","password":"hunter2"}`, "application/json")
+	assert.Contains(t, masked, `"phone":"13800138000"`, "排除内置键后应放行原文")
+	assert.Contains(t, masked, `"inner_secret":"v1"`, "排除追加键后应放行原文")
+	assert.Contains(t, masked, `"password":"***"`, "未排除的内置键仍应掩码")
+
+	params := d.maskQueryParams(map[string]string{"Phone": "13800138000", "token": "t1"})
+	assert.Equal(t, "13800138000", params["Phone"], "查询参数同享排除语义（大小写不敏感）")
+	assert.Equal(t, maskPlaceholder, params["token"], "未排除的键仍应掩码")
+
+	// URL 列与正文共用同一集合，排除必须同样体现在查询串上（否则同一份原文留在 url 列）
+	u, _ := url.Parse("/api/sms?phone=13800138000&sms_code=123456")
+	maskedURL := d.safeURL(u)
+	assert.Contains(t, maskedURL, "phone=13800138000", "URL 查询串同享排除集合")
+	assert.Contains(t, maskedURL, "sms_code="+maskPlaceholder, "URL 中未排除的键仍应掩码")
+}
+
+// TestMaskHeaderKeyExclusions 排除列表放行被误伤的内置头名
+func TestMaskHeaderKeyExclusions(t *testing.T) {
+	d := newMaskTester(t, &Config{HeaderMaskKeyExclusions: []string{"X-Api-Key"}})
+
+	masked := d.maskHeaders(map[string]string{"X-Api-Key": "sk-123456", "Authorization": "Bearer t"})
+	assert.Equal(t, "sk-123456", masked["X-Api-Key"], "排除内置头名后应放行原文")
+	assert.Equal(t, maskPlaceholder, masked["Authorization"], "未排除的头名仍应掩码")
+}
+
+// TestBuildMaskKeySetNormalization 掩码键集合应小写归一化、忽略空白项且排除键优先级最高
 func TestBuildMaskKeySetNormalization(t *testing.T) {
-	set := buildMaskKeySet([]string{"A"}, []string{" B ", "", "  "})
-	_, hasA := set["a"]
+	set := buildMaskKeySet([]string{"A"}, []string{" B ", "", "  "}, []string{"a"})
 	_, hasB := set["b"]
-	assert.True(t, hasA)
+	_, hasA := set["a"]
 	assert.True(t, hasB)
-	assert.Len(t, set, 2, "空白键名不应入集合")
+	assert.False(t, hasA, "排除键应从并集中移除（大小写不敏感）")
+	assert.Len(t, set, 1, "空白键名不应入集合")
 }
 
 // TestMaskThroughMiddlewareEndToEnd 走完整中间件链路验证落库条目不含凭据原文

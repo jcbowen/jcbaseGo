@@ -74,6 +74,12 @@ type Config struct {
 	// 与 AutoSkipStatic 同理使用 *bool 三态：nil（JSON 未配置）默认开启，显式 false 生效关闭；
 	// 关闭会让密码、验证码、令牌原文写入存储与页面，仅建议本地一次性排查时使用
 	BodyMaskEnabled *bool `json:"body_mask_enabled"`
+	// HeaderMaskKeyExclusions 从「内置默认 + HeaderMaskKeys 追加」的头名并集中排除指定键，
+	// 放行被误伤的字段；排除优先级最高，同一键无论来自内置还是追加均不再掩码
+	HeaderMaskKeyExclusions []string `json:"header_mask_key_exclusions" default:""`
+	// BodyMaskKeyExclusions 从「内置默认 + BodyMaskKeys 追加」的字段名并集中排除指定键，
+	// 作用于查询参数与请求/响应体；典型场景：放行内置的 phone、session_id 等业务排查字段
+	BodyMaskKeyExclusions []string `json:"body_mask_key_exclusions" default:""`
 
 	// IP访问控制配置
 	AllowedIPs []string `json:"allowed_ips" default:""` // 页面访问IP白名单（支持IP与CIDR）；为空时默认不注册页面路由

@@ -74,10 +74,11 @@ var (
 	reMaskMultipartField = regexp.MustCompile(`(?m)^(\s*\[Field\] Name: )([^,]+?)(,[^\n]*?(?:Value|Content): ).*$`)
 )
 
-// buildMaskKeySet 归一化掩码键集合：内置默认 + 配置追加，统一小写并去空白
+// buildMaskKeySet 归一化掩码键集合：内置默认 + 配置追加 - 配置排除，统一小写并去空白
 // 参数：
 //   - defaults: 内置默认键名
 //   - extra: 调用方通过配置追加的键名（不覆盖默认值，只补充）
+//   - exclusions: 调用方配置的排除键名，从并集中减去；优先级最高，用于放行被误伤的字段
 //
 // 返回值：
 //   - map[string]struct{}: 供 O(1) 查表的集合，键已小写；空输入返回空集合（非 nil）
@@ -85,8 +86,8 @@ var (
 // 异常：不触发 panic
 // 使用示例：
 //
-//	set := buildMaskKeySet(defaultMaskHeaderKeys, cfg.HeaderMaskKeys)
-func buildMaskKeySet(defaults, extra []string) map[string]struct{} {
+//	set := buildMaskKeySet(defaultMaskHeaderKeys, cfg.HeaderMaskKeys, cfg.HeaderMaskKeyExclusions)
+func buildMaskKeySet(defaults, extra, exclusions []string) map[string]struct{} {
 	set := make(map[string]struct{}, len(defaults)+len(extra))
 	for _, list := range [][]string{defaults, extra} {
 		for _, key := range list {
@@ -96,19 +97,27 @@ func buildMaskKeySet(defaults, extra []string) map[string]struct{} {
 			}
 		}
 	}
+	for _, key := range exclusions {
+		normalized := strings.ToLower(strings.TrimSpace(key))
+		if normalized != "" {
+			delete(set, normalized)
+		}
+	}
 	return set
 }
 
 // ensureMaskSets 保证掩码键集合已构建（New 调用一次，sync.Once 保证并发安全且幂等）
 func (d *Debugger) ensureMaskSets() {
 	d.maskSetsOnce.Do(func() {
-		var headerExtra, bodyExtra []string
+		var headerExtra, bodyExtra, headerExclusions, bodyExclusions []string
 		if d.config != nil {
 			headerExtra = d.config.HeaderMaskKeys
 			bodyExtra = d.config.BodyMaskKeys
+			headerExclusions = d.config.HeaderMaskKeyExclusions
+			bodyExclusions = d.config.BodyMaskKeyExclusions
 		}
-		d.maskHeaderSet = buildMaskKeySet(defaultMaskHeaderKeys, headerExtra)
-		d.maskBodySet = buildMaskKeySet(defaultMaskBodyKeys, bodyExtra)
+		d.maskHeaderSet = buildMaskKeySet(defaultMaskHeaderKeys, headerExtra, headerExclusions)
+		d.maskBodySet = buildMaskKeySet(defaultMaskBodyKeys, bodyExtra, bodyExclusions)
 	})
 }
 

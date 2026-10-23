@@ -199,9 +199,11 @@ config := &debugger.Config{
 	AllowEmptyWhitelist: false,                 // 白名单为空时是否仍开放页面，默认 false（fail-closed，不注册路由）
 
 	// 凭据掩码配置（默认开启，在写入日志条目时统一替换为 ***）
-	BodyMaskEnabled:  nil,                      // *bool：nil=默认开启，显式 false 关闭
-	HeaderMaskKeys:   []string{"x-custom-auth"}, // 追加需掩码的请求/响应头（内置含 authorization/cookie/set-cookie 等）
-	BodyMaskKeys:     []string{"custom_secret"}, // 追加需掩码的请求/响应体字段名
+	BodyMaskEnabled:         nil,                       // *bool：nil=默认开启，显式 false 关闭
+	HeaderMaskKeys:          []string{"x-custom-auth"}, // 追加需掩码的请求/响应头（内置含 authorization/cookie/set-cookie 等）
+	BodyMaskKeys:            []string{"custom_secret"}, // 追加需掩码的请求/响应体字段名
+	HeaderMaskKeyExclusions: nil,                       // 排除的请求/响应头键名（从「内置+追加」并集中减去，放行被误伤的字段）
+	BodyMaskKeyExclusions:   []string{"phone"},         // 排除的正文/查询参数字段名（如放行内置的 phone 供业务排查）
 
 	// Multipart请求配置
 	EnableMultipartSupport: true,               // 启用multipart请求支持
@@ -312,10 +314,13 @@ config := &debugger.Config{
 - **开关**：`BodyMaskEnabled`为`*bool`三态，`nil`（不配置）= 开启，显式`false`才关闭；关闭后原文照记，仅建议在受控环境使用
 - **头部**：默认掩码`authorization`、`proxy-authorization`、`cookie`、`set-cookie`、`x-api-key`、`x-access-token`、`x-auth-token`，可用`HeaderMaskKeys`追加
 - **正文**：默认覆盖`password`/`pwd`/`old_password`一类凭据字段，以及`token`、`*_secret`、`api_key`、`session_id`、`captcha`、`sms_code`、`verify_code`、`id_card`、`phone`等；`code`这类业务状态码字段刻意不在名单内，避免把接口返回值掩成不可读
-- **查询串**：URL 列与请求级 logger 的`url`字段走同一套键名匹配（与正文共用`BodyMaskKeys`），命中参数的值替换为`***`——GET 类凭据（如短信验证码接口）的敏感值只体现在查询串上，若只掩码 query_params 映射，同一份原文仍会留在 url 列，明文检索即可命中
+- **排除**：`HeaderMaskKeyExclusions`/`BodyMaskKeyExclusions`从「内置默认 + 追加」的并集中**减去**指定键，用于放行被误伤的业务字段（如内置的`phone`、`session_id`恰好是要排查的字段时）；排除优先级最高，同一键无论来自内置还是追加均不再掩码——这比整体关闭`BodyMaskEnabled`的暴露面小得多
+- **排除的边界**：组件不对排除键做白名单校验，把`authorization`、`cookie`、`set-cookie`或`password`、`token`、`*_secret`一类内置凭据键排除后，其原文会照常入库、渲染到页面并进入导出。排除只应用于确认过的业务字段；生产环境不建议排除任何内置凭据键，需要临时排查时用`BodyMaskEnabled=false`并当场复原，避免配置长期留存
+- **查询串**：URL 列与请求级 logger 的`url`字段走同一套键名匹配（与正文共用`BodyMaskKeys`与`BodyMaskKeyExclusions`），命中参数的值替换为`***`——GET 类凭据（如短信验证码接口）的敏感值只体现在查询串上，若只掩码 query_params 映射，同一份原文仍会留在 url 列，明文检索即可命中
 - **形态**：正则替换、不解析重排，因此保留原始排版，且对被截断的非法JSON同样安全——正文被切成两半的凭据值，靠「尾部未闭合值」规则命中
 - **顺序**：先掩码再追加`[Body truncated: ...]`截断说明。顺序颠倒会让说明行被当成字段值一起掩掉，也会让尾部规则匹配不到
 - **二进制**：二进制正文只记摘要，不进入掩码流程
+- **默认集合演进**：内置名单只减不增；确需新增默认键时视为破坏性变更（下游相关字段会悄然变为`***`），须在 changelog 显式标注
 
 ## 流式请求支持
 
@@ -1964,31 +1969,33 @@ type LogEntry struct {
 #### Config
 ```go
 type Config struct {
-	Enabled               bool             // 是否启用调试器
-	Storage               Storage          // 存储器实例
-	MaxBodySize           int64            // 最大请求/响应体大小（KB）
-	RetentionPeriod       time.Duration    // 日志保留期限
-	Level                 LogLevel         // 日志级别
-	MaxRecords            int              // 最大记录数量
-	SkipPaths             []string         // 跳过的路径
-	SkipMethods           []string         // 跳过的HTTP方法
-	AutoSkipStatic        *bool            // 是否自动跳过静态资源请求（*bool 三态：nil=默认开启，显式false关闭）
-	StaticExtensions      []string         // 静态资源扩展名列表
-	SampleRate            float64          // 采样率（0-1之间）
-	Logger                LoggerInterface  // 日志记录器实例
-	AllowedIPs            []string         // 调试页面/API 的 IP 白名单（鉴权走 ctx.ClientIP()）
-	AllowEmptyWhitelist   bool             // 白名单为空时是否仍开放，默认 false（fail-closed 不注册路由）
-	UseCDN                bool             // 仅影响日志中记录的客户端IP，不参与鉴权
-	BodyMaskEnabled       *bool            // 凭据掩码开关（*bool 三态：nil=默认开启，显式false关闭）
-	HeaderMaskKeys        []string         // 追加需掩码的请求/响应头键名
-	BodyMaskKeys          []string         // 追加需掩码的请求/响应体字段名
-	EnableStreamingSupport bool            // 启用流式请求支持
-	EnableMultipartSupport bool            // 启用multipart请求支持
-	MultipartMaxPartSize   int64           // multipart单个部分最大大小（KB）
-	MultipartSkipFiles     *bool           // 文件部件是否只记元数据（*bool 三态：nil=默认只记元数据，显式false记录内容）
-	MultipartPreserveState *bool           // 是否复制请求体以保持Gin上下文（*bool 三态：nil=默认开启）
-	MiddlewareOrder        string          // 中间件执行顺序：normal/early/late
-	ServiceName            string          // 服务标识，多服务共享同一存储时区分日志来源，默认空 = 不标识
+	Enabled                 bool            // 是否启用调试器
+	Storage                 Storage         // 存储器实例
+	MaxBodySize             int64           // 最大请求/响应体大小（KB）
+	RetentionPeriod         time.Duration   // 日志保留期限
+	Level                   LogLevel        // 日志级别
+	MaxRecords              int             // 最大记录数量
+	SkipPaths               []string        // 跳过的路径
+	SkipMethods             []string        // 跳过的HTTP方法
+	AutoSkipStatic          *bool           // 是否自动跳过静态资源请求（*bool 三态：nil=默认开启，显式false关闭）
+	StaticExtensions        []string        // 静态资源扩展名列表
+	SampleRate              float64         // 采样率（0-1之间）
+	Logger                  LoggerInterface // 日志记录器实例
+	AllowedIPs              []string        // 调试页面/API 的 IP 白名单（鉴权走 ctx.ClientIP()）
+	AllowEmptyWhitelist     bool            // 白名单为空时是否仍开放，默认 false（fail-closed 不注册路由）
+	UseCDN                  bool            // 仅影响日志中记录的客户端IP，不参与鉴权
+	BodyMaskEnabled         *bool           // 凭据掩码开关（*bool 三态：nil=默认开启，显式false关闭）
+	HeaderMaskKeys          []string        // 追加需掩码的请求/响应头键名
+	BodyMaskKeys            []string        // 追加需掩码的请求/响应体字段名
+	HeaderMaskKeyExclusions []string        // 排除的请求/响应头键名（从「内置+追加」并集中减去）
+	BodyMaskKeyExclusions   []string        // 排除的正文/查询参数字段名（从「内置+追加」并集中减去）
+	EnableStreamingSupport  bool            // 启用流式请求支持
+	EnableMultipartSupport  bool            // 启用multipart请求支持
+	MultipartMaxPartSize    int64           // multipart单个部分最大大小（KB）
+	MultipartSkipFiles      *bool           // 文件部件是否只记元数据（*bool 三态：nil=默认只记元数据，显式false记录内容）
+	MultipartPreserveState  *bool           // 是否复制请求体以保持Gin上下文（*bool 三态：nil=默认开启）
+	MiddlewareOrder         string          // 中间件执行顺序：normal/early/late
+	ServiceName             string          // 服务标识，多服务共享同一存储时区分日志来源，默认空 = 不标识
 }
 ```
 
