@@ -71,6 +71,49 @@ func DefaultReconnectConfig() ReconnectConfig {
 // 修改该默认值会直接影响所有下游项目的时间语义，只允许通过配置覆盖，不得改动此常量。
 const defaultLoc = "Local"
 
+// parseTimeTrueValues / parseTimeFalseValues parsetime 配置认可的写法（大小写与前后空格均不敏感）
+var parseTimeTrueValues = []string{"true", "1", "yes", "on", "t", "y"}
+var parseTimeFalseValues = []string{"false", "0", "no", "off", "f", "n"}
+
+// normalizeParseTime 显式解析 DbStruct.ParseTime 的字符串布尔值
+//
+// 历史实现是「只要不等于 false 就开启」：拼错的 Flase、本想关闭的 0/no/on 反义写法
+// 都会被静默当成开启。而 parseTime 决定 datetime 列的读回形态（False→裸串
+// `2026-10-21 14:19:47`，True→RFC3339 `2026-10-21T14:19:47+08:00`），
+// 任何「拿读回字符串比时间」的代码会在配置写错的那一刻整体失效，且只在运行期暴露
+// （2026-10-23 下游项目因此出现过期优惠券可核销的缺陷）。
+// 现在只认真假两种写法；无法识别的值保持原口径（开启，避免改变存量部署的实际行为）
+// 并返回 recognized=false，由调用方打启动告警，让配置错误当场可见。
+//
+// 参数：
+//   - raw: 配置里的原始值（DbStruct.ParseTime）
+//
+// 返回值：
+//   - string: DSN 使用的 "true"/"false"
+//   - bool: 取值是否可识别；false 表示调用方应告警
+//
+// 使用示例：
+//   - v, ok := normalizeParseTime("Flase") // v="true", ok=false
+func normalizeParseTime(raw string) (string, bool) {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if value == "" {
+		// 空值本应由结构体 tag 的 default:"False" 经 CheckAndSetDefault 填充，
+		// 走到这里说明调用方绕过了默认值；保持历史口径（开启），不当配置错误告警
+		return "true", true
+	}
+	for _, v := range parseTimeFalseValues {
+		if value == v {
+			return "false", true
+		}
+	}
+	for _, v := range parseTimeTrueValues {
+		if value == v {
+			return "true", true
+		}
+	}
+	return "true", false
+}
+
 // getDSN 拼接 Data Source Name（数据源）字符串，基于提供的 `DbStruct`。
 //
 // 时区（Loc）说明：
@@ -80,10 +123,9 @@ const defaultLoc = "Local"
 //     转义由本函数统一负责；
 //   - 约定“数据库存 UTC”的项目必须显式配置 Loc=UTC，否则读出的时间会整体偏移一个本地时区。
 func getDSN(dbConfig jcbaseGo.DbStruct) (dsn string) {
-	// 拼接dsn
-	parseTime := strings.ToLower(dbConfig.ParseTime)
-	if parseTime != "false" {
-		parseTime = "true"
+	parseTime, known := normalizeParseTime(dbConfig.ParseTime)
+	if !known {
+		log.Printf("[jcbaseGo] db.parsetime 取值 %q 无法识别，已按历史口径启用时间解析（parseTime=true）；关闭请写 false/0/no/off", dbConfig.ParseTime)
 	}
 
 	loc := strings.TrimSpace(dbConfig.Loc)

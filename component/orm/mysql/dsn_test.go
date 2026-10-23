@@ -185,3 +185,54 @@ func TestGetDSN_LocRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+// TestGetDSN_ParseTime 校验 parsetime 的显式解析与「无法识别即保持历史口径」的兜底。
+//
+// parseTime 决定驱动把 DATETIME/TIMESTAMP 读成 time.Time 还是裸串，进而决定下游项目
+// 模型 string 字段拿到的是 `2026-10-21 14:19:47` 还是 RFC3339；
+// 「不等于 false 就开启」的老写法会让 Flase 这类拼错静默变成开启，
+// 因此真假两种写法都必须认全，拼错时保持原行为并交由日志告警暴露。
+func TestGetDSN_ParseTime(t *testing.T) {
+	base := testDSNBase()
+
+	cases := []struct {
+		name       string
+		parseTime  string
+		wantParam  string
+		recognized bool
+	}{
+		{name: "True", parseTime: "True", wantParam: "true", recognized: true},
+		{name: "全小写true", parseTime: "true", wantParam: "true", recognized: true},
+		{name: "全大写TRUE", parseTime: "TRUE", wantParam: "true", recognized: true},
+		{name: "数字1", parseTime: "1", wantParam: "true", recognized: true},
+		{name: "yes", parseTime: "yes", wantParam: "true", recognized: true},
+		{name: "on", parseTime: "on", wantParam: "true", recognized: true},
+		{name: "单字符t", parseTime: "t", wantParam: "true", recognized: true},
+		{name: "单字符y", parseTime: "y", wantParam: "true", recognized: true},
+		{name: "False", parseTime: "False", wantParam: "false", recognized: true},
+		{name: "全大写FALSE", parseTime: "FALSE", wantParam: "false", recognized: true},
+		{name: "数字0关闭（老实现会误判为开启）", parseTime: "0", wantParam: "false", recognized: true},
+		{name: "no关闭（老实现会误判为开启）", parseTime: "no", wantParam: "false", recognized: true},
+		{name: "off关闭（老实现会误判为开启）", parseTime: "off", wantParam: "false", recognized: true},
+		{name: "单字符f关闭（老实现会误判为开启）", parseTime: "f", wantParam: "false", recognized: true},
+		{name: "单字符n关闭（老实现会误判为开启）", parseTime: "n", wantParam: "false", recognized: true},
+		{name: "两端空格裁剪", parseTime: "  False  ", wantParam: "false", recognized: true},
+		{name: "空值保持开启且不判为配置错误", parseTime: "", wantParam: "true", recognized: true},
+		{name: "拼错的Flase保持历史口径并标记待告警", parseTime: "Flase", wantParam: "true", recognized: false},
+		{name: "越界取值2保持历史口径并标记待告警", parseTime: "2", wantParam: "true", recognized: false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cfg := base
+			cfg.ParseTime = c.parseTime
+			got := getDSN(cfg)
+			if !strings.Contains(got, "parseTime="+c.wantParam) {
+				t.Errorf("getDSN() = %q, want parseTime=%s", got, c.wantParam)
+			}
+			if _, recognized := normalizeParseTime(c.parseTime); recognized != c.recognized {
+				t.Errorf("normalizeParseTime(%q) 可识别性 = %v, want %v", c.parseTime, recognized, c.recognized)
+			}
+		})
+	}
+}
