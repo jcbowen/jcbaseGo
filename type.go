@@ -115,12 +115,12 @@ type OSSStruct struct {
 
 // COSStruct cos配置
 type COSStruct struct {
-	SecretId  string `json:"secretId" ini:"secretId" default:""`   // 腾讯云Cos SecretId
-	SecretKey string `json:"secretKey" ini:"secretKey" default:""` // 腾讯云Cos SecretKey
+	SecretId  string `json:"secretId" ini:"secretId" default:""`               // 腾讯云Cos SecretId
+	SecretKey string `json:"secretKey" ini:"secretKey" default:""`             // 腾讯云Cos SecretKey
 	Token     string `json:"token,omitempty" ini:"token,omitempty" default:""` // 腾讯云Cos临时密钥Token（可选，使用STS临时凭证时填写）
-	Bucket    string `json:"bucket" ini:"bucket" default:""`       // 腾讯云Cos Bucket
-	Region    string `json:"region" ini:"region" default:""`       // 腾讯云Cos Region
-	Url       string `json:"url" ini:"url" default:""`             // 腾讯云Cos Url
+	Bucket    string `json:"bucket" ini:"bucket" default:""`                   // 腾讯云Cos Bucket
+	Region    string `json:"region" ini:"region" default:""`                   // 腾讯云Cos Region
+	Url       string `json:"url" ini:"url" default:""`                         // 腾讯云Cos Url
 
 	// 自定义附件访问域名(非平台配置，供程序调用，非必填，一定以"/"结尾)
 	CustomizeVisitDomain string `json:"customize_visit_domain,omitempty" ini:"customize_visit_domain,omitempty" default:""`

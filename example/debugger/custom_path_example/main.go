@@ -32,7 +32,7 @@ func main() {
 			"message": "Debugger自定义基础路径示例",
 			"debug_urls": []string{
 				"/api/debug/list",
-				"/admin/debug/list", 
+				"/admin/debug/list",
 				"/custom/debug/list",
 			},
 		})
@@ -58,7 +58,7 @@ func example1(router *gin.Engine) {
 	// 创建自定义控制器配置
 	controllerConfig := &debugger.ControllerConfig{
 		BasePath: "/api/debug", // 自定义基础路径
-		Title:    "API调试器",   // 自定义页面标题
+		Title:    "API调试器",     // 自定义页面标题
 		PageSize: 30,           // 自定义每页显示数量
 	}
 
@@ -73,11 +73,11 @@ func example1(router *gin.Engine) {
 	apiGroup.GET("/users", func(c *gin.Context) {
 		// 获取当前请求的Logger实例
 		logger := debugger.GetLoggerFromContext(c)
-		
+
 		logger.Info("获取用户列表", map[string]interface{}{
 			"timestamp": time.Now().Format(time.RFC3339),
 		})
-		
+
 		c.JSON(http.StatusOK, gin.H{
 			"users": []gin.H{
 				{"id": 1, "name": "张三"},
@@ -114,9 +114,9 @@ func example2(router *gin.Engine) {
 	adminGroup.GET("/dashboard", func(c *gin.Context) {
 		logger := debugger.GetLoggerFromContext(c)
 		logger.Info("访问管理后台仪表板")
-		
+
 		c.JSON(http.StatusOK, gin.H{
-			"message": "管理后台",
+			"message":   "管理后台",
 			"debug_url": "/admin/debug/list", // 最终访问路径
 		})
 	})
@@ -150,9 +150,9 @@ func example3(router *gin.Engine) {
 	customGroup.GET("/test", func(c *gin.Context) {
 		logger := debugger.GetLoggerFromContext(c)
 		logger.Info("自定义路由测试")
-		
+
 		c.JSON(http.StatusOK, gin.H{
-			"message": "自定义路由",
+			"message":    "自定义路由",
 			"debug_path": "/custom/debug",
 		})
 	})

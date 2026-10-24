@@ -14,11 +14,11 @@ type auditInfo struct {
 
 // 测试模型，包含各种 gorm 忽略标签
 type testUpdateFilterModel struct {
-	ID        uint   `gorm:"column:id;primaryKey" json:"id"`
-	Username  string `gorm:"column:username" json:"username"`
-	Password  string `gorm:"column:password;-:update" json:"password"`
-	TempAll   string `gorm:"column:temp_all;-:all" json:"temp_all"`
-	TempOnly  string `gorm:"column:temp_only" json:"temp_only"`
+	ID       uint   `gorm:"column:id;primaryKey" json:"id"`
+	Username string `gorm:"column:username" json:"username"`
+	Password string `gorm:"column:password;-:update" json:"password"`
+	TempAll  string `gorm:"column:temp_all;-:all" json:"temp_all"`
+	TempOnly string `gorm:"column:temp_only" json:"temp_only"`
 }
 
 // 测试匿名嵌入字段的 gorm 标签解析

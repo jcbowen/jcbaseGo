@@ -4,7 +4,4 @@
 
 .workbuddy
 
-# go
-/go.sum
-
 /test/

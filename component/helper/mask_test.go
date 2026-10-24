@@ -43,4 +43,3 @@ func TestMaskString(t *testing.T) {
 		t.Errorf("MaskString = %q, want %q", got, "ab")
 	}
 }
-

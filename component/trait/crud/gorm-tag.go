@@ -136,4 +136,3 @@ func getColumnFromGormTag(tag string) string {
 	}
 	return ""
 }
-

@@ -49,11 +49,11 @@ func TestNewClient(t *testing.T) {
 		config      interface{}
 		wantErr     bool
 	}{
-		{"FTP", TypeFTP, ftpConfig, false},   // 连接本地内存 FTP 服务器，预期成功
-		{"SFTP", TypeSFTP, sftpConfig, false}, // 连接本地内存 SFTP 服务器，预期成功
-		{"COS", TypeCOS, cosConfig, false},   // 本地创建COS客户端不会连接服务器，预期成功
-		{"OSS", TypeOSS, ossConfig, false},   // 本地创建OSS客户端不会连接服务器，预期成功
-		{"Unknown", "unknown", nil, true},    // 预期失败，因为类型未知
+		{"FTP", TypeFTP, ftpConfig, false},         // 连接本地内存 FTP 服务器，预期成功
+		{"SFTP", TypeSFTP, sftpConfig, false},      // 连接本地内存 SFTP 服务器，预期成功
+		{"COS", TypeCOS, cosConfig, false},         // 本地创建COS客户端不会连接服务器，预期成功
+		{"OSS", TypeOSS, ossConfig, false},         // 本地创建OSS客户端不会连接服务器，预期成功
+		{"Unknown", "unknown", nil, true},          // 预期失败，因为类型未知
 		{"WrongConfig", TypeFTP, sftpConfig, true}, // 预期失败，因为配置类型与存储类型不匹配
 	}
 

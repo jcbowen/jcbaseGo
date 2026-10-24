@@ -152,7 +152,7 @@ class Console
      * @param string|null $prompt the prompt to display before waiting for input (optional)
      * @return string the user's input
      */
-    public static function input(string $prompt = null): string
+    public static function input(?string $prompt = null): string
     {
         if (isset($prompt)) {
             static::stdout($prompt);
@@ -167,7 +167,7 @@ class Console
      * @param string|null $string the text to print
      * @return int|bool number of bytes printed or false on error.
      */
-    public static function output(string $string = null)
+    public static function output(?string $string = null)
     {
         return static::stdout($string . PHP_EOL);
     }
@@ -178,7 +178,7 @@ class Console
      * @param string|null $string the text to print
      * @return int|bool number of bytes printed or false on error.
      */
-    public static function error(string $string = null)
+    public static function error(?string $string = null)
     {
         return static::stderr($string . PHP_EOL);
     }

@@ -19,6 +19,7 @@ import (
 // 通过预签名 URL 直传 OSS 的完整链路（模拟 ssjk 预签名上传的对象路径规则）。
 //
 // 需要真实 OSS 配置，通过环境变量提供，缺失时自动跳过，不影响常规单测：
+//
 //	OSS_TEST_AK / OSS_TEST_SK / OSS_TEST_ENDPOINT / OSS_TEST_BUCKET
 //
 // 运行示例：
