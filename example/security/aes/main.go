@@ -35,7 +35,10 @@ func defaultExample() {
 	}
 
 	// 应用默认值
-	helper.CheckAndSetDefault(&aes)
+	if err := helper.CheckAndSetDefault(&aes); err != nil {
+		fmt.Printf("填充默认值失败: %v\n", err)
+		return
+	}
 	fmt.Printf("默认密钥: %s (长度: %d)\n", aes.Key, len(aes.Key))
 	fmt.Printf("默认IV: %s (长度: %d)\n", aes.Iv, len(aes.Iv))
 

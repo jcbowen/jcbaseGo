@@ -316,13 +316,13 @@ func TestUnitTypeParameter(t *testing.T) {
 		// 测试"8b to byte"转换在不同优先类型下的行为
 
 		// 默认情况下应该失败，因为b和byte类型不同
-		result, err := ConvertUnit(8, "b", "byte", UnitTypeStorage)
+		_, err := ConvertUnit(8, "b", "byte", UnitTypeStorage)
 		if err == nil {
 			t.Error("Expected error for '8b to byte' conversion by default, but got none")
 		}
 
 		// 指定优先类型为数据单位时应该成功
-		result, err = ConvertUnit(8, "b", "byte", UnitTypeData)
+		result, err := ConvertUnit(8, "b", "byte", UnitTypeData)
 		if err != nil {
 			t.Errorf("Unexpected error for '8b to byte' conversion with UnitTypeData: %v", err)
 		}

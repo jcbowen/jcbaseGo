@@ -1,8 +1,9 @@
 package orm
 
 import (
-	"github.com/jcbowen/jcbaseGo/component/debugger"
 	"gorm.io/gorm"
+
+	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
 // Instance 定义数据库实例接口

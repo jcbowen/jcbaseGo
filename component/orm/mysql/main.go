@@ -13,14 +13,15 @@ import (
 	"sync"
 	"time"
 
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
+
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/debugger"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/orm"
 	"github.com/jcbowen/jcbaseGo/component/orm/base"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
-	"gorm.io/gorm/schema"
 )
 
 // AllTableName 用于映射 information_schema 查询结果的表名字段。
@@ -380,7 +381,7 @@ func (c *Instance) applyDebugMode(db *gorm.DB) *gorm.DB {
 //   - *gorm.DB: 已确保SQL日志配置的GORM实例
 func (c *Instance) applySQLLogging(db *gorm.DB) *gorm.DB {
 	// 已挂载且模式一致时无需重建
-	if gl, ok := db.Config.Logger.(*orm.GormDebuggerLogger); ok && gl.IsContextAware() == c.contextAware {
+	if gl, ok := db.Logger.(*orm.GormDebuggerLogger); ok && gl.IsContextAware() == c.contextAware {
 		return db
 	}
 

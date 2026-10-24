@@ -3,11 +3,12 @@ package mailer
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/jcbowen/jcbaseGo"
-	"github.com/jcbowen/jcbaseGo/component/tlsconfig"
 	"log"
 	"net/smtp"
 	"strings"
+
+	"github.com/jcbowen/jcbaseGo"
+	"github.com/jcbowen/jcbaseGo/component/tlsconfig"
 )
 
 // Email 结构体定义了邮件的基本属性

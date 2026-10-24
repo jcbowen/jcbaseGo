@@ -15,9 +15,10 @@ import (
 	"strings"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/jcbowen/jcbaseGo/component/helper"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v3"
+
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 // Config 实例化后配置信息将储存在此全局变量中
@@ -84,7 +85,7 @@ func (opt *Option) ReplaceConfigNode(nodePath string, newValue interface{}, cond
 	}
 
 	// 遍历节点路径，找到目标节点
-	var currentVal reflect.Value = val
+	var currentVal = val
 	for i := 0; i < len(nodeNames); i++ {
 		// 如果当前值不是结构体，则无法继续查找
 		if currentVal.Kind() != reflect.Struct {
@@ -384,8 +385,17 @@ func (opt *Option) loadConfig() error {
 
 // PanicIfError 异常处理
 // 如果err不为nil，则直接panic，用于省略if判断
+// redis.Nil（键不存在）视为正常，不触发 panic
+//
+// 行为变更（自 v0.17.0 起）: 旧版本的类型分支中 case error 先于 case redis.Error 匹配，
+// redis.Nil 也会触发 panic；现版本 redis.Nil 视为正常，其余 redis 错误仍 panic。
 func PanicIfError(err interface{}) {
+	// redis.Error 是内嵌 error 的接口，必须排在 case error 之前，否则永远匹配不到
 	switch v := err.(type) {
+	case redis.Error:
+		if !errors.Is(v, redis.Nil) {
+			log.Panic(v)
+		}
 	case error:
 		if v != nil {
 			log.Panic(v)
@@ -393,10 +403,6 @@ func PanicIfError(err interface{}) {
 	case []error:
 		if helper.IsError(v) {
 			log.Panic(formatErrors(v))
-		}
-	case redis.Error:
-		if !errors.Is(v, redis.Nil) {
-			log.Panic(v)
 		}
 	default:
 		// If the type is not error , []error or redis.Error, do nothing
@@ -526,7 +532,7 @@ func (opt *Option) readConfigFile(fileNameFull string) error {
 			for _, key := range section.Keys() {
 				// 将键名按点号分割，处理嵌套结构
 				fieldNames := strings.Split(key.Name(), ".")
-				var currentVal reflect.Value = sectionVal
+				var currentVal = sectionVal
 				var currentField reflect.StructField
 				var found bool
 
@@ -579,28 +585,28 @@ func (opt *Option) readConfigFile(fileNameFull string) error {
 						} else if key.Value() == "false" || key.Value() == "0" {
 							currentVal.SetBool(false)
 						} else {
-							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：布尔值\n实际值有误，无法转换为布尔类型。\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value())
+							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：布尔值\n实际值有误，无法转换为布尔类型。\n请检查并修正该配置项的值后重启程序", section.Name(), key.Name(), key.Value())
 						}
 					case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 						// 整数类型转换
 						if i, err := strconv.ParseInt(key.Value(), 10, 64); err == nil {
 							currentVal.SetInt(i)
 						} else {
-							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：整数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
+							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：整数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序", section.Name(), key.Name(), key.Value(), err)
 						}
 					case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 						// 无符号整数类型转换
 						if i, err := strconv.ParseUint(key.Value(), 10, 64); err == nil {
 							currentVal.SetUint(i)
 						} else {
-							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：无符号整数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
+							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：无符号整数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序", section.Name(), key.Name(), key.Value(), err)
 						}
 					case reflect.Float32, reflect.Float64:
 						// 浮点数类型转换
 						if f, err := strconv.ParseFloat(key.Value(), 64); err == nil {
 							currentVal.SetFloat(f)
 						} else {
-							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：浮点数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), err)
+							return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：浮点数\n实际值有误，无法转换（错误信息：%v）\n请检查并修正该配置项的值后重启程序", section.Name(), key.Name(), key.Value(), err)
 						}
 					case reflect.Slice, reflect.Array:
 						// INI 中的 slice/array 被 processStructToINI 序列化为 JSON 字符串，这里反序列化
@@ -629,7 +635,7 @@ func (opt *Option) readConfigFile(fileNameFull string) error {
 								}
 								currentVal.Set(newSlice)
 							} else {
-								return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：%s 数组\n实际值有误，无法转换为数组类型。\n请检查并修正该配置项的值后重启程序。\n", section.Name(), key.Name(), key.Value(), currentField.Type.Elem().Kind())
+								return fmt.Errorf("\n配置错误：[%s] %s = %s\n期望类型：%s 数组\n实际值有误，无法转换为数组类型。\n请检查并修正该配置项的值后重启程序", section.Name(), key.Name(), key.Value(), currentField.Type.Elem().Kind())
 							}
 						}
 					default:

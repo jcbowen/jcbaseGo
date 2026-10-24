@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestStreamingResponseDetection 测试流式响应检测功能
@@ -92,7 +93,8 @@ func TestStreamingChunkRecording(t *testing.T) {
 
 		// 发送多个SSE事件
 		for i := 1; i <= 3; i++ {
-			c.Writer.Write([]byte(fmt.Sprintf("data: 事件 %d\\n\\n", i)))
+			_, err := fmt.Fprintf(c.Writer, "data: 事件 %d\\n\\n", i)
+			require.NoError(t, err)
 			c.Writer.(http.Flusher).Flush()
 			time.Sleep(10 * time.Millisecond) // 模拟延迟
 		}
@@ -145,7 +147,8 @@ func TestStreamingChunkSizeLimit(t *testing.T) {
 
 		// 发送超过限制的数据
 		largeData := strings.Repeat("A", 200) // 200字节数据
-		c.Writer.Write([]byte(fmt.Sprintf("data: %s\\n\\n", largeData)))
+		_, err := fmt.Fprintf(c.Writer, "data: %s\\n\\n", largeData)
+		require.NoError(t, err)
 		c.Writer.(http.Flusher).Flush()
 	})
 
@@ -195,7 +198,8 @@ func TestMaxStreamingChunksLimit(t *testing.T) {
 
 		// 发送3个事件，但只应该记录前2个
 		for i := 1; i <= 3; i++ {
-			c.Writer.Write([]byte(fmt.Sprintf("data: 事件 %d\\n\\n", i)))
+			_, err := fmt.Fprintf(c.Writer, "data: 事件 %d\\n\\n", i)
+			require.NoError(t, err)
 			c.Writer.(http.Flusher).Flush()
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -241,7 +245,8 @@ func TestStreamingDisabled(t *testing.T) {
 	// 模拟SSE流式响应
 	router.GET("/sse-disabled", func(c *gin.Context) {
 		c.Header("Content-Type", "text/event-stream")
-		c.Writer.Write([]byte("data: 测试事件\\n\\n"))
+		_, err := c.Writer.Write([]byte("data: 测试事件\\n\\n"))
+		require.NoError(t, err)
 		c.Writer.(http.Flusher).Flush()
 	})
 
@@ -289,7 +294,8 @@ func TestBinaryStreamingData(t *testing.T) {
 
 		// 发送二进制数据
 		binaryData := []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09}
-		c.Writer.Write(binaryData)
+		_, err := c.Writer.Write(binaryData)
+		require.NoError(t, err)
 		c.Writer.(http.Flusher).Flush()
 	})
 
@@ -338,7 +344,8 @@ func TestStreamingMetadata(t *testing.T) {
 
 		// 发送多个事件
 		for i := 1; i <= 2; i++ {
-			c.Writer.Write([]byte(fmt.Sprintf("data: 元数据测试事件 %d\\n\\n", i)))
+			_, err := fmt.Fprintf(c.Writer, "data: 元数据测试事件 %d\\n\\n", i)
+			require.NoError(t, err)
 			c.Writer.(http.Flusher).Flush()
 			time.Sleep(10 * time.Millisecond)
 		}

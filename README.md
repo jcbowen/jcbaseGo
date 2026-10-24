@@ -1,5 +1,7 @@
 # jcbaseGo
 
+![CI](https://github.com/jcbowen/jcbaseGo/actions/workflows/ci.yml/badge.svg)
+
 一个功能丰富的 Go 语言基础工具包，提供多种可复用的组件和工具函数，帮助开发者快速构建高质量的 Go 应用程序。
 
 ## 🚀 功能特性
@@ -1650,6 +1652,26 @@ docs(README): 更新 CRUD 使用文档
 - **格式**: 使用 `gofmt` 和 `goimports` 格式化
 - **测试**: 新功能必须包含测试用例
 - **文档**: 更新相关文档和示例
+
+### 质量检查
+
+CI 由 `.github/workflows/ci.yml` 定义，全部检查项都可用本地命令复现：
+
+| 任务 | 检查内容 | 失败是否阻塞 |
+| --- | --- | --- |
+| Lint | `go mod tidy` 一致性、行尾与 BOM、`gofmt`、`go vet`、`golangci-lint`（errcheck/govet/staticcheck/unused/ineffassign + nilerr/unconvert/wastedassign/copyloopvar/misspell，goimports 格式） | 是 |
+| Test (race) | `go test -race` 全量用例，采集覆盖率并写入 PR 摘要、归档 HTML 报告 | 是 |
+| Test (windows/macos) | 跨平台运行普通用例，捕捉文件锁、路径分隔符、大小写敏感类问题 | 是（仅 GitHub 有对应 Runner） |
+| Build | linux/darwin/windows × amd64/arm64 交叉编译（`CGO_ENABLED=0`，单 Runner 完成） | 是 |
+| Vulnerability Scan | `govulncheck` 检查代码实际调用到的已知漏洞，每日定时复查 | GitHub 阻塞，其他环境仅报告 |
+| Workflow Lint | `actionlint` 校验工作流自身的 YAML 与表达式 | 是 |
+
+覆盖率只报告不设阈值，作为评审参考。检查器版本在 workflow 的 `GOLANGCI_LINT_VERSION` 与
+`.golangci.yml` 中固定，本地未安装 golangci-lint 时可直接运行：
+
+```bash
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run
+```
 
 ### Pull Request 流程
 1. Fork 本仓库

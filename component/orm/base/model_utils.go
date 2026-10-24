@@ -5,8 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcbowen/jcbaseGo/component/helper"
 	"gorm.io/gorm"
+
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 // getColumnFromTag 从gorm标签中获取列名

@@ -464,9 +464,10 @@ func (ds *DatabaseStorage) applyFilters(db *gorm.DB, filters map[string]interfac
 		case "streaming_status":
 			// 流式状态过滤：active/inactive 字符串匹配
 			if v, ok := value.(string); ok {
-				if v == "active" {
+				switch v {
+				case "active":
 					db = db.Where("is_streaming_response = ?", true)
-				} else if v == "inactive" {
+				case "inactive":
 					db = db.Where("is_streaming_response = ?", false)
 				}
 			}

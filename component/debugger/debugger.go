@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/security"
 	"github.com/jcbowen/jcbaseGo/middleware"
@@ -777,12 +778,12 @@ func (d *Debugger) formatStreamingResponse(writer *responseWriter) string {
 	}
 
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("[Streaming Response: %d chunks, total size: %d bytes]\n",
-		len(writer.streamingChunks), d.calculateTotalStreamingSize(writer)))
+	fmt.Fprintf(&result, "[Streaming Response: %d chunks, total size: %d bytes]\n",
+		len(writer.streamingChunks), d.calculateTotalStreamingSize(writer))
 
 	for i, chunk := range writer.streamingChunks {
-		result.WriteString(fmt.Sprintf("Chunk %d (size: %d bytes, time: %s): ",
-			i+1, chunk.Size, chunk.Timestamp.Format("15:04:05.000")))
+		fmt.Fprintf(&result, "Chunk %d (size: %d bytes, time: %s): ",
+			i+1, chunk.Size, chunk.Timestamp.Format("15:04:05.000"))
 
 		if chunk.IsBinary {
 			result.WriteString("[Binary Data] ")
@@ -1117,7 +1118,7 @@ func (d *Debugger) extractMultipartRequestBody(c *gin.Context) (string, error) {
 			break
 		}
 		if err != nil {
-			result.WriteString(fmt.Sprintf("  Error reading part: %v\n", err))
+			fmt.Fprintf(&result, "  Error reading part: %v\n", err)
 			continue
 		}
 
@@ -1128,8 +1129,8 @@ func (d *Debugger) extractMultipartRequestBody(c *gin.Context) (string, error) {
 		// 文件部件默认只记元数据：连内容都不读取，避免上传字节进入调试日志与数据库
 		if fileName != "" && d.skipMultipartFileContent() {
 			fileCount++
-			result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Content-Type: %s (content not recorded)\n",
-				fileName, partName, part.Header.Get("Content-Type")))
+			fmt.Fprintf(&result, "  [File] Name: %s, Field: %s, Content-Type: %s (content not recorded)\n",
+				fileName, partName, part.Header.Get("Content-Type"))
 			continue
 		}
 
@@ -1141,7 +1142,7 @@ func (d *Debugger) extractMultipartRequestBody(c *gin.Context) (string, error) {
 		partBytes := make([]byte, maxPartSize)
 		n, err := part.Read(partBytes)
 		if err != nil && err != io.EOF {
-			result.WriteString(fmt.Sprintf("  Error reading part content: %v\n", err))
+			fmt.Fprintf(&result, "  Error reading part content: %v\n", err)
 			continue
 		}
 
@@ -1150,32 +1151,32 @@ func (d *Debugger) extractMultipartRequestBody(c *gin.Context) (string, error) {
 		if fileName != "" {
 			// 文件上传部分
 			fileCount++
-			result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Size: %d bytes, Type: %s\n",
-				fileName, partName, n, detectFileType(partBytes[:n])))
+			fmt.Fprintf(&result, "  [File] Name: %s, Field: %s, Size: %d bytes, Type: %s\n",
+				fileName, partName, n, detectFileType(partBytes[:n]))
 		} else {
 			// 文本字段部分
 			if isBinaryData(partBytes[:n]) {
-				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Type: Binary\n",
-					partName, n))
+				fmt.Fprintf(&result, "  [Field] Name: %s, Size: %d bytes, Type: Binary\n",
+					partName, n)
 			} else {
 				// 限制文本长度，避免显示过长
 				textContent := string(partBytes[:n])
 				if len(textContent) > 100 {
 					textContent = textContent[:100] + "..."
 				}
-				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Content: %s\n",
-					partName, n, textContent))
+				fmt.Fprintf(&result, "  [Field] Name: %s, Size: %d bytes, Content: %s\n",
+					partName, n, textContent)
 			}
 		}
 
 		// 检查总大小是否超过限制
 		if totalSize > int(d.config.MaxBodySize*1024) {
-			result.WriteString(fmt.Sprintf("  [Truncated] Total size exceeds limit: %d bytes\n", totalSize))
+			fmt.Fprintf(&result, "  [Truncated] Total size exceeds limit: %d bytes\n", totalSize)
 			break
 		}
 	}
 
-	result.WriteString(fmt.Sprintf("Total Parts: %d, Files: %d, Total Size: %d bytes\n", partCount, fileCount, totalSize))
+	fmt.Fprintf(&result, "Total Parts: %d, Files: %d, Total Size: %d bytes\n", partCount, fileCount, totalSize)
 	return result.String(), nil
 }
 
@@ -1223,8 +1224,8 @@ func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string)
 	result.WriteString("[Multipart Form Data - Safe Processing]\n")
 	if truncated {
 		// 只解析捕获窗口内的部件，其余部分不读取也不入库
-		result.WriteString(fmt.Sprintf("  [Truncated] body exceeds max_body_size=%d KB, parts after the capture window are not recorded\n",
-			d.config.MaxBodySize))
+		fmt.Fprintf(&result, "  [Truncated] body exceeds max_body_size=%d KB, parts after the capture window are not recorded\n",
+			d.config.MaxBodySize)
 	}
 
 	partCount := 0
@@ -1242,7 +1243,7 @@ func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string)
 			break
 		}
 		if err != nil {
-			result.WriteString(fmt.Sprintf("  Error reading part: %v\n", err))
+			fmt.Fprintf(&result, "  Error reading part: %v\n", err)
 			continue
 		}
 
@@ -1253,8 +1254,8 @@ func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string)
 		// 文件部件默认只记元数据：连内容都不读取，避免上传字节进入调试日志与数据库
 		if fileName != "" && d.skipMultipartFileContent() {
 			fileCount++
-			result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Content-Type: %s (content not recorded)\n",
-				fileName, partName, part.Header.Get("Content-Type")))
+			fmt.Fprintf(&result, "  [File] Name: %s, Field: %s, Content-Type: %s (content not recorded)\n",
+				fileName, partName, part.Header.Get("Content-Type"))
 			continue
 		}
 
@@ -1262,7 +1263,7 @@ func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string)
 		partBytes := make([]byte, maxPartSize)
 		n, err := part.Read(partBytes)
 		if err != nil && err != io.EOF {
-			result.WriteString(fmt.Sprintf("  Error reading part content: %v\n", err))
+			fmt.Fprintf(&result, "  Error reading part content: %v\n", err)
 			continue
 		}
 
@@ -1271,27 +1272,27 @@ func (d *Debugger) extractMultipartWithBodyCopy(c *gin.Context, boundary string)
 		if fileName != "" {
 			// 文件上传部分（显式关闭 MultipartSkipFiles 才会记录内容）
 			fileCount++
-			result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Size: %d bytes, Type: %s, Content: %s\n",
-				fileName, partName, n, detectFileType(partBytes[:n]), formatPartContentPreview(partBytes[:n])))
+			fmt.Fprintf(&result, "  [File] Name: %s, Field: %s, Size: %d bytes, Type: %s, Content: %s\n",
+				fileName, partName, n, detectFileType(partBytes[:n]), formatPartContentPreview(partBytes[:n]))
 		} else {
 			// 文本字段部分
 			if isBinaryData(partBytes[:n]) {
-				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Type: Binary\n",
-					partName, n))
+				fmt.Fprintf(&result, "  [Field] Name: %s, Size: %d bytes, Type: Binary\n",
+					partName, n)
 			} else {
-				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Content: %s\n",
-					partName, n, formatPartContentPreview(partBytes[:n])))
+				fmt.Fprintf(&result, "  [Field] Name: %s, Size: %d bytes, Content: %s\n",
+					partName, n, formatPartContentPreview(partBytes[:n]))
 			}
 		}
 
 		// 检查总大小是否超过限制
 		if int64(totalSize) > d.bodyCaptureLimit() {
-			result.WriteString(fmt.Sprintf("  [Truncated] Total size exceeds limit: %d bytes\n", totalSize))
+			fmt.Fprintf(&result, "  [Truncated] Total size exceeds limit: %d bytes\n", totalSize)
 			break
 		}
 	}
 
-	result.WriteString(fmt.Sprintf("Total Parts: %d, Files: %d, Total Size: %d bytes\n", partCount, fileCount, totalSize))
+	fmt.Fprintf(&result, "Total Parts: %d, Files: %d, Total Size: %d bytes\n", partCount, fileCount, totalSize)
 	return result.String(), nil
 }
 
@@ -1484,87 +1485,6 @@ func extractBoundary(contentType string) string {
 	}
 
 	return strings.Trim(contentType[boundaryIndex:boundaryIndex+boundaryEnd], " \"")
-}
-
-// formatMultipartFormData 格式化multipart/form-data请求体
-// 解析multipart数据并显示文件上传信息，避免显示二进制乱码
-func formatMultipartFormData(c *gin.Context, bodyBytes []byte) string {
-	contentType := c.Request.Header.Get("Content-Type")
-
-	// 提取boundary参数
-	boundary := extractBoundary(contentType)
-	if boundary == "" {
-		// 如果没有boundary，回退到二进制数据显示
-		return formatBinaryData(bodyBytes)
-	}
-
-	// 创建multipart reader
-	reader := bytes.NewReader(bodyBytes)
-	mr := multipart.NewReader(reader, boundary)
-	if mr == nil {
-		// 如果创建失败，回退到二进制数据显示
-		return formatBinaryData(bodyBytes)
-	}
-
-	var result strings.Builder
-	result.WriteString("[Multipart Form Data]\n")
-	result.WriteString(fmt.Sprintf("Total Size: %d bytes\n", len(bodyBytes)))
-	result.WriteString("Parts:\n")
-
-	// 解析multipart的各个部分
-	partCount := 0
-	fileCount := 0
-	textCount := 0
-
-	for {
-		part, err := mr.NextPart()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			result.WriteString(fmt.Sprintf("  Error reading part: %v\n", err))
-			continue
-		}
-
-		partCount++
-		partName := part.FormName()
-		fileName := part.FileName()
-
-		// 读取部分内容：整份请求体已在上游按捕获上限读入，这里再对单个部件限量，
-		// 避免个别大部件把已捕获的字节全部复制一遍
-		partBytes, err := io.ReadAll(io.LimitReader(part, defaultMultipartMaxPartSizeKB*1024))
-		if err != nil {
-			result.WriteString(fmt.Sprintf("  Error reading part content: %v\n", err))
-			continue
-		}
-
-		if fileName != "" {
-			// 文件上传部分
-			fileCount++
-			result.WriteString(fmt.Sprintf("  [File] Name: %s, Field: %s, Size: %d bytes, Type: %s\n",
-				fileName, partName, len(partBytes), detectFileType(partBytes)))
-		} else {
-			// 文本字段部分
-			textCount++
-			if isBinaryData(partBytes) {
-				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Size: %d bytes, Type: Binary\n",
-					partName, len(partBytes)))
-			} else {
-				// 限制文本长度，避免显示过长
-				textContent := string(partBytes)
-				if len(textContent) > 100 {
-					textContent = textContent[:100] + "..."
-				}
-				result.WriteString(fmt.Sprintf("  [Field] Name: %s, Value: %s\n",
-					partName, textContent))
-			}
-		}
-	}
-
-	result.WriteString(fmt.Sprintf("\nSummary: %d parts total (%d files, %d fields)",
-		partCount, fileCount, textCount))
-
-	return result.String()
 }
 
 // responseWriter 自定义ResponseWriter用于捕获响应

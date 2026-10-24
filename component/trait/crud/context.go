@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/security"
 	"github.com/jcbowen/jcbaseGo/component/serializer"
@@ -197,7 +198,8 @@ func (ctx *Context) Result(code int, msg string, args ...any) {
 
 	// 设置数据统计字段
 	dataKind := reflect.TypeOf(result["data"]).Kind()
-	if dataKind == reflect.Map {
+	switch dataKind {
+	case reflect.Map:
 		if list, exists := result["data"].(map[string]any)["list"].([]any); exists {
 			total := len(list)
 			if countParam, exists := result["data"].(map[string]any)["total"]; exists {
@@ -216,7 +218,7 @@ func (ctx *Context) Result(code int, msg string, args ...any) {
 				}
 			}
 		}
-	} else if dataKind == reflect.Slice {
+	case reflect.Slice:
 		if countParam, exists := result["total"]; exists {
 			result["total"] = countParam
 		} else {

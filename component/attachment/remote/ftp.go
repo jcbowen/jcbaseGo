@@ -11,8 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jcbowen/jcbaseGo"
 	"github.com/jlaffaye/ftp"
+
+	"github.com/jcbowen/jcbaseGo"
 )
 
 // FTPConfig 定义了FTP存储的配置参数。

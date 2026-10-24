@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
@@ -44,7 +45,9 @@ func main() {
 	fmt.Println("- /admin/debug/list  (管理后台调试器)")
 	fmt.Println("- /custom/debug/list (自定义调试器)")
 
-	router.Run(":8080")
+	if err := router.Run(":8080"); err != nil {
+		panic(err)
+	}
 }
 
 // example1 演示使用自定义基础路径（推荐方式）

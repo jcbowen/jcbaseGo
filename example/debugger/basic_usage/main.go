@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
@@ -80,5 +81,7 @@ func main() {
 	fmt.Println("访问 http://localhost:8080/api/users 获取用户列表")
 	fmt.Println("使用POST方法访问 http://localhost:8080/api/users 创建用户")
 
-	r.Run(":8080")
+	if err := r.Run(":8080"); err != nil {
+		panic(err)
+	}
 }

@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/jcbowen/jcbaseGo/component/attachment"
 	"log"
+
+	"github.com/jcbowen/jcbaseGo/component/attachment"
 )
 
 func main() {

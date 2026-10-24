@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo/component/serializer"
 	"github.com/jcbowen/jcbaseGo/errcode"
 )

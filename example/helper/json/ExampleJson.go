@@ -2,6 +2,7 @@ package ExampleJson
 
 import (
 	"fmt"
+
 	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
@@ -17,14 +18,6 @@ type dataStruct struct {
 	Prices      []float64    `json:"prices"`
 	Names       []string     `json:"names"`
 	Items       []itemStruct `json:"items"`
-}
-
-var data = dataStruct{
-	Name:        "test computers",
-	Description: "List of computer products",
-	Prices:      []float64{2400, 2100, 1200, 400.87, 89.90, 150.10},
-	Names:       []string{"John Doe", "Jane Doe", "Tom", "Jerry", "Nicolas", "Abby"},
-	Items:       []itemStruct{{Id: 1, Name: "MacBook Pro 13 inch retina", Price: 1350}, {Id: 2, Name: "MacBook Pro 15 inch retina", Price: 1700}, {Id: 3, Name: "Sony VAIO", Price: 1200}, {Id: 4, Name: "Fujitsu", Price: 850}, {Id: 0, Name: "HP core i3 SSD", Price: 850}},
 }
 
 func JsonFileToStruct() {

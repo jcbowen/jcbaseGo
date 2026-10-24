@@ -110,7 +110,8 @@ func RSAVerify(data, sign, publicKey string, keyFromFile bool) (bool, error) {
 	digest := sha256.Sum256([]byte(data))
 	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, digest[:], signBytes)
 	if err != nil {
-		return false, nil
+		// 验签不通过属于正常的业务结果，由返回的 false 表达，不向上抛错误
+		return false, nil //nolint:nilerr // 有意吞掉 VerifyPKCS1v15 的错误，语义是「签名无效」而非「校验失败」
 	}
 	return true, nil
 }

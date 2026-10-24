@@ -200,7 +200,7 @@ func buildNestedMapChain(depth int) map[string]interface{} {
 //
 //	sub, ok := digNestedMapChain(chain, 30)
 func digNestedMapChain(data map[string]interface{}, depth int) (SubDefaultConfig, bool) {
-	var cur interface{} = data["root"]
+	var cur = data["root"]
 	for i := 0; i < depth; i++ {
 		m, ok := cur.(map[string]interface{})
 		if !ok {
@@ -241,7 +241,7 @@ func buildNestedMapChainPtr(depth int) map[string]interface{} {
 //
 //	raw, ok := digNestedMapChainAny(chain, 30)
 func digNestedMapChainAny(data map[string]interface{}, depth int) (interface{}, bool) {
-	var cur interface{} = data["root"]
+	var cur = data["root"]
 	for i := 0; i < depth; i++ {
 		m, ok := cur.(map[string]interface{})
 		if !ok {

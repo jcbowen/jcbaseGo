@@ -309,7 +309,7 @@ func TestSM4_EncodingOptionsCBC(t *testing.T) {
 			return false
 		}
 		for _, c := range s {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 				return false
 			}
 		}
@@ -378,7 +378,7 @@ func TestSM4_EncodingOptionsGCM(t *testing.T) {
 			return false
 		}
 		for _, c := range s {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 				return false
 			}
 		}

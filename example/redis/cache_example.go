@@ -16,7 +16,8 @@ type User struct {
 	Age  int    `json:"age"`
 }
 
-func main() {
+// CacheExample Redis 缓存用法示例入口（本包非 main 包，故不使用 main 命名）
+func CacheExample() {
 	fmt.Println("=== Redis Cache 使用示例 ===")
 
 	// 1. 初始化Redis连接

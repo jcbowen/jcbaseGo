@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -38,13 +39,10 @@ func (fh *File) Exists() bool {
 		return false
 	}
 	_, err := os.Stat(fh.Path)
-	if err != nil {
-		if os.IsExist(err) {
-			return true
-		}
-		return false
+	if err == nil {
+		return true
 	}
-	return true
+	return os.IsExist(err)
 }
 
 // JsonToData 将文件中的json数据解析到data中
@@ -93,6 +91,10 @@ func (fh *File) IsFile() bool {
 }
 
 // IsEmptyDir 判断目录是否为空
+//
+// 返回值: 目录存在且不含任何条目时为 true；路径不存在、不是目录或无权限读取时为 false。
+// 说明: f.Readdirnames(1) 读到目录末尾（即空目录）返回的是 io.EOF，不是 os.ErrNotExist。
+// 行为变更（自 v0.17.0 起）: 旧版本误用 os.ErrNotExist 判定，空目录会错误地返回 false；现版本空目录正确返回 true。
 func (fh *File) IsEmptyDir() bool {
 	f, err := os.Open(fh.Path)
 	if err != nil {
@@ -102,10 +104,7 @@ func (fh *File) IsEmptyDir() bool {
 		_ = f.Close()
 	}(f)
 	_, err = f.Readdirnames(1)
-	if errors.Is(err, os.ErrNotExist) {
-		return true
-	}
-	return false
+	return errors.Is(err, io.EOF)
 }
 
 // IsEmptyFile 判断文件是否为空
@@ -114,12 +113,7 @@ func (fh *File) IsEmptyFile() bool {
 	if err != nil {
 		return false
 	}
-	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-
-		}
-	}(f)
+	defer func() { _ = f.Close() }()
 	fi, err := f.Stat()
 	if err != nil {
 		return false
@@ -137,29 +131,49 @@ func (fh *File) IsEmpty() bool {
 
 // IsReadable 判断文件是否可读
 func (fh *File) IsReadable() bool {
-	_, err := os.OpenFile(fh.Path, os.O_RDONLY, 0666)
+	f, err := os.OpenFile(fh.Path, os.O_RDONLY, 0666)
 	if err != nil {
 		return false
 	}
+	_ = f.Close()
 	return true
 }
 
 // IsWritable 判断文件是否可写
 func (fh *File) IsWritable() bool {
-	_, err := os.OpenFile(fh.Path, os.O_WRONLY, 0666)
+	f, err := os.OpenFile(fh.Path, os.O_WRONLY, 0666)
 	if err != nil {
 		return false
 	}
+	_ = f.Close()
 	return true
 }
 
+// windowsExecutableExts Windows 下用于判定可执行的扩展名集合
+// 该平台的文件系统不表达 Unix 权限位，可执行性由扩展名决定
+var windowsExecutableExts = map[string]bool{
+	".exe": true,
+	".bat": true,
+	".cmd": true,
+	".com": true,
+}
+
 // IsExecutable 判断文件是否可执行
+//
+// 返回值: 路径指向一个可执行文件时为 true；路径不存在或指向目录时为 false。
+// 说明: Unix/macOS 检查权限位的可执行位（0111，任一主体）；
+// Windows 权限位不表达可执行性，改为按扩展名（.exe/.bat/.cmd/.com）判定。
+// 行为变更（自 v0.17.0 起）: 旧版本仅尝试以只读方式打开文件，目录也总是返回 true；现版本目录返回 false，
+// 且 Unix 改按权限位、Windows 改按扩展名判定，普通数据文件不再被误判为可执行。
 func (fh *File) IsExecutable() bool {
-	_, err := os.OpenFile(fh.Path, os.O_RDONLY, 0666)
-	if err != nil {
+	fi, err := os.Stat(fh.Path)
+	if err != nil || fi.IsDir() {
 		return false
 	}
-	return true
+	if runtime.GOOS == "windows" {
+		return windowsExecutableExts[strings.ToLower(filepath.Ext(fh.Path))]
+	}
+	return fi.Mode().Perm()&0111 != 0
 }
 
 // IsSymlink 判断是否是软链接
@@ -255,22 +269,12 @@ func (fh *File) CopyFile(targetPath string, overwrite bool, copyAttr bool) error
 	if err != nil {
 		return err
 	}
-	defer func(srcFile *os.File) {
-		err := srcFile.Close()
-		if err != nil {
-
-		}
-	}(srcFile)
+	defer func() { _ = srcFile.Close() }()
 	dstFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY, fh.Perm)
 	if err != nil {
 		return err
 	}
-	defer func(dstFile *os.File) {
-		err := dstFile.Close()
-		if err != nil {
-
-		}
-	}(dstFile)
+	defer func() { _ = dstFile.Close() }()
 	_, err = io.Copy(dstFile, srcFile)
 	if err != nil {
 		return err

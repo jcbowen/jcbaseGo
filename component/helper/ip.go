@@ -44,12 +44,7 @@ func (ip *IP) IsValid() bool {
 		return false
 	}
 
-	// 检查是否为私有地址（可选，根据需求决定是否过滤）
-	if ip.IsPrivate() {
-		// 可以根据实际需求决定是否允许私有地址
-		// 这里暂时允许私有地址通过验证
-	}
-
+	// 私有地址按业务需求允许通过验证，此处不做过滤
 	return true
 }
 

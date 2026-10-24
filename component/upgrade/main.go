@@ -3,12 +3,13 @@ package upgrade
 import (
 	"errors"
 	"fmt"
-	"github.com/jcbowen/jcbaseGo"
-	"github.com/jcbowen/jcbaseGo/component/command"
-	"github.com/jcbowen/jcbaseGo/component/helper"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/jcbowen/jcbaseGo"
+	"github.com/jcbowen/jcbaseGo/component/command"
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 type Context struct {
@@ -175,8 +176,8 @@ func defaultUpgrade(conf jcbaseGo.RepositoryStruct) {
 	currentBranch := ""
 	for i, v := range branchArr {
 		isCurrent := helper.StringStartWith(v, "*")
-		branchArr[i] = strings.Replace(v, "*", "", -1)
-		branchArr[i] = strings.Replace(branchArr[i], " ", "", -1)
+		branchArr[i] = strings.ReplaceAll(v, "*", "")
+		branchArr[i] = strings.ReplaceAll(branchArr[i], " ", "")
 		if isCurrent {
 			currentBranch = branchArr[i]
 		}

@@ -3,9 +3,10 @@ package ExampleRedis
 import (
 	"context"
 	"fmt"
+	"log"
+
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/redis"
-	"log"
 )
 
 func Redis() {

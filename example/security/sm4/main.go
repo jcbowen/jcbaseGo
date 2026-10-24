@@ -47,7 +47,10 @@ func defaultExample() {
 	}
 
 	// 应用默认值
-	helper.CheckAndSetDefault(&sm4)
+	if err := helper.CheckAndSetDefault(&sm4); err != nil {
+		fmt.Printf("填充默认值失败: %v\n", err)
+		return
+	}
 	fmt.Printf("默认密钥: %s (长度: %d)\n", sm4.Key, len(sm4.Key))
 	fmt.Printf("默认IV: %s (长度: %d)\n", sm4.Iv, len(sm4.Iv))
 	fmt.Printf("默认模式: %s\n", sm4.Mode)

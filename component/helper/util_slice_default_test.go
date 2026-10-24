@@ -403,7 +403,7 @@ func buildNestedSliceChain(depth int) []interface{} {
 //
 //	sub, ok := digNestedSliceChain(chain, 30)
 func digNestedSliceChain(data []interface{}, depth int) (SubDefaultConfig, bool) {
-	var cur interface{} = data[0]
+	var cur = data[0]
 	for i := 0; i < depth; i++ {
 		s, ok := cur.([]interface{})
 		if !ok || len(s) == 0 {

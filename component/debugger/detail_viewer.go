@@ -154,20 +154,20 @@ func (dv *DetailViewer) formatProcessDetail(detailView *DetailView) {
 func (dv *DetailViewer) formatProcessInfo(entry *LogEntry) string {
 	var buf bytes.Buffer
 
-	buf.WriteString(fmt.Sprintf("进程ID: %s\n", entry.ProcessID))
-	buf.WriteString(fmt.Sprintf("进程名称: %s\n", entry.ProcessName))
-	buf.WriteString(fmt.Sprintf("进程类型: %s\n", entry.ProcessType))
+	fmt.Fprintf(&buf, "进程ID: %s\n", entry.ProcessID)
+	fmt.Fprintf(&buf, "进程名称: %s\n", entry.ProcessName)
+	fmt.Fprintf(&buf, "进程类型: %s\n", entry.ProcessType)
 
 	if !entry.EndTime.IsZero() {
-		buf.WriteString(fmt.Sprintf("开始时间: %s\n", entry.Timestamp.Format("2006-01-02 15:04:05.000")))
-		buf.WriteString(fmt.Sprintf("结束时间: %s\n", entry.EndTime.Format("2006-01-02 15:04:05.000")))
+		fmt.Fprintf(&buf, "开始时间: %s\n", entry.Timestamp.Format("2006-01-02 15:04:05.000"))
+		fmt.Fprintf(&buf, "结束时间: %s\n", entry.EndTime.Format("2006-01-02 15:04:05.000"))
 	} else {
-		buf.WriteString(fmt.Sprintf("开始时间: %s\n", entry.Timestamp.Format("2006-01-02 15:04:05.000")))
+		fmt.Fprintf(&buf, "开始时间: %s\n", entry.Timestamp.Format("2006-01-02 15:04:05.000"))
 		buf.WriteString("结束时间: 进行中\n")
 	}
 
-	buf.WriteString(fmt.Sprintf("状态: %s\n", formatProcessStatus(entry.Status)))
-	buf.WriteString(fmt.Sprintf("耗时: %s\n", formatDuration(entry.Duration)))
+	fmt.Fprintf(&buf, "状态: %s\n", formatProcessStatus(entry.Status))
+	fmt.Fprintf(&buf, "耗时: %s\n", formatDuration(entry.Duration))
 
 	return buf.String()
 }
@@ -270,7 +270,7 @@ func formatQueryParams(params map[string]string) string {
 
 	var buf bytes.Buffer
 	for key, value := range params {
-		buf.WriteString(fmt.Sprintf("%s: %s\n", key, html.EscapeString(value)))
+		fmt.Fprintf(&buf, "%s: %s\n", key, html.EscapeString(value))
 	}
 
 	return buf.String()

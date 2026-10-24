@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jcbowen/jcbaseGo"
 	"github.com/tencentyun/cos-go-sdk-v5"
+
+	"github.com/jcbowen/jcbaseGo"
 )
 
 // COSConfig 定义了腾讯云COS的配置参数。

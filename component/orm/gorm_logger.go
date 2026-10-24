@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jcbowen/jcbaseGo/component/debugger"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
 // GormDebuggerLogger 实现GORM的logger.Interface接口，将SQL执行情况记录到debugger中
@@ -236,8 +237,8 @@ func EnableContextAwareSQLLogging(db *gorm.DB, fallbackLogger debugger.LoggerInt
 //   - *gorm.DB: 配置好SQL日志的GORM实例
 func enableSQLLogging(db *gorm.DB, debuggerLogger debugger.LoggerInterface, contextAware bool, opts ...interface{}) *gorm.DB {
 	var (
-		slowThreshold time.Duration = 200 * time.Millisecond
-		logLevel                    = debugger.LevelSilent
+		slowThreshold = 200 * time.Millisecond
+		logLevel      = debugger.LevelSilent
 	)
 
 	// 上下文感知模式允许兜底Logger为空，此时取不到请求级Logger的SQL将被丢弃
@@ -288,7 +289,7 @@ func enableSQLLogging(db *gorm.DB, debuggerLogger debugger.LoggerInterface, cont
 	}
 
 	// 配置GORM日志
-	db.Config.Logger = gormLogger
+	db.Logger = gormLogger
 
 	// 记录配置信息（仅在非静默模式下）
 	if logLevel > debugger.LevelSilent {

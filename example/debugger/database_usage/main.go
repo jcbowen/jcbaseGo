@@ -195,5 +195,7 @@ func main() {
 	fmt.Printf("进程状态筛选测试: http://localhost:8081/api/process/list?status=running\n")
 	fmt.Printf("进程名称筛选测试: http://localhost:8081/api/process/list?process_name=测试\n")
 
-	r.Run("0.0.0.0:8081")
+	if err := r.Run("0.0.0.0:8081"); err != nil {
+		panic(err)
+	}
 }

@@ -11,14 +11,15 @@ import (
 	"reflect"
 	"time"
 
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
+
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/debugger"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/orm"
 	"github.com/jcbowen/jcbaseGo/component/orm/base"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/schema"
 )
 
 // Instance 表示 SQLite 连接实例，封装数据库配置、连接句柄、调试状态与错误收集。
@@ -186,7 +187,7 @@ func (c *Instance) applyDebugMode(db *gorm.DB) *gorm.DB {
 // 仅当Logger缺失或模式不匹配时才重新注入，避免每次 GetDb 都重复替换并重复打印启用日志。
 func (c *Instance) applySQLLogging(db *gorm.DB) *gorm.DB {
 	// 已挂载且模式一致时无需重建
-	if gl, ok := db.Config.Logger.(*orm.GormDebuggerLogger); ok && gl.IsContextAware() == c.contextAware {
+	if gl, ok := db.Logger.(*orm.GormDebuggerLogger); ok && gl.IsContextAware() == c.contextAware {
 		return db
 	}
 

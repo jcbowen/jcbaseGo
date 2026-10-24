@@ -587,7 +587,7 @@ func main() {
 
 文件路径和状态操作：
 
-- **文件状态**: Exists(), IsDir(), IsFile(), IsEmpty()
+- **文件状态**: Exists(), IsDir(), IsFile(), IsEmpty(), IsEmptyDir(), IsEmptyFile()
 - **权限检查**: IsReadable(), IsWritable(), IsExecutable()
 - **路径操作**: GetAbsPath(), Basename(), DirName()
 - **目录管理**: DirExists()
@@ -614,6 +614,10 @@ func main() {
 - 检查文件是否为空
 - 对于目录，检查是否包含文件或子目录
 
+**IsEmptyDir() bool**
+- 检查目录是否为空
+- 路径不存在、不是目录或无权限读取时返回 false
+
 **IsReadable() bool**
 - 检查文件是否可读
 - 验证当前用户对文件的读取权限
@@ -623,8 +627,9 @@ func main() {
 - 验证当前用户对文件的写入权限
 
 **IsExecutable() bool**
-- 检查文件是否可执行
-- 验证当前用户对文件的执行权限
+- 检查文件是否可执行，目录与不存在的路径返回 false
+- Unix/macOS 检查权限位的可执行位（0111）
+- Windows 文件系统不表达 Unix 权限位，改为按扩展名判定（.exe/.bat/.cmd/.com）
 
 **GetAbsPath() (string, error)**
 - 获取文件的绝对路径

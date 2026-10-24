@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestLoggerInterface 测试Logger接口的基本功能
@@ -628,17 +629,19 @@ func TestFileUploadBinaryDataHandling(t *testing.T) {
 		writer := multipart.NewWriter(&body)
 
 		// 添加文本字段
-		writer.WriteField("username", "testuser")
-		writer.WriteField("email", "test@example.com")
+		require.NoError(t, writer.WriteField("username", "testuser"))
+		require.NoError(t, writer.WriteField("email", "test@example.com"))
 
 		// 添加文件字段
-		fileWriter, _ := writer.CreateFormFile("avatar", "avatar.jpg")
-		fileWriter.Write([]byte{
+		fileWriter, err := writer.CreateFormFile("avatar", "avatar.jpg")
+		require.NoError(t, err)
+		_, err = fileWriter.Write([]byte{
 			0xFF, 0xD8, 0xFF, 0xE0, // JPEG文件头
 			0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
 		})
+		require.NoError(t, err)
 
-		writer.Close()
+		require.NoError(t, writer.Close())
 
 		c := &gin.Context{}
 		c.Request = &http.Request{
@@ -800,8 +803,9 @@ func captureOutput(f func()) string {
 	log.SetOutput(oldLogOutput)
 
 	var buf bytes.Buffer
-	buf.ReadFrom(rStdout)
-	buf.ReadFrom(rStderr)
+	// 读取到 EOF 即已拿到重定向期间的全部输出，管道关闭产生的错误不影响结果
+	_, _ = buf.ReadFrom(rStdout)
+	_, _ = buf.ReadFrom(rStderr)
 	return buf.String()
 }
 
@@ -835,8 +839,8 @@ func TestMultipartOptimization(t *testing.T) {
 			// 创建multipart表单数据
 			var body bytes.Buffer
 			writer := multipart.NewWriter(&body)
-			writer.WriteField("test_field", "test_value")
-			writer.Close()
+			require.NoError(t, writer.WriteField("test_field", "test_value"))
+			require.NoError(t, writer.Close())
 
 			// 创建Gin上下文
 			c := &gin.Context{}
@@ -941,9 +945,9 @@ func TestMultipartStateRestoration(t *testing.T) {
 	// 创建multipart表单数据
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	writer.WriteField("field1", "value1")
-	writer.WriteField("field2", "value2")
-	writer.Close()
+	require.NoError(t, writer.WriteField("field1", "value1"))
+	require.NoError(t, writer.WriteField("field2", "value2"))
+	require.NoError(t, writer.Close())
 
 	// 保存原始body内容用于后续比较
 	originalBody := make([]byte, body.Len())
@@ -1067,8 +1071,8 @@ func TestSafeRequestBodyExtraction(t *testing.T) {
 	t.Run("multipart请求体", func(t *testing.T) {
 		var body bytes.Buffer
 		writer := multipart.NewWriter(&body)
-		writer.WriteField("test", "data")
-		writer.Close()
+		require.NoError(t, writer.WriteField("test", "data"))
+		require.NoError(t, writer.Close())
 
 		c := &gin.Context{}
 		c.Request = &http.Request{

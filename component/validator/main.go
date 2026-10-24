@@ -40,11 +40,7 @@ func IsEmail(email string) bool {
 		return false
 	}
 	domain := parts[1]
-	if len(domain) < 3 {
-		return false
-	}
-
-	return true
+	return len(domain) >= 3
 }
 
 // IsURL 检查字符串是否为有效的 URL

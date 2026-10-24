@@ -193,7 +193,7 @@ func (c Convert) ToInt64() int64 {
 	case int64:
 		return v
 	case int, int8, int16, int32:
-		return int64(reflect.ValueOf(v).Int())
+		return reflect.ValueOf(v).Int()
 	case uint, uint8, uint16, uint32, uint64:
 		u := reflect.ValueOf(v).Uint()
 		if u > uint64(math.MaxInt64) {
@@ -318,7 +318,7 @@ func (c Convert) ToUint64() uint64 {
 		}
 		return uint64(i)
 	case uint, uint8, uint16, uint32:
-		return uint64(reflect.ValueOf(v).Uint())
+		return reflect.ValueOf(v).Uint()
 	case float32, float64:
 		f := reflect.ValueOf(v).Float()
 		if f < 0 {

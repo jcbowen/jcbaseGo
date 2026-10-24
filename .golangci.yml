@@ -1,0 +1,36 @@
+version: "2"
+
+linters:
+  # standard 已包含 errcheck / govet / ineffassign / staticcheck / unused
+  default: standard
+  enable:
+    - copyloopvar
+    - misspell
+    - nilerr
+    - unconvert
+    - wastedassign
+  settings:
+    govet:
+      # inline 分析器要求把 reflect.Ptr 等包级常量替换为字面量，属于噪声
+      disable:
+        - inline
+    errcheck:
+      # 资源清理调用的返回值在 defer 场景无处理价值（关闭失败无法回滚、文件句柄随进程释放），
+      # 统一豁免；其余忽略错误值的调用仍需 errcheck 拦截
+      exclude-functions:
+        - (*os.File).Close
+        - (*os.File).Sync
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (*archive/zip.Writer).Close
+        - os.Remove
+        - os.RemoveAll
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/jcbowen/jcbaseGo

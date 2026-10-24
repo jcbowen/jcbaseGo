@@ -10,9 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jcbowen/jcbaseGo"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
+
+	"github.com/jcbowen/jcbaseGo"
 )
 
 // SFTPConfig 定义了SFTP存储的配置参数。

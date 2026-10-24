@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo/component/debugger"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/component/orm"
@@ -96,12 +97,10 @@ func (t *Trait) InitCrud(ginContext *gin.Context, args ...any) (ctx *Context) {
 		log.Panic("模型不能为空")
 	}
 
-	modelValue := reflect.ValueOf(t.Model)
 	modelType := reflect.TypeOf(t.Model)
 
 	// 检查是否传入的是指针
 	if modelType.Kind() == reflect.Ptr {
-		modelValue = modelValue.Elem()
 		modelType = modelType.Elem()
 	}
 
@@ -451,7 +450,7 @@ func (t *Trait) setValue(fieldVal reflect.Value, val interface{}) error {
 		fieldVal.SetFloat(floatVal)
 	case reflect.Bool:
 		// 处理布尔类型，兼容多种输入：bool、字符串、数字等
-		boolVal := false
+		var boolVal bool
 		switch v := val.(type) {
 		case bool:
 			boolVal = v

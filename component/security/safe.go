@@ -1,13 +1,14 @@
 package security
 
 import (
-	"github.com/jcbowen/jcbaseGo/component/helper"
 	"html"
 	"mime/multipart"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
 type Input struct {

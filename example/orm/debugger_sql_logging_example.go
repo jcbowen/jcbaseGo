@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/debugger"
 	"github.com/jcbowen/jcbaseGo/component/orm"
@@ -136,13 +137,11 @@ func main() {
 		debuggerLevel := logger.GetLevel()
 
 		// 检查GORM的日志级别配置
-		gormLogger := db.GetDb().Config.Logger
+		gormLogger := db.GetDb().Logger
 		gormLevelConfigured := false
-		if gormLogger != nil {
-			// 检查是否配置了GORM日志记录器
-			if _, ok := gormLogger.(*orm.GormDebuggerLogger); ok {
-				gormLevelConfigured = true
-			}
+		// 类型断言成功即说明已配置且为 debugger 的 GORM 日志记录器
+		if _, ok := gormLogger.(*orm.GormDebuggerLogger); ok {
+			gormLevelConfigured = true
 		}
 
 		c.JSON(200, gin.H{

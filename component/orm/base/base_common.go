@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/helper"
-	"gorm.io/gorm"
 )
 
 // CommonBaseModel 跨数据库通用基础模型

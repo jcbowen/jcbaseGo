@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
@@ -140,7 +141,9 @@ func main() {
 	fmt.Println("测试API地址: http://localhost:8080/")
 	fmt.Println("访问 http://localhost:8080/api/users 测试用户API")
 
-	r.Run("0.0.0.0:8080")
+	if err := r.Run("0.0.0.0:8080"); err != nil {
+		panic(err)
+	}
 }
 
 // getLocalIP 获取本地IP地址

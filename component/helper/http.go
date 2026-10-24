@@ -97,7 +97,7 @@ func FormatHeaders(headers map[string]string) string {
 
 	var buf bytes.Buffer
 	for key, value := range headers {
-		buf.WriteString(fmt.Sprintf("%s: %s\n", key, html.EscapeString(value)))
+		fmt.Fprintf(&buf, "%s: %s\n", key, html.EscapeString(value))
 	}
 
 	return buf.String()

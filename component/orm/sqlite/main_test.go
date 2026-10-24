@@ -81,6 +81,9 @@ func (l *recordingLogger) count() int {
 
 // newTestInstance 创建用于测试的 SQLite 实例（临时文件库）
 //
+// 实例持有的连接会锁定数据库文件，因此注册 t.Cleanup 在用例结束时关闭底层
+// *sql.DB，否则 Windows 上 t.TempDir 无法删除临时目录。
+//
 // 参数：
 //   - t: 测试实例
 //
@@ -98,6 +101,17 @@ func newTestInstance(t *testing.T) *Instance {
 	if err != nil {
 		t.Fatalf("创建 SQLite 实例失败: %v", err)
 	}
+
+	sqlDB, err := inst.GetDb().DB()
+	if err != nil {
+		t.Fatalf("获取底层连接池失败: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := sqlDB.Close(); err != nil {
+			t.Errorf("关闭 SQLite 连接失败: %v", err)
+		}
+	})
+
 	return inst
 }
 

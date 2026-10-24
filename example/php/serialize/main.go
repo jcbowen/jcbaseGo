@@ -163,7 +163,7 @@ func main() {
 
 	// 尝试反序列化无效数据
 	invalidData := "a:1:{i:0;s:5:\"hello\""
-	result, err = phpComponent.RunFunc("unserialize", invalidData)
+	_, err = phpComponent.RunFunc("unserialize", invalidData)
 	if err != nil {
 		fmt.Printf("✅ 错误处理正常: %v\n", err)
 	} else {

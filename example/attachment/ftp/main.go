@@ -23,7 +23,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("关闭 FTP 客户端失败: %v", err)
+		}
+	}()
 
 	err = client.Upload(ctx, "/remote/path/file.txt", []byte("Hello FTP"))
 	if err != nil {

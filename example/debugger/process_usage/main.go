@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
@@ -105,7 +106,9 @@ func batchProcessor(debuggerInstance *debugger.Debugger) {
 		"total_duration":   time.Since(logger.GetStartTime()).String(),
 	})
 
-	debuggerInstance.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
+	if err := debuggerInstance.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted); err != nil {
+		log.Printf("结束进程记录失败: %v", err)
+	}
 }
 
 // main 主函数，演示进程级debugger的使用
@@ -189,7 +192,9 @@ func main() {
 			})
 			time.Sleep(100 * time.Millisecond)
 			logger.Info("后台任务完成")
-			debuggerInstance.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted)
+			if err := debuggerInstance.EndProcess(logger.GetProcessID(), debugger.ProcessStatusCompleted); err != nil {
+				log.Printf("结束进程记录失败: %v", err)
+			}
 		}()
 
 		c.JSON(http.StatusOK, gin.H{

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo/component/helper"
 )
 
@@ -251,12 +252,7 @@ func getCallerInfo() (fileName string, line int, function string) {
 		fn := f.Function
 
 		// 过滤调试器自身和GORM内部调用栈
-		if !(strings.Contains(file, "/component/debugger/logger.go") ||
-			strings.Contains(file, "/component/debugger/debugger.go") ||
-			strings.Contains(file, "/component/orm/gorm_logger.go") ||
-			strings.Contains(fn, "gorm.io/gorm") ||
-			strings.Contains(fn, "gorm.io/driver") ||
-			strings.Contains(fn, "database/sql")) {
+		if !strings.Contains(file, "/component/debugger/logger.go") && !strings.Contains(file, "/component/debugger/debugger.go") && !strings.Contains(file, "/component/orm/gorm_logger.go") && !strings.Contains(fn, "gorm.io/gorm") && !strings.Contains(fn, "gorm.io/driver") && !strings.Contains(fn, "database/sql") {
 			found = f
 			break
 		}

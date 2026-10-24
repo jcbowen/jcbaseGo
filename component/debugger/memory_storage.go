@@ -495,16 +495,6 @@ func (ms *MemoryStorage) containsKeyword(entry *LogEntry, keyword string) bool {
 	return false
 }
 
-// rebuildIndex 重新构建索引
-func (ms *MemoryStorage) rebuildIndex() {
-	ms.index = make(map[string]int)
-	for i, entry := range ms.entries {
-		if entry != nil {
-			ms.index[entry.ID] = i
-		}
-	}
-}
-
 // GetStats 获取存储统计信息
 func (ms *MemoryStorage) GetStats() (map[string]interface{}, error) {
 	ms.mutex.RLock()

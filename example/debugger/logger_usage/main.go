@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/jcbowen/jcbaseGo/component/debugger"
 )
 
@@ -240,5 +241,7 @@ func main() {
 	fmt.Println("")
 	fmt.Println("查看控制台输出，观察logger记录的调试信息")
 
-	r.Run(":8080")
+	if err := r.Run(":8080"); err != nil {
+		panic(err)
+	}
 }

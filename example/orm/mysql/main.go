@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 
+	"gorm.io/gorm"
+
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/orm/mysql"
-	"gorm.io/gorm"
 )
 
 // User 用户模型

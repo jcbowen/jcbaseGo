@@ -768,22 +768,6 @@ func (fs *FileStorage) GetStats() (map[string]interface{}, error) {
 	return stats, nil
 }
 
-// formatFileSize 格式化文件大小
-func (fs *FileStorage) formatFileSize(size int64) string {
-	const unit = 1024
-	if size < unit {
-		return fmt.Sprintf("%d B", size)
-	}
-
-	div, exp := int64(unit), 0
-	for n := size / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-
-	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
-}
-
 // ExportAll 导出所有日志到单个文件
 func (fs *FileStorage) ExportAll(outputPath string) error {
 	files, err := fs.listLogFiles()

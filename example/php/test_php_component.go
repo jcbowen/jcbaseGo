@@ -68,7 +68,7 @@ func main() {
 	// 测试6: 错误处理
 	fmt.Println("\n6. 测试错误处理:")
 
-	result, err = phpComponent.RunFunc("non_existent_function")
+	_, err = phpComponent.RunFunc("non_existent_function")
 	if err != nil {
 		fmt.Printf("✅ 错误处理正常: %v\n", err)
 	} else {

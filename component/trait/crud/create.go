@@ -4,9 +4,10 @@ import (
 	"reflect"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+
 	"github.com/jcbowen/jcbaseGo/component/helper"
 	"github.com/jcbowen/jcbaseGo/errcode"
-	"gorm.io/gorm"
 )
 
 // ActionCreate 创建数据的主要处理方法
@@ -32,7 +33,6 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 	// 调用自定义的CreateBefore方法进行前置处理
 	callResults = t.callCustomMethod("CreateBefore", ctx, modelValue, mapData)
 	modelValue = callResults[0]
-	mapData = callResults[1].(map[string]any)
 	if callResults[2] != nil {
 		err = callResults[2].(error)
 		if err != nil {

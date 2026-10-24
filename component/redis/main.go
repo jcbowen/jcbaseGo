@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+
 	"github.com/jcbowen/jcbaseGo"
 	"github.com/jcbowen/jcbaseGo/component/helper"
 )
@@ -108,7 +109,7 @@ func (i *Instance) Set(key string, value interface{}, args ...time.Duration) err
 		jsonString = string(jsonBytes)
 	}
 
-	err := i.Client.Set(i.Context, key, string(jsonString), expire).Err()
+	err := i.Client.Set(i.Context, key, jsonString, expire).Err()
 	return err
 }
 

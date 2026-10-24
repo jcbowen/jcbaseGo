@@ -8,9 +8,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"io"
+
 	"golang.org/x/crypto/hkdf"
 	"golang.org/x/crypto/pbkdf2"
-	"io"
 )
 
 // CipherConfig stores the cipher configuration

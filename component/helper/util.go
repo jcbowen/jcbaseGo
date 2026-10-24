@@ -1326,9 +1326,8 @@ func setDefaultForStruct(val reflect.Value, depth int, visited map[uintptr]struc
 		// 切片：为空切片时按 default 标签整体填充；元素类型为配置结构体时递归补充每个元素的默认值
 		if fieldKind == reflect.Slice {
 			if field.Len() == 0 {
-				if err := setDefaultValue(field, tag); err != nil {
-					// 静默处理错误，保持与原有逻辑兼容
-				}
+				// 静默处理错误，保持与原有逻辑兼容
+				_ = setDefaultValue(field, tag)
 			}
 			if err := setDefaultForSliceField(field, depth, visited); err != nil {
 				return err
@@ -1338,9 +1337,8 @@ func setDefaultForStruct(val reflect.Value, depth int, visited map[uintptr]struc
 		// 映射：为空映射时设置默认值；值类型为配置结构体时递归补充每个元素的默认值
 		if fieldKind == reflect.Map {
 			if field.Len() == 0 {
-				if err := setDefaultValue(field, tag); err != nil {
-					// 静默处理错误，保持与原有逻辑兼容
-				}
+				// 静默处理错误，保持与原有逻辑兼容
+				_ = setDefaultValue(field, tag)
 			}
 			if err := setDefaultForStructMap(field, depth, visited); err != nil {
 				return err

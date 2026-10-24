@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestMemoryCleanupMechanism 测试内存阈值清理机制
@@ -39,7 +40,8 @@ func TestMemoryCleanupMechanism(t *testing.T) {
 		for i := 1; i <= 6; i++ {
 			// 生成2MB的数据
 			largeData := strings.Repeat(fmt.Sprintf("Chunk-%d-", i), 1024*1024/10) // 约2MB
-			c.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", largeData)))
+			_, err := fmt.Fprintf(c.Writer, "data: %s\n\n", largeData)
+			require.NoError(t, err)
 			c.Writer.(http.Flusher).Flush()
 			time.Sleep(10 * time.Millisecond) // 模拟延迟
 		}
@@ -101,7 +103,8 @@ func TestMemoryCleanupEdgeCase(t *testing.T) {
 		for i := 1; i <= 10; i++ {
 			// 生成1MB的数据
 			data := strings.Repeat(fmt.Sprintf("Edge-%d-", i), 1024*1024/10) // 约1MB
-			c.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", data)))
+			_, err := fmt.Fprintf(c.Writer, "data: %s\n\n", data)
+			require.NoError(t, err)
 			c.Writer.(http.Flusher).Flush()
 			time.Sleep(5 * time.Millisecond)
 		}
@@ -156,7 +159,8 @@ func TestMemoryCleanupWithSmallChunks(t *testing.T) {
 		for i := 1; i <= 120; i++ {
 			// 生成100KB的数据
 			data := strings.Repeat(fmt.Sprintf("Small-%03d-", i), 1024) // 约100KB
-			c.Writer.Write([]byte(fmt.Sprintf("data: %s\n\n", data)))
+			_, err := fmt.Fprintf(c.Writer, "data: %s\n\n", data)
+			require.NoError(t, err)
 			c.Writer.(http.Flusher).Flush()
 			time.Sleep(2 * time.Millisecond)
 		}
@@ -219,7 +223,8 @@ func TestMemoryCleanupZeroChunks(t *testing.T) {
 	router.GET("/no-chunks", func(c *gin.Context) {
 		c.Header("Content-Type", "text/event-stream")
 		// 发送一个空分块来确保被识别为流式响应
-		c.Writer.Write([]byte(""))
+		_, err := c.Writer.Write([]byte(""))
+		require.NoError(t, err)
 		c.Writer.(http.Flusher).Flush()
 	})
 

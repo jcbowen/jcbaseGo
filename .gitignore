@@ -5,3 +5,7 @@
 .workbuddy
 
 /test/
+
+# 覆盖率产物
+coverage.out
+coverage.html
