@@ -88,6 +88,16 @@ type MailerStruct struct {
 	CAPath   string `json:"ca_path" ini:"ca_path" default:""`                 // CA证书文件路径
 }
 
+// PushPlusStruct PushPlus 推送配置
+type PushPlusStruct struct {
+	Token    string        `json:"token" ini:"token" default:""`                                                         // 用户令牌，必填
+	Topic    string        `json:"topic,omitempty" ini:"topic,omitempty" default:""`                                     // 默认群组编码，可选
+	Channel  string        `json:"channel,omitempty" ini:"channel,omitempty" default:"wechat"`                           // 默认发送渠道：wechat/webhook/cp/mail/sms/voice
+	Template string        `json:"template,omitempty" ini:"template,omitempty" default:"html"`                           // 默认消息模板：html/json/markdown/txt
+	Timeout  time.Duration `json:"timeout,omitempty" ini:"timeout,omitempty" default:""`                                 // 请求超时时间，默认 10s
+	BaseURL  string        `json:"base_url,omitempty" ini:"base_url,omitempty" default:"https://www.pushplus.plus/send"` // 发送接口地址
+}
+
 // AttachmentStruct 附件配置
 type AttachmentStruct struct {
 	StorageType string `json:"storage_type" ini:"storage_type" default:"local"` // 存储类型 local/ftp/sftp/cos/oss
@@ -171,6 +181,7 @@ type DefaultConfigStruct struct {
 	Cos        COSStruct        `json:"cos" ini:"cos"`               // cos配置信息
 	Project    ProjectStruct    `json:"project" ini:"project"`       // 项目配置信息
 	Repository RepositoryStruct `json:"repository" ini:"repository"` // 仓库配置信息
+	PushPlus   PushPlusStruct   `json:"pushplus" ini:"pushplus"`     // PushPlus 推送配置
 }
 
 // ListData 分页查询数据输出

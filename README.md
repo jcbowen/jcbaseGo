@@ -7,6 +7,7 @@
 - **🔐 安全组件**: SM4/AES 加密、密码处理、数据验证
 - **🗄️ 数据库 ORM**: MySQL/SQLite 支持，基于 GORM 的抽象层，包含基础模型和 CRUD trait
 - **📧 邮件服务**: 支持 SMTP 邮件发送，HTML/文本邮件，附件支持
+- **📢 消息推送**: PushPlus 推送薄封装，支持群组、多渠道、模板与上下文取消
 - **📁 附件管理**: 本地、FTP、SFTP、OSS、COS 等多种存储方式
 - **🛠️ 工具函数**: 类型转换、字符串处理、JSON 操作、文件处理、HTTP工具、IP地址处理、SSH密钥管理、单位转换等
 - **💾 缓存支持**: Redis 缓存组件，连接池优化
@@ -117,6 +118,9 @@ jcbaseGo/
 │   ├── php/                    # 🐘 PHP 解释器集成
 │   │   ├── jcbasePHP.go        # PHP 解释器接口
 │   │   └── main.go             # PHP 集成主文件
+│   ├── pushplus/               # 📢 PushPlus 推送组件
+│   │   ├── pushplus.go         # 发送接口薄封装
+│   │   └── README.md           # 组件文档
 │   ├── ratelimit/              # 🚦 滑动窗口限流（Redis + 本地降级）
 │   │   └── ratelimit.go        # 限流器实现
 │   ├── redis/                  # 💾 Redis 缓存组件
@@ -1034,6 +1038,31 @@ mailer.Mailer{
     Password: "应用专用密码",
 }
 ```
+
+### 📢 消息推送 (pushplus/)
+
+#### 功能特性
+- **薄封装**: 仅依赖标准库，无第三方 SDK
+- **默认值回落**: 群组、渠道、模板可在消息级覆盖
+- **错误分层**: HTTP 异常、响应解析失败、业务 code 非 200 可分别判定
+- **上下文取消**: `SendContext` 支持超时与取消
+- **并发安全**: 客户端创建后字段只读，可多 goroutine 复用
+
+#### 使用示例
+```go
+client := pushplus.New(jcbaseGo.PushPlusStruct{
+    Token: "你的用户令牌",
+    Topic: "ops", // 可选：群组编码
+})
+
+resp, err := client.Send(pushplus.Message{
+    Title:   "部署完成",
+    Content: "v1.0.0 已上线",
+})
+```
+
+> `code=200` 仅表示 PushPlus 已受理，实际投递是异步的；组件不做自动重试。
+> 配置项与完整说明见 [component/pushplus/README.md](component/pushplus/README.md)。
 
 ### 📁 附件管理 (attachment/)
 
