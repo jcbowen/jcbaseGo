@@ -255,6 +255,8 @@ func TestAttachment_GetPresignURL_RebuildOnConfigChange(t *testing.T) {
 }
 
 // TestAttachment_RemoveDomain 验证可从附件 URL 中去除访问域名并得到相对路径。
+// 逻辑对齐 PHP 端 Util::removeMediaDomain：命中域名后从文件类型目录处截取，
+// 本地 /static/ 资源保留 static 起点。
 func TestAttachment_RemoveDomain(t *testing.T) {
 	att := &Attachment{
 		BaseConfig: &jcbaseGo.AttachmentStruct{
@@ -265,15 +267,115 @@ func TestAttachment_RemoveDomain(t *testing.T) {
 		},
 	}
 
-	if got := att.ToSource("https://localhost:8080/uploads/logo.png"); got != "uploads/logo.png" {
-		t.Fatalf("ToSource() = %q, want %q", got, "uploads/logo.png")
+	// 本地域名下的普通附件：LocalDir 前缀随类型目录定位一并剥离
+	if got := att.ToSource("https://localhost:8080/uploads/images/logo.png"); got != "images/logo.png" {
+		t.Fatalf("ToSource() = %q, want %q", got, "images/logo.png")
 	}
 
-	if got := att.ToSource("https://localhost:8080/uploads/logo.png?v=123"); got != "uploads/logo.png" {
-		t.Fatalf("ToSource() = %q, want %q", got, "uploads/logo.png")
+	if got := att.ToSource("https://localhost:8080/uploads/images/logo.png?v=123"); got != "images/logo.png" {
+		t.Fatalf("ToSource() = %q, want %q", got, "images/logo.png")
 	}
 
-	if got := att.ToSource("https://localhost:8080/uploads/logo.png?v=123", false); got != "uploads/logo.png?v=123" {
-		t.Fatalf("ToSource() = %q, want %q", got, "uploads/logo.png?v=123")
+	if got := att.ToSource("https://localhost:8080/uploads/images/logo.png?v=123", false); got != "images/logo.png?v=123" {
+		t.Fatalf("ToSource() = %q, want %q", got, "images/logo.png?v=123")
+	}
+
+	// 远程域名：同样从类型目录处截取，bucket/path 前缀被剥离（对应 PHP 的 attachment 域名分支）
+	if got := att.ToSource("https://cdn.example.com/bucket/videos/2026/01/demo.mp4"); got != "videos/2026/01/demo.mp4" {
+		t.Fatalf("ToSource() = %q, want %q", got, "videos/2026/01/demo.mp4")
+	}
+
+	// zips 类型目录：正常截取（与 PHP 端 {$type}s/ 存储目录命名一致）
+	if got := att.ToSource("https://cdn.example.com/zips/2026/01/demo.zip"); got != "zips/2026/01/demo.zip" {
+		t.Fatalf("ToSource() = %q, want %q", got, "zips/2026/01/demo.zip")
+	}
+
+	// 路径中仅含 zip 子串但非 zips 目录时不应被误截断
+	if got := att.ToSource("https://cdn.example.com/uploads/myzipfile/x.png"); got != "uploads/myzipfile/x.png" {
+		t.Fatalf("ToSource() = %q, want %q", got, "uploads/myzipfile/x.png")
+	}
+
+	// 本地 /static/ 内部资源：保留 static 起始路径
+	if got := att.ToSource("https://localhost:8080/static/js/app.js"); got != "static/js/app.js" {
+		t.Fatalf("ToSource() = %q, want %q", got, "static/js/app.js")
+	}
+
+	// 未命中任何域名时原样返回相对路径
+	if got := att.ToSource("images/logo.png"); got != "images/logo.png" {
+		t.Fatalf("ToSource() = %q, want %q", got, "images/logo.png")
 	}
 }
+
+// TestAttachment_ToMediaToSourceRoundTrip 验证 ToMedia 与 ToSource 本地存储下互逆，
+// 还原结果与 FileAttachment 保存的相对路径格式一致（不含 LocalDir 前缀）。
+func TestAttachment_ToMediaToSourceRoundTrip(t *testing.T) {
+	att := &Attachment{
+		BaseConfig: &jcbaseGo.AttachmentStruct{
+			VisitDomain:      "https://localhost:8080/",
+			LocalVisitDomain: "https://localhost:8080/",
+			StorageType:      "local",
+			LocalDir:         "uploads",
+		},
+	}
+
+	src := "images/2026/01/logo.png"
+	if got := att.ToSource(att.ToMedia(src)); got != src {
+		t.Fatalf("ToSource(ToMedia(%q)) = %q, want %q", src, got, src)
+	}
+}
+
+// TestAttachment_ToMedia 验证 ToMedia 的 static/ 资源拼接、本地完整 URL 重组与缓存参数语义，
+// 逻辑对齐 PHP 端 Util::toMedia。
+func TestAttachment_ToMedia(t *testing.T) {
+	att := &Attachment{
+		BaseConfig: &jcbaseGo.AttachmentStruct{
+			VisitDomain:      "https://cdn.example.com/",
+			LocalVisitDomain: "https://localhost:8080/",
+			StorageType:      "remote",
+			LocalDir:         "uploads",
+		},
+	}
+
+	// 相对路径含 static/ 时：从 static/ 处拼接本地资源域名（不追加 LocalDir）
+	if got := att.ToMedia("static/js/app.js"); got != "https://localhost:8080/static/js/app.js" {
+		t.Fatalf("ToMedia() = %q, want %q", got, "https://localhost:8080/static/js/app.js")
+	}
+	if got := att.ToMedia("/static/js/app.js"); got != "https://localhost:8080/static/js/app.js" {
+		t.Fatalf("ToMedia() = %q, want %q", got, "https://localhost:8080/static/js/app.js")
+	}
+
+	// 完整本地附件 URL 重组：远程存储下剥离域名与 LocalDir 前缀后切换到远程域名
+	if got := att.ToMedia("https://localhost:8080/uploads/images/2026/01/logo.png"); got != "https://cdn.example.com/images/2026/01/logo.png" {
+		t.Fatalf("ToMedia() = %q, want %q", got, "https://cdn.example.com/images/2026/01/logo.png")
+	}
+
+	// 完整本地 /static/ URL：原样返回，不做重组
+	if got := att.ToMedia("https://localhost:8080/static/js/app.js"); got != "https://localhost:8080/static/js/app.js" {
+		t.Fatalf("ToMedia() = %q, want %q", got, "https://localhost:8080/static/js/app.js")
+	}
+
+	// 完整本地 URL 但未命中类型目录：原样返回
+	if got := att.ToMedia("https://localhost:8080/uploads/logo.png"); got != "https://localhost:8080/uploads/logo.png" {
+		t.Fatalf("ToMedia() = %q, want %q", got, "https://localhost:8080/uploads/logo.png")
+	}
+
+	// 本地存储下重组后按 LocalDir 拼回（与原 URL 一致）
+	attLocal := &Attachment{BaseConfig: &jcbaseGo.AttachmentStruct{
+		VisitDomain:      "https://cdn.example.com/",
+		LocalVisitDomain: "https://localhost:8080/",
+		StorageType:      "local",
+		LocalDir:         "uploads",
+	}}
+	if got := attLocal.ToMedia("https://localhost:8080/uploads/images/logo.png"); got != "https://localhost:8080/uploads/images/logo.png" {
+		t.Fatalf("ToMedia() = %q, want %q", got, "https://localhost:8080/uploads/images/logo.png")
+	}
+
+	// 缓存参数：isCache=false 追加时间戳，默认不追加
+	if got := att.ToMedia("images/logo.png", false, false); !strings.HasPrefix(got, "https://cdn.example.com/images/logo.png?v=") {
+		t.Fatalf("ToMedia() = %q, want prefix %q", got, "https://cdn.example.com/images/logo.png?v=")
+	}
+	if got := att.ToMedia("images/logo.png"); got != "https://cdn.example.com/images/logo.png" {
+		t.Fatalf("ToMedia() = %q, want %q", got, "https://cdn.example.com/images/logo.png")
+	}
+}
+

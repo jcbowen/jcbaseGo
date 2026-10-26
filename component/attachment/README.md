@@ -103,15 +103,15 @@ config := &jcbaseGo.AttachmentStruct{
 }
 
 att := attachment.New(c, config)
-fullURL := att.ToMedia("avatar.png")
+fullURL := att.ToMedia("images/avatar.png")
 source := att.ToSource(fullURL)
 querySource := att.ToSource(fullURL+"?v=123", false)
-// fullURL => https://cdn.example.com/uploads/avatar.png
-// source  => uploads/avatar.png
-// querySource => uploads/avatar.png?v=123
+// fullURL => https://localhost:8080/uploads/images/avatar.png
+// source  => images/avatar.png
+// querySource => images/avatar.png?v=123
 ```
 
-`ToMedia` 负责补全访问域名，`ToSource` / `RemoveDomain` 负责去除访问域名并返回相对路径。默认会自动移除 URL 中的查询参数（如 `?v=123`），如需保留则调用 `att.ToSource(url, false)`，便于在服务端存储、展示和转发时保持统一的路径格式。
+`ToMedia` 负责补全访问域名，`ToSource` 负责去除访问域名并返回相对路径（逻辑对齐 PHP 端 `Util::removeMediaDomain`：命中附件域名后从文件类型目录 `images/`、`videos/` 等处截取，本地 `LocalDir` 前缀会被一并剥离；本地 `/static/` 内部资源则保留 `static` 起始路径）。`ToMedia` 同样对齐 PHP 端 `Util::toMedia`：相对路径含 `static/` 时从 `static/` 处拼接本地资源域名（不追加 `LocalDir`）；传入完整本地附件 URL 且命中类型目录时，会剥离域名与 `LocalDir` 前缀后重新拼装，远程存储开启时可借此切换到远程访问域名。默认会自动移除 URL 中的查询参数（如 `?v=123`），如需保留则调用 `att.ToSource(url, false)`，便于在服务端存储、展示和转发时保持统一的路径格式。
 
 ### Base64 图片上传示例
 
@@ -611,17 +611,17 @@ func main() {
     // 生成完整的访问 URL
     filePath := "images/2023/10/0112345678901234567890.jpg"
     
-    // 本地访问 URL
-    localURL := att.ToMedia(filePath, true, false)
+    // 本地访问 URL（不追加时间戳）
+    localURL := att.ToMedia(filePath, true, true)
     fmt.Printf("本地访问 URL: %s\n", localURL)
     
-    // 远程访问 URL（带缓存时间戳）
-    remoteURL := att.ToMedia(filePath, false, true)
-    fmt.Printf("远程访问 URL: %s\n", remoteURL)
+    // 远程访问 URL（第二个参数传 false 会追加 ?v= 时间戳以绕过缓存）
+    remoteURL := att.ToMedia(filePath, false, false)
+    fmt.Printf("远程访问 URL（带缓存时间戳）: %s\n", remoteURL)
     
     // 不带时间戳的远程访问 URL
-    remoteURLNoCache := att.ToMedia(filePath, false, false)
-    fmt.Printf("不带缓存的远程访问 URL: %s\n", remoteURLNoCache)
+    remoteURLNoCache := att.ToMedia(filePath, false, true)
+    fmt.Printf("不带缓存时间戳的远程访问 URL: %s\n", remoteURLNoCache)
 }
 ```
 
@@ -726,6 +726,7 @@ FTP 与 SFTP 的用例在测试进程内启动本地服务器，测试结束自�
 - `SetBeforeSave(fn func(a *Attachment) bool) *Attachment` - 设置保存前回调
 - `Save() *Attachment` - 保存文件
 - `ToMedia(src string, args ...interface{}) string` - 生成访问 URL
+- `ToSource(src string, args ...bool) string` - 将访问 URL 还原为相对路径（对齐 PHP 端 `Util::removeMediaDomain`）
 - `GetPresignURL(ctx context.Context, remotePath string, opts *remote.PresignOptions) (string, map[string]string, error)` - 生成预签名上传 URL，支持 oss 与 cos
 - `ObjectExists(ctx context.Context, remotePath string) (bool, error)` - 判断远端对象是否存在，支持 oss 与 cos
 - `HasError() bool` - 检查是否有错误
