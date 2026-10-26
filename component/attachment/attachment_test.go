@@ -378,4 +378,3 @@ func TestAttachment_ToMedia(t *testing.T) {
 		t.Fatalf("ToMedia() = %q, want %q", got, "https://cdn.example.com/images/logo.png")
 	}
 }
-
