@@ -52,7 +52,7 @@ func (a *Attachment) ToMedia(src string, args ...interface{}) string {
 
 	if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
 		isLocalURL := a.BaseConfig != nil && a.BaseConfig.LocalVisitDomain != "" &&
-			strings.HasPrefix(src, a.BaseConfig.LocalVisitDomain) && !strings.Contains(src, "/static/")
+			strings.HasPrefix(src, a.BaseConfig.LocalVisitDomain) && indexOfStaticSegment(detPath(src)) < 0
 		if !isLocalURL {
 			return src
 		}
@@ -66,8 +66,8 @@ func (a *Attachment) ToMedia(src string, args ...interface{}) string {
 		src = rel
 	} else if strings.HasPrefix(src, "//") {
 		return "http:" + src
-	} else if idx := strings.Index(src, "static/"); idx >= 0 {
-		// 相对路径含 static/ 时属于内部资源，从 static/ 处拼接本地资源域名（对齐 PHP toMedia 的 static/ 分支）
+	} else if idx := indexOfStaticSegment(src); idx >= 0 {
+		// 相对路径含独立 static 目录段时属于内部资源，从 static 处拼接本地资源域名（对齐 PHP toMedia 的 static/ 分支）
 		return a.BaseConfig.LocalVisitDomain + src[idx:]
 	}
 
@@ -162,15 +162,17 @@ func (a *Attachment) ToSource(src string, args ...bool) string {
 		return src
 	}
 
-	// 命中本地域名且路径含 /static/ 时属于内部资源，保留 /static 起始路径（对应 PHP else 分支）
-	isStaticResource := startsWithLocal && !startsWithRemote && strings.Contains(src, "/static/")
+	base := detPath(src)
 
-	if base := detPath(src); base != "" {
-		if isStaticResource {
-			if idx := strings.Index(base, "/static"); idx >= 0 {
-				return joinQuery(strings.TrimLeft(base[idx:], "/"), src, rawQuery, removeQuery)
-			}
-			return joinQuery(strings.TrimLeft(base, "/"), src, rawQuery, removeQuery)
+	// 命中本地域名且路径含独立 static 目录段时属于内部资源，保留 static 起始路径（对应 PHP else 分支）
+	staticIdx := -1
+	if startsWithLocal && !startsWithRemote && base != "" {
+		staticIdx = indexOfStaticSegment(base)
+	}
+
+	if base != "" {
+		if staticIdx >= 0 {
+			return joinQuery(strings.TrimLeft(base[staticIdx:], "/"), src, rawQuery, removeQuery)
 		}
 		// 默认定位到文件类型目录（对应 PHP 的 strpos($urls['path'], $type)），
 		// 本地域名下的 LocalDir 前缀与远程域名后的 bucket/path 前缀均会被一并剥离
@@ -225,6 +227,7 @@ func joinQuery(path, src, rawQuery string, removeQuery bool) string {
 }
 
 // indexOfFileType 定位路径中首个附件文件类型目录的起始下标。
+// 仅匹配 /item/ 或路径开头 item/ 两种独立目录段形式，避免 myimages 等普通子串被误截。
 // 参数：
 //   - path: 待匹配的 URL 路径
 //
@@ -233,11 +236,32 @@ func joinQuery(path, src, rawQuery string, removeQuery bool) string {
 func indexOfFileType(path string) int {
 	cut := -1
 	for _, item := range attachmentFileTypes {
-		if idx := strings.Index(path, item); idx >= 0 && (cut < 0 || idx < cut) {
-			cut = idx
+		// 匹配 /item/ 或路径开头 item/ 两种情况，确保是独立目录段
+		if idx := strings.Index(path, "/"+item+"/"); idx >= 0 && (cut < 0 || idx+1 < cut) {
+			cut = idx + 1 // 跳过前导斜杠，指向 item 起始位置
+		}
+		if strings.HasPrefix(path, item+"/") && cut != 0 {
+			cut = 0
 		}
 	}
 	return cut
+}
+
+// indexOfStaticSegment 定位路径中独立 static 目录段的起始下标。
+// 仅匹配 /static/ 或路径开头 static/ 两种独立目录段形式，避免 oldstatic/ 等子串误命中。
+// 参数：
+//   - path: 待匹配的 URL 路径
+//
+// 返回值：
+//   - static 目录段在路径中的起始下标，未命中返回 -1
+func indexOfStaticSegment(path string) int {
+	if idx := strings.Index(path, "/static/"); idx >= 0 {
+		return idx + 1 // 跳过前导斜杠，指向 static 起始位置
+	}
+	if strings.HasPrefix(path, "static/") {
+		return 0
+	}
+	return -1
 }
 
 // stripURLQuery 去除 URL 中的查询字符串与锚点，保留有效路径。

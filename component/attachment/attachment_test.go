@@ -378,3 +378,36 @@ func TestAttachment_ToMedia(t *testing.T) {
 		t.Fatalf("ToMedia() = %q, want %q", got, "https://cdn.example.com/images/logo.png")
 	}
 }
+
+// TestAttachment_PathSegmentMatchRegression 验证路径段匹配的回归场景：
+// 类型目录与 static 仅在其作为独立路径段时才命中，普通子串或查询串内容不应被误判。
+func TestAttachment_PathSegmentMatchRegression(t *testing.T) {
+	att := &Attachment{
+		BaseConfig: &jcbaseGo.AttachmentStruct{
+			VisitDomain:      "https://cdn.example.com/",
+			LocalVisitDomain: "https://localhost:8080/",
+			StorageType:      "remote",
+			LocalDir:         "uploads",
+		},
+	}
+
+	// Issue1：myimages 中的 images 仅为普通子串，不应从 images 处误截
+	if got := att.ToSource("https://localhost:8080/uploads/myimages/logo.png"); got != "uploads/myimages/logo.png" {
+		t.Fatalf("ToSource() = %q, want %q", got, "uploads/myimages/logo.png")
+	}
+
+	// Issue2：oldstatic 是以 static 结尾的目录段（非独立 static 段），不应被识别为静态资源
+	if got := att.ToMedia("oldstatic/app.js"); got != "https://cdn.example.com/oldstatic/app.js" {
+		t.Fatalf("ToMedia() = %q, want %q", got, "https://cdn.example.com/oldstatic/app.js")
+	}
+
+	// Issue3：查询串中的 /static/ 不应影响静态资源判定，普通附件仍从类型目录处截取
+	if got := att.ToSource("https://localhost:8080/uploads/images/logo.png?next=/static/x", false); got != "images/logo.png?next=/static/x" {
+		t.Fatalf("ToSource() = %q, want %q", got, "images/logo.png?next=/static/x")
+	}
+
+	// method.go:55：本地完整 URL 仅查询串含 /static/ 时仍应识别为本地附件 URL 并重组
+	if got := att.ToMedia("https://localhost:8080/uploads/images/logo.png?next=/static/x"); got != "https://cdn.example.com/images/logo.png" {
+		t.Fatalf("ToMedia() = %q, want %q", got, "https://cdn.example.com/images/logo.png")
+	}
+}
