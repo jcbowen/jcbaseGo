@@ -2,6 +2,8 @@ module github.com/jcbowen/jcbaseGo
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require (
 	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.6.1
 	github.com/gin-gonic/gin v1.12.0
@@ -51,7 +53,7 @@ require (
 	github.com/mozillazg/go-httpheader v0.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3-0.20260718010011-08b09f19fe93 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.59.0 // indirect
+	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
