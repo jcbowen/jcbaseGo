@@ -41,6 +41,9 @@ type Snowflake struct {
 	epoch    int64
 	sequence int64
 	lastTime int64
+
+	// now 可注入的毫秒时钟源，仅用于测试；nil 时使用 time.Now().UnixMilli()
+	now func() int64
 }
 
 // NewSnowflake 创建雪花 ID 生成器（使用默认起始时间戳）。
@@ -76,44 +79,50 @@ func NewSnowflakeWithEpoch(node uint16, epochMillis int64) (*Snowflake, error) {
 	}, nil
 }
 
+// currentTime 返回当前毫秒时间戳（优先使用注入时钟）
+func (s *Snowflake) currentTime() int64 {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now().UnixMilli()
+}
+
 // NextID 生成下一个唯一 ID。
-// 发生时钟回拨时，小回拨在释放锁后短等，大回拨（超过 5 秒）直接返回错误。
+// 整个生成过程持有互斥锁：序列号在当前毫秒内用尽、或时钟回拨时，
+// 在锁内等待时钟严格越过上次生成时间后再继续，确保任何情况下序列号不会被复用。
 //
 // 返回值:
 //   - uint64: 生成的雪花 ID
-//   - error: 时钟回拨超过阈值或序列号溢出等待失败时返回错误
+//   - error: 时钟回拨超过阈值时返回错误
 func (s *Snowflake) NextID() (uint64, error) {
-	for {
-		s.mu.Lock()
-		now := time.Now().UnixMilli()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-		if now < s.lastTime {
-			backward := s.lastTime - now
-			if backward > maxBackwardMillis {
-				s.mu.Unlock()
-				return 0, fmt.Errorf("时钟回拨超过阈值 %d ms，lastTime=%d now=%d", maxBackwardMillis, s.lastTime, now)
-			}
-			// 小回拨释放锁后短等，避免阻塞其他 ID 生成请求
-			s.mu.Unlock()
-			time.Sleep(time.Millisecond)
-			continue
+	now := s.currentTime()
+	// 时钟回拨：等待时钟追上 lastTime，回拨超过阈值直接报错
+	for now < s.lastTime {
+		if s.lastTime-now > maxBackwardMillis {
+			return 0, fmt.Errorf("时钟回拨超过阈值 %d ms，lastTime=%d now=%d", maxBackwardMillis, s.lastTime, now)
 		}
+		time.Sleep(time.Millisecond)
+		now = s.currentTime()
+	}
 
-		if now == s.lastTime {
-			s.sequence = (s.sequence + 1) & sequenceMask
-			if s.sequence == 0 {
-				// 当前毫秒内序列号已用完，释放锁等待下一毫秒
-				s.mu.Unlock()
+	if now == s.lastTime {
+		s.sequence = (s.sequence + 1) & sequenceMask
+		if s.sequence == 0 {
+			// 当前毫秒序列号已用尽：必须进入下一毫秒后从 0 重新计数，
+			// 期间保持持锁，防止时钟抖动/回跳导致同一毫秒的序列号被复用
+			for now = s.currentTime(); now <= s.lastTime; now = s.currentTime() {
 				time.Sleep(time.Millisecond)
-				continue
 			}
-		} else {
 			s.sequence = 0
 		}
-
-		s.lastTime = now
-		id := ((now - s.epoch) << timestampShift) | (s.node << nodeShift) | s.sequence
-		s.mu.Unlock()
-		return uint64(id), nil
+	} else {
+		s.sequence = 0
 	}
+
+	s.lastTime = now
+	id := ((now - s.epoch) << timestampShift) | (s.node << nodeShift) | s.sequence
+	return uint64(id), nil
 }
