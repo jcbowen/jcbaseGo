@@ -38,22 +38,28 @@ func TestReproCycleTypeNoStackOverflow(t *testing.T) {
 }
 
 // 用例3：并发调用 CheckAndSetDefault（-race 下验证缓存与递归的并发安全）
+// 注意：CheckAndSetDefault 会写目标结构体字段，不承诺对同一实例的并发调用安全；
+// 并发使用方需各自持有实例。本用例各 goroutine 使用独立实例，
+// 但类型判定缓存 configStructTypeCache 按 reflect.Type 全局共享，
+// 因此并发路径依旧会穿越缓存，覆盖其并发安全。
 func TestReproConcurrentCheckAndSetDefault(t *testing.T) {
-	p := &reproParent{Kid: &reproChild{}, Children: []*reproChild{{}}}
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// 每个goroutine使用独立实例，避免对同一对象的并发写冲突
+			p := &reproParent{Kid: &reproChild{}, Children: []*reproChild{{}}}
 			if err := CheckAndSetDefault(p); err != nil {
 				t.Errorf("并发填充失败: %v", err)
+				return
+			}
+			if p.Name != "parent" || p.Kid.Note != "child" || p.Children[0].Note != "child" {
+				t.Error("并发填充结果不正确")
 			}
 		}()
 	}
 	wg.Wait()
-	if p.Name != "parent" || p.Kid.Note != "child" || p.Children[0].Note != "child" {
-		t.Fatal("并发填充结果不正确")
-	}
 }
 
 // 用例2：自引用类型环（T → []*T），值路径不经过时直接调用类型判定入口验证收敛
