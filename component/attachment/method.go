@@ -11,6 +11,9 @@ import (
 // 定位类型目录起点、ToMedia 重组本地完整 URL；匹配时取所有候选名中出现最早的一个作为截取点。
 var attachmentFileTypes = []string{"images", "thumbs", "voices", "videos", "audios", "offices", "zips"}
 
+// defaultLocalDir 本地附件目录缺省名，与 jcbaseGo.AttachmentStruct.LocalDir 的 default 标签一致
+const defaultLocalDir = "attachment"
+
 // ToMedia 将附件相对路径补全为可访问的完整 URL。
 // 参数：
 //   - src: 附件源路径（可为相对路径、绝对路径或已带协议的 URL）
@@ -100,9 +103,17 @@ func stripToLocalRelative(src string) (string, bool) {
 }
 
 // ToSource 将附件访问 URL 或带域名的路径还原为相对路径。
-// 逻辑对齐 PHP 端 Util::removeMediaDomain：命中附件域名后，
-// 普通附件从文件类型目录（images/videos/offices 等）处截取；
-// 本地 /static/ 内部资源则保留 /static 起始的路径。
+// 还原规则按输入形态与存储模式分支：
+//   - 命中本地访问域名（LocalVisitDomain）：优先从文件类型目录（images/videos/offices 等）截取；
+//     未命中类型目录与 static 时剥离 LocalDir 前缀（覆盖 /uploads/seed/** 等非类型目录路径）
+//   - 命中远程访问域名（VisitDomain）：按对象 Key 语义从类型目录截取；
+//     对象 Key 合法含 uploads 等目录段时不做强行剥离（远程 Key 与本地 LocalDir 无关）
+//   - 未命中任何域名的 http(s) URL：local 存储模式下路径命中 /<LocalDir>/ 前缀即剥离
+//     （覆盖历史按任意请求域名拼出的存量附件 URL）；其余视为外链原样返回，且不再剥除
+//     查询参数，保证带参数外链（如占位图服务）不被破坏
+//   - 纯路径形态（/uploads/... 或 uploads/...）：local 存储模式下剥离 LocalDir 前缀，
+//     其余仅去掉开头的 /
+//
 // 参数：
 //   - src: 带附件域名的 URL 或路径
 //   - args: 可选参数，args[0] 表示是否移除 URL 中的查询参数；默认 true
@@ -115,27 +126,19 @@ func stripToLocalRelative(src string) (string, bool) {
 //
 // 示例：
 //
-//	att.ToSource("https://host/attachment/avatar.png") => "attachment/avatar.png"
-//	att.ToSource("https://host/attachment/avatar.png?v=123") => "attachment/avatar.png"
-//	att.ToSource("https://host/attachment/avatar.png?v=123", false) => "attachment/avatar.png?v=123"
-//	att.ToSource("https://localhost:8080/uploads/images/logo.png") => "images/logo.png" // 本地域名剥离 LocalDir 前缀
-//	att.ToSource("https://localhost:8080/static/js/app.js") => "static/js/app.js" // 本地 /static/ 资源保留 static 起点
+//	att.ToSource("https://localhost:8080/uploads/images/logo.png")        => "images/logo.png"
+//	att.ToSource("https://old-host.example/uploads/images/logo.png")      => "images/logo.png" // 历史请求域名存量，按路径前缀剥离
+//	att.ToSource("https://localhost:8080/uploads/seed/x.png")             => "seed/x.png"      // 非类型目录路径剥离 LocalDir
+//	att.ToSource("https://cdn.example.com/uploads/myzipfile/x.png")       => "uploads/myzipfile/x.png" // 远程 Key 不做 LocalDir 剥离
+//	att.ToSource("https://placehold.co/300x300?text=Tomato")              => 原样返回（外链保留查询参数）
+//	att.ToSource("https://host/attachment/avatar.png?v=123", false)       => "attachment/avatar.png?v=123"
 func (a *Attachment) ToSource(src string, args ...bool) string {
-	removeQuery := true
-	if len(args) > 0 {
-		removeQuery = args[0]
-	}
 	if src == "" {
 		return ""
 	}
-
-	// 记录原始查询串，removeQuery 为 false 时在还原后追加回路径尾部
-	rawQuery := ""
-	if idx := strings.Index(src, "?"); idx >= 0 {
-		rawQuery = src[idx:]
-	}
-	if removeQuery {
-		src = stripURLQuery(src)
+	removeQuery := true
+	if len(args) > 0 {
+		removeQuery = args[0]
 	}
 
 	remoteDomain := ""
@@ -144,20 +147,21 @@ func (a *Attachment) ToSource(src string, args ...bool) string {
 		remoteDomain = strings.TrimSpace(a.BaseConfig.VisitDomain)
 		localDomain = strings.TrimSpace(a.BaseConfig.LocalVisitDomain)
 	}
-	if (localDomain == "" || localDomain == "/") && (remoteDomain == "" || remoteDomain == "/") {
-		// 未配置附件域名时无法剥离，原样返回
-		if strings.HasPrefix(src, "/") {
-			return strings.TrimLeft(src, "/")
-		}
-		return src
+
+	// 纯路径形态（无协议）：local 模式剥离 LocalDir 前缀，其余归一为相对路径
+	if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
+		return a.sourceFromPathForm(src, removeQuery)
 	}
 
-	// 仅当 URL 命中附件域名时才做剥离（对应 PHP 端的 startsWith 守卫）
-	startsWithLocal := localDomain != "" && localDomain != "/" && strings.HasPrefix(src, localDomain)
-	startsWithRemote := remoteDomain != "" && remoteDomain != "/" && strings.HasPrefix(src, remoteDomain)
+	startsWithLocal := isUsableDomain(localDomain) && strings.HasPrefix(src, localDomain)
+	startsWithRemote := isUsableDomain(remoteDomain) && strings.HasPrefix(src, remoteDomain)
+
+	// 未命中任何附件域名：local 模式按 LocalDir 路径前缀剥离历史存量 URL，外链原样保留
 	if !startsWithLocal && !startsWithRemote {
-		if strings.HasPrefix(src, "/") {
-			return strings.TrimLeft(src, "/")
+		if base := detPath(src); a.isLocalStorage() {
+			if rel, ok := cutLocalDir(base, a.localDirName()); ok {
+				return joinQuery(rel, tailQuery(src), removeQuery)
+			}
 		}
 		return src
 	}
@@ -172,24 +176,103 @@ func (a *Attachment) ToSource(src string, args ...bool) string {
 
 	if base != "" {
 		if staticIdx >= 0 {
-			return joinQuery(strings.TrimLeft(base[staticIdx:], "/"), src, rawQuery, removeQuery)
+			return joinQuery(strings.TrimLeft(base[staticIdx:], "/"), tailQuery(src), removeQuery)
 		}
 		// 默认定位到文件类型目录（对应 PHP 的 strpos($urls['path'], $type)），
 		// 本地域名下的 LocalDir 前缀与远程域名后的 bucket/path 前缀均会被一并剥离
 		if cut := indexOfFileType(base); cut >= 0 {
-			return joinQuery(base[cut:], src, rawQuery, removeQuery)
+			return joinQuery(base[cut:], tailQuery(src), removeQuery)
 		}
-		// 未找到类型目录时兜底：detPath 已取到纯路径（域名部分自然去除），仅去掉开头的斜杠
+		// 本地域名命中但未命中类型目录：剥离 LocalDir 前缀得到服务目录之后的相对路径
+		// （如 /uploads/seed/**；远程域名分支不处理，对象 Key 与 LocalDir 无关）
+		if startsWithLocal && !startsWithRemote {
+			if rel, ok := cutLocalDir(base, a.localDirName()); ok {
+				return joinQuery(rel, tailQuery(src), removeQuery)
+			}
+		}
+		// 兜底：detPath 已取到纯路径（域名部分自然去除），仅去掉开头的斜杠
 		if startsWithRemote {
-			return joinQuery(strings.TrimLeft(strings.TrimPrefix(base, strings.TrimRight(remoteDomain, "/")), "/"), src, rawQuery, removeQuery)
+			return joinQuery(strings.TrimLeft(strings.TrimPrefix(base, strings.TrimRight(remoteDomain, "/")), "/"), tailQuery(src), removeQuery)
 		}
-		return joinQuery(strings.TrimLeft(strings.TrimPrefix(base, strings.TrimRight(localDomain, "/")), "/"), src, rawQuery, removeQuery)
+		return joinQuery(strings.TrimLeft(strings.TrimPrefix(base, strings.TrimRight(localDomain, "/")), "/"), tailQuery(src), removeQuery)
 	}
 
 	if strings.HasPrefix(src, "/") {
 		return strings.TrimLeft(src, "/")
 	}
 	return src
+}
+
+// sourceFromPathForm 处理无协议前缀的路径形态输入：
+// local 存储模式剥离 LocalDir 前缀（/uploads/images/x → images/x，uploads/x → x），
+// 协议相对链接（//host/x）非附件路径原样返回，其余仅去掉开头的 /
+func (a *Attachment) sourceFromPathForm(src string, removeQuery bool) string {
+	path := src
+	tail := ""
+	if idx := strings.IndexAny(src, "?#"); idx >= 0 {
+		path = src[:idx]
+		tail = src[idx:]
+	}
+	if strings.HasPrefix(path, "//") {
+		return src
+	}
+	rel := strings.TrimLeft(path, "/")
+	if a.isLocalStorage() {
+		rel = strings.TrimPrefix(rel, a.localDirName()+"/")
+	}
+	if removeQuery {
+		return rel
+	}
+	return rel + tail
+}
+
+// isLocalStorage 判断是否本地存储模式；StorageType 缺省（字面量构造未赋值）按 local 处理
+// 与 AttachmentStruct.StorageType 的 default:local 一致
+func (a *Attachment) isLocalStorage() bool {
+	if a == nil || a.BaseConfig == nil {
+		return true
+	}
+	st := a.BaseConfig.StorageType
+	return st == "" || st == "local"
+}
+
+// localDirName 取本地存储目录名；未配置时回 AttachmentStruct 的默认值 attachment
+func (a *Attachment) localDirName() string {
+	if a == nil || a.BaseConfig == nil || a.BaseConfig.LocalDir == "" {
+		return defaultLocalDir
+	}
+	if dir := strings.Trim(a.BaseConfig.LocalDir, "/"); dir != "" {
+		return dir
+	}
+	return defaultLocalDir
+}
+
+// cutLocalDir 从 URL 路径中剥离 /<LocalDir>/ 服务目录前缀
+// 参数：
+//   - path: URL 的 path 部分
+//   - dir: 本地存储目录名
+//
+// 返回值：
+//   - string: 剥离后的相对路径
+//   - bool: 是否命中前缀
+func cutLocalDir(path, dir string) (string, bool) {
+	if dir == "" {
+		return "", false
+	}
+	return strings.CutPrefix(path, "/"+dir+"/")
+}
+
+// isUsableDomain 域名是否可用于 URL 前缀匹配（空与占位 "/" 视为未配置）
+func isUsableDomain(domain string) bool {
+	return domain != "" && domain != "/"
+}
+
+// tailQuery 取 URL 尾部的查询串与锚点片段，无则返回空串
+func tailQuery(src string) string {
+	if idx := strings.IndexAny(src, "?#"); idx >= 0 {
+		return src[idx:]
+	}
+	return ""
 }
 
 // detPath 提取 URL 的路径部分，对齐 PHP 端 parse_url($src)['path'] 的行为。
@@ -209,21 +292,16 @@ func detPath(src string) string {
 // joinQuery 在剥离域名后的相对路径尾部按需追加原始查询串。
 // 参数：
 //   - path: 剥离域名后的相对路径
-//   - src: 本次参与剥离处理的 URL（removeQuery 为 false 时仍带查询串/锚点）
-//   - rawQuery: 原始输入中含 ? 的尾部片段，为空则说明无查询串可恢复
+//   - rawQuery: 原始输入中含 ?/# 的尾部片段，为空则说明无查询串可恢复
 //   - removeQuery: 是否移除查询参数
 //
 // 返回值：
 //   - 保留查询参数时返回路径加原始尾部（含锚点），否则仅返回路径部分
-func joinQuery(path, src, rawQuery string, removeQuery bool) string {
+func joinQuery(path, rawQuery string, removeQuery bool) string {
 	if removeQuery || rawQuery == "" {
 		return path
 	}
-	// stripURLQuery 未启用时 src 仍带查询串，锚点也一并保留
-	if idx := strings.IndexAny(src, "?#"); idx >= 0 {
-		return path + src[idx:]
-	}
-	return path
+	return path + rawQuery
 }
 
 // indexOfFileType 定位路径中首个附件文件类型目录的起始下标。
@@ -262,17 +340,4 @@ func indexOfStaticSegment(path string) int {
 		return 0
 	}
 	return -1
-}
-
-// stripURLQuery 去除 URL 中的查询字符串与锚点，保留有效路径。
-// 参数：
-//   - src: 待处理的 URL 或路径
-//
-// 返回值：
-//   - 去除 ? 后参数及 # 后锚点后的路径
-func stripURLQuery(src string) string {
-	if idx := strings.IndexAny(src, "?#"); idx >= 0 {
-		return src[:idx]
-	}
-	return src
 }

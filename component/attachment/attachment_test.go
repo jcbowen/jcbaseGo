@@ -306,6 +306,75 @@ func TestAttachment_RemoveDomain(t *testing.T) {
 	}
 }
 
+// TestAttachment_ToSourceLocalDirStrip 验证 ToSource 的 LocalDir 前缀剥离语义：
+// 历史按任意请求域名拼出的存量附件 URL 与本地非类型目录路径都能归一为相对路径，
+// 而远程域名命中的对象 Key 与未命中的外链不受 LocalDir 影响。
+func TestAttachment_ToSourceLocalDirStrip(t *testing.T) {
+	local := &Attachment{
+		BaseConfig: &jcbaseGo.AttachmentStruct{
+			StorageType:      "local",
+			LocalDir:         "uploads",
+			LocalVisitDomain: "https://m.example.com/",
+		},
+	}
+
+	// 历史请求域名的存量附件 URL：与域名无关，按 /<LocalDir>/ 路径前缀剥离
+	if got := local.ToSource("http://localhost:18080/uploads/images/legacy/a.jpg"); got != "images/legacy/a.jpg" {
+		t.Fatalf("ToSource() = %q, want %q", got, "images/legacy/a.jpg")
+	}
+
+	// 本地非类型目录路径（如演示种子素材）：剥离 LocalDir 得到服务目录后的相对路径
+	if got := local.ToSource("https://m.example.com/uploads/seed/products/pickle.png"); got != "seed/products/pickle.png" {
+		t.Fatalf("ToSource() = %q, want %q", got, "seed/products/pickle.png")
+	}
+
+	// 纯路径形态：local 模式剥离 LocalDir 前缀
+	if got := local.ToSource("/uploads/images/a.jpg"); got != "images/a.jpg" {
+		t.Fatalf("ToSource() = %q, want %q", got, "images/a.jpg")
+	}
+	if got := local.ToSource("uploads/images/a.jpg"); got != "images/a.jpg" {
+		t.Fatalf("ToSource() = %q, want %q", got, "images/a.jpg")
+	}
+
+	// 外链未命中域名与目录前缀：原样返回且保留查询参数（修复旧实现剥 query 破坏外链）
+	if got := local.ToSource("https://placehold.co/300x300?text=Tomato"); got != "https://placehold.co/300x300?text=Tomato" {
+		t.Fatalf("ToSource() = %q, want %q", got, "https://placehold.co/300x300?text=Tomato")
+	}
+
+	// 协议相对链接原样返回
+	if got := local.ToSource("//cdn.other.example/x.jpg"); got != "//cdn.other.example/x.jpg" {
+		t.Fatalf("ToSource() = %q, want %q", got, "//cdn.other.example/x.jpg")
+	}
+
+	// 远程存储模式：未命中域名的 URL 即使路径含 /uploads/ 也视为外链原样返回
+	// （对象 Key 与本地 LocalDir 无关，不做误剥）
+	oss := &Attachment{
+		BaseConfig: &jcbaseGo.AttachmentStruct{
+			StorageType: "oss",
+			LocalDir:    "uploads",
+			VisitDomain: "https://cdn.example.com/",
+		},
+	}
+	if got := oss.ToSource("https://other-bucket.oss-cn-beijing.aliyuncs.com/uploads/images/a.jpg"); got != "https://other-bucket.oss-cn-beijing.aliyuncs.com/uploads/images/a.jpg" {
+		t.Fatalf("ToSource() = %q, want %q", got, "https://other-bucket.oss-cn-beijing.aliyuncs.com/uploads/images/a.jpg")
+	}
+
+	// LocalDir 自定义目录名：按配置目录剥离
+	media := &Attachment{
+		BaseConfig: &jcbaseGo.AttachmentStruct{
+			StorageType:      "local",
+			LocalDir:         "media",
+			LocalVisitDomain: "https://m.example.com/",
+		},
+	}
+	if got := media.ToSource("https://m.example.com/media/images/a.jpg"); got != "images/a.jpg" {
+		t.Fatalf("ToSource() = %q, want %q", got, "images/a.jpg")
+	}
+	if got := media.ToSource("/media/seed/x.png"); got != "seed/x.png" {
+		t.Fatalf("ToSource() = %q, want %q", got, "seed/x.png")
+	}
+}
+
 // TestAttachment_ToMediaToSourceRoundTrip 验证 ToMedia 与 ToSource 本地存储下互逆，
 // 还原结果与 FileAttachment 保存的相对路径格式一致（不含 LocalDir 前缀）。
 func TestAttachment_ToMediaToSourceRoundTrip(t *testing.T) {
@@ -391,9 +460,10 @@ func TestAttachment_PathSegmentMatchRegression(t *testing.T) {
 		},
 	}
 
-	// Issue1：myimages 中的 images 仅为普通子串，不应从 images 处误截
-	if got := att.ToSource("https://localhost:8080/uploads/myimages/logo.png"); got != "uploads/myimages/logo.png" {
-		t.Fatalf("ToSource() = %q, want %q", got, "uploads/myimages/logo.png")
+	// Issue1：myimages 中的 images 仅为普通子串，不应从 images 处误截；
+	// 命中本地域名即本地服务目录下的 URL，未命中类型目录时按 LocalDir 前缀剥离
+	if got := att.ToSource("https://localhost:8080/uploads/myimages/logo.png"); got != "myimages/logo.png" {
+		t.Fatalf("ToSource() = %q, want %q", got, "myimages/logo.png")
 	}
 
 	// Issue2：oldstatic 是以 static 结尾的目录段（非独立 static 段），不应被识别为静态资源

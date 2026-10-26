@@ -111,7 +111,7 @@ querySource := att.ToSource(fullURL+"?v=123", false)
 // querySource => images/avatar.png?v=123
 ```
 
-`ToMedia` 负责补全访问域名，`ToSource` 负责去除访问域名并返回相对路径（逻辑对齐 PHP 端 `Util::removeMediaDomain`：命中附件域名后从文件类型目录 `images/`、`videos/` 等处截取，本地 `LocalDir` 前缀会被一并剥离；本地 `/static/` 内部资源则保留 `static` 起始路径）。`ToMedia` 同样对齐 PHP 端 `Util::toMedia`：相对路径含 `static/` 时从 `static/` 处拼接本地资源域名（不追加 `LocalDir`）；传入完整本地附件 URL 且命中类型目录时，会剥离域名与 `LocalDir` 前缀后重新拼装，远程存储开启时可借此切换到远程访问域名。默认会自动移除 URL 中的查询参数（如 `?v=123`），如需保留则调用 `att.ToSource(url, false)`，便于在服务端存储、展示和转发时保持统一的路径格式。
+`ToMedia` 负责补全访问域名，`ToSource` 负责去除访问域名并返回相对路径，按输入形态与存储模式分支：命中本地访问域名时从文件类型目录 `images/`、`videos/` 等处截取（本地 `/static/` 内部资源保留 `static` 起始路径；未命中类型目录时剥离 `LocalDir` 前缀，覆盖 `/uploads/seed/**` 等非类型目录路径）；命中远程访问域名时按对象 Key 语义处理，Key 中合法的 `uploads` 等目录段不会因 `LocalDir` 被误剥；未命中任何域名的 URL 在 local 存储模式下按 `/<LocalDir>/` 路径前缀剥离（可归一历史按任意请求域名拼出的存量附件 URL），其余视为外链原样返回且保留查询参数，带参数外链（如占位图服务）不会被破坏。`ToMedia` 同样对齐 PHP 端 `Util::toMedia`：相对路径含 `static/` 时从 `static/` 处拼接本地资源域名（不追加 `LocalDir`）；传入完整本地附件 URL 且命中类型目录时，会剥离域名与 `LocalDir` 前缀后重新拼装，远程存储开启时可借此切换到远程访问域名。附件 URL 默认会自动移除查询参数（如 `?v=123`），如需保留则调用 `att.ToSource(url, false)`，便于在服务端存储、展示和转发时保持统一的路径格式。
 
 ### Base64 图片上传示例
 
