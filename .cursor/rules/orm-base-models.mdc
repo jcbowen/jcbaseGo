@@ -253,22 +253,23 @@ type User struct {
 ## 数据库钩子方法
 
 ### 自动时间戳管理
-基础模型提供了自动的时间戳管理：
+基础模型提供了自动的时间戳管理，语义对齐 GORM 原生 autoCreateTime/autoUpdateTime：
+**字段为空值时才自动填充当前时间，已显式指定（如数据迁移、导入历史数据）则保留**；被 Omit 的字段同样跳过。
 
 ```go
 // BeforeCreate 创建前钩子
-// 自动设置 CreatedAt 和 UpdatedAt 字段
-func (b *MysqlBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
+// 仅当 CreatedAt/UpdatedAt 等字段未设置（零值）时填充默认时间，显式指定的值不会被覆盖
+func (b *CommonBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
     strTime := time.Now().Format("2006-01-02 15:04:05")
-    setFieldIfExist(tx.Statement.Dest, "CreatedAt", strTime)
-    setFieldIfExist(tx.Statement.Dest, "UpdatedAt", strTime)
+    SetTimeFieldDefaults(tx, strTime, "CreatedAt", "Created", "UpdatedAt", "Updated")
     return
 }
 
 // BeforeUpdate 更新前钩子
-// 自动更新 UpdatedAt 字段
-func (b *MysqlBaseModel) BeforeUpdate(tx *gorm.DB) (err error) {
-    setFieldIfExist(tx.Statement.Dest, "UpdatedAt", time.Now().Format("2006-01-02 15:04:05"))
+// 仅当 UpdatedAt 等字段未设置时填充默认时间；map 更新时若已带 updated_at 键则保留
+func (b *CommonBaseModel) BeforeUpdate(tx *gorm.DB) (err error) {
+    strTime := time.Now().Format("2006-01-02 15:04:05")
+    SetTimeFieldDefaults(tx, strTime, "UpdatedAt", "Updated")
     return
 }
 ```

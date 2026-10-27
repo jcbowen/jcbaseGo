@@ -135,6 +135,108 @@ func SetFieldIfExist(model interface{}, fieldName string, value string) {
 	}
 }
 
+// SetFieldDefault 设置字段默认值（仅当字段未设置时写入）
+// 与 SetFieldIfExist 的区别：字段已有值时跳过设置，保留调用方显式指定的时间，
+// 对齐 GORM 原生 autoCreateTime/autoUpdateTime 与 default 标签的"零值才填充"语义。
+// 两种目标类型的"未设置"判定与存在性语义：
+//   - struct：字段必须存在（FieldByName 查不到则静默跳过），且值为零值
+//     （string 为空 / time.Time 为零值 / 指针为 nil）时才写入；
+//   - map：字段名与 aliasKeys 中任意 key 已存在即视为已设置（哪怕值为空字符串），
+//     全部不存在时才以 fieldName 为 key 添加默认值。
+//
+// 函数名：SetFieldDefault
+// 参数：
+//   - model interface{}：模型对象指针或 map
+//   - fieldName string：结构体字段名（非列名），同时作为 map 添加时的 key
+//   - value string：默认值字符串（时间格式：2006-01-02 15:04:05）
+//   - aliasKeys ...string：map 目标的备选 key（如数据库列名 updated_at）
+//
+// 返回值：无
+// 异常：无（内部忽略不可设或类型不匹配的字段）
+// 使用示例：
+//
+//	// 结构体：仅当 CreatedAt 为零值时才填充默认时间
+//	SetFieldDefault(&user, "CreatedAt", "2026-01-01 00:00:00", "created_at")
+//	// map：UpdatedAt 与 updated_at 均不存在时才添加默认时间
+//	SetFieldDefault(dest, "UpdatedAt", "2026-01-01 00:00:00", "updated_at")
+func SetFieldDefault(model interface{}, fieldName string, value string, aliasKeys ...string) {
+	modelValue := reflect.ValueOf(model)
+
+	if modelValue.Kind() == reflect.Ptr {
+		modelValue = modelValue.Elem()
+	}
+
+	switch modelValue.Kind() {
+	case reflect.Struct:
+		field := modelValue.FieldByName(fieldName)
+		if !field.IsValid() || !field.CanSet() {
+			return
+		}
+		// 字段已有值时跳过，保留调用方显式指定的时间
+		if !isZeroValue(field) {
+			return
+		}
+		// 根据字段类型设置相应的值
+		switch field.Kind() {
+		case reflect.String:
+			// 字符串类型字段，直接设置
+			field.SetString(value)
+		case reflect.Struct:
+			// 检查是否为 time.Time 类型
+			if field.Type().String() == "time.Time" {
+				// 解析时间字符串并设置
+				if timeValue, err := time.Parse("2006-01-02 15:04:05", value); err == nil {
+					field.Set(reflect.ValueOf(timeValue))
+				}
+			}
+		case reflect.Ptr:
+			// 处理 *time.Time 等指针类型，仅在 nil 时分配新对象
+			if field.Type().Elem().String() == "time.Time" && field.IsNil() {
+				if timeValue, err := time.Parse("2006-01-02 15:04:05", value); err == nil {
+					newElem := reflect.New(field.Type().Elem())
+					newElem.Elem().Set(reflect.ValueOf(timeValue))
+					field.Set(newElem)
+				}
+			}
+		}
+	case reflect.Map:
+		// 仅支持 string key 的 map（与 GORM Updates 的 map 形态一致）
+		if modelValue.Type().Key().Kind() != reflect.String {
+			return
+		}
+		// key 已存在（字段名或列名形式）时跳过，尊重调用方显式指定的时间
+		for _, key := range append([]string{fieldName}, aliasKeys...) {
+			if key == "" {
+				continue
+			}
+			if modelValue.MapIndex(reflect.ValueOf(key)).IsValid() {
+				return
+			}
+		}
+		modelValue.SetMapIndex(reflect.ValueOf(fieldName), reflect.ValueOf(value))
+	}
+}
+
+// isZeroValue 判断反射值是否为空值
+// 空值判定规则：字符串为空、time.Time 为零值、指针为 nil。
+//
+// 参数：
+//   - v reflect.Value：待判断的反射值
+//
+// 返回值：
+//   - bool：是否为空值
+func isZeroValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.String:
+		return v.String() == ""
+	case reflect.Struct:
+		return v.Type().String() == "time.Time" && v.Interface().(time.Time).IsZero()
+	case reflect.Ptr:
+		return v.IsNil()
+	}
+	return false
+}
+
 // EnsureSelects 在使用 Select 限定插入/更新字段时，确保必要字段被包含
 // 典型场景：在钩子中设置 CreatedAt/UpdatedAt 等字段，但外部使用了 Select 导致未持久化
 // 函数名：EnsureSelects

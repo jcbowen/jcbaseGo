@@ -308,6 +308,9 @@ func parseDeletedAtCondition(tag string) string {
 
 // BeforeCreate 创建前钩子
 // GORM 在创建记录前自动调用。若模型中不存在对应字段，设置操作会被静默忽略。
+// 仅当 CreatedAt/Created/UpdatedAt/Updated 字段为空值时才填充当前时间；
+// 已显式指定时间的字段（如数据迁移、导入历史数据）不会被覆盖，
+// 对齐 GORM 原生 autoCreateTime 语义。被 Omit 的字段同样跳过。
 //
 // 参数：
 //   - tx *gorm.DB: 当前 GORM 事务上下文，包含 Statement.Dest 与 Statement.Selects
@@ -324,23 +327,22 @@ func parseDeletedAtCondition(tag string) string {
 //	    base.CommonBaseModel
 //	    Username string `gorm:"column:username" json:"username"`
 //	}
-//	db.Create(&user) // 自动触发 BeforeCreate，设置 CreatedAt/UpdatedAt 等字段
+//	db.Create(&user) // CreatedAt/UpdatedAt 为空时自动填充；已指定则保留
 func (b *CommonBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
 	if tx == nil || tx.Statement == nil || tx.Statement.Dest == nil {
 		return
 	}
 
 	strTime := time.Now().Format("2006-01-02 15:04:05")
-	SetFieldIfExist(tx.Statement.Dest, "CreatedAt", strTime)
-	SetFieldIfExist(tx.Statement.Dest, "Created", strTime)
-	SetFieldIfExist(tx.Statement.Dest, "UpdatedAt", strTime)
-	SetFieldIfExist(tx.Statement.Dest, "Updated", strTime)
+	SetTimeFieldDefaults(tx, strTime, "CreatedAt", "Created", "UpdatedAt", "Updated")
 	EnsureSelects(tx, "CreatedAt", "Created", "UpdatedAt", "Updated")
 	return
 }
 
 // BeforeUpdate 更新前钩子
 // GORM 在更新记录前自动调用。若模型中不存在对应字段，设置操作会被静默忽略。
+// 仅当 UpdatedAt/Updated 字段为空值时才填充当前时间；已显式指定时间的字段
+// 不会被覆盖，对齐 GORM 原生 autoUpdateTime 语义。被 Omit 的字段同样跳过。
 //
 // 参数：
 //   - tx *gorm.DB: 当前 GORM 事务上下文，包含 Statement.Dest 与 Statement.Selects
@@ -357,15 +359,93 @@ func (b *CommonBaseModel) BeforeCreate(tx *gorm.DB) (err error) {
 //	    base.CommonBaseModel
 //	    Username string `gorm:"column:username" json:"username"`
 //	}
-//	db.Model(&user).Updates(map[string]interface{}{"username": "new"}) // 自动触发 BeforeUpdate
+//	// UpdatedAt 为空时自动填充；map 中已带 updated_at 则保留
+//	db.Model(&user).Updates(map[string]interface{}{"username": "new"})
 func (b *CommonBaseModel) BeforeUpdate(tx *gorm.DB) (err error) {
 	if tx == nil || tx.Statement == nil || tx.Statement.Dest == nil {
 		return
 	}
 
 	strTime := time.Now().Format("2006-01-02 15:04:05")
-	SetFieldIfExist(tx.Statement.Dest, "UpdatedAt", strTime)
-	SetFieldIfExist(tx.Statement.Dest, "Updated", strTime)
+	SetTimeFieldDefaults(tx, strTime, "UpdatedAt", "Updated")
 	EnsureSelects(tx, "UpdatedAt", "Updated")
 	return
+}
+
+// SetTimeFieldDefaults 通过 GORM 事务上下文为未设置的时间字段批量填充默认值
+// 供基础模型钩子内部使用，也可在业务模型自定义 BeforeCreate/BeforeUpdate
+// 钩子中复用（如为业务自有时间字段兜底）。
+// 内部包含三层保护：
+//  1. Schema 校验：字段不存在于模型中时直接跳过，避免向 map Dest 添加
+//     GORM 无法解析的 key（未识别的 key 会被当作裸列名生成 SQL 而报错）；
+//  2. Omit 检查：被 Omit 的字段（按字段名或列名匹配）不设置；
+//  3. 列名解析：将字段名解析为数据库列名，作为 map 场景的备选 key
+//     （map 更新时调用方通常使用列名）。
+//
+// 函数名：SetTimeFieldDefaults
+// 参数：
+//   - tx *gorm.DB: 当前 GORM 事务上下文（钩子回调参数）
+//   - strTime: 默认时间字符串（格式 2006-01-02 15:04:05）
+//   - fieldNames: 结构体字段名列表（如 "UpdatedAt"）
+//
+// 返回值：无
+// 异常：无
+// 使用示例：
+//
+//	// 业务模型自定义钩子中为自有时间字段兜底
+//	func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
+//	    if err = u.MysqlBaseModel.BeforeCreate(tx); err != nil {
+//	        return err
+//	    }
+//	    base.SetTimeFieldDefaults(tx, time.Now().Format("2006-01-02 15:04:05"), "LoginAt")
+//	    return nil
+//	}
+func SetTimeFieldDefaults(tx *gorm.DB, strTime string, fieldNames ...string) {
+	for _, name := range fieldNames {
+		dbName := lookupDBName(tx, name)
+		if dbName == "" {
+			continue
+		}
+		if isFieldOmitted(tx, name) {
+			continue
+		}
+		SetFieldDefault(tx.Statement.Dest, name, strTime, dbName)
+	}
+}
+
+// lookupDBName 从 GORM Schema 中查找字段名对应的数据库列名
+// 查不到时返回空字符串，SetFieldDefault 会自动忽略空备选 key。
+//
+// 参数：
+//   - tx *gorm.DB: 当前 GORM 事务上下文
+//   - fieldName: 结构体字段名
+//
+// 返回值：
+//   - string: 数据库列名，Schema 不可用或字段不存在时返回空字符串
+func lookupDBName(tx *gorm.DB, fieldName string) string {
+	if tx == nil || tx.Statement == nil || tx.Statement.Schema == nil {
+		return ""
+	}
+	if f := tx.Statement.Schema.LookUpField(fieldName); f != nil {
+		return f.DBName
+	}
+	return ""
+}
+
+// isFieldOmitted 判断字段是否被 Omit 排除（按字段名或列名匹配）
+//
+// 参数：
+//   - tx *gorm.DB: 当前 GORM 事务上下文
+//   - fieldName: 结构体字段名
+//
+// 返回值：
+//   - bool: 字段名或其列名出现在 Statement.Omits 中时返回 true
+func isFieldOmitted(tx *gorm.DB, fieldName string) bool {
+	if tx == nil || tx.Statement == nil || len(tx.Statement.Omits) == 0 {
+		return false
+	}
+	if helper.InArray(fieldName, tx.Statement.Omits) {
+		return true
+	}
+	return helper.InArray(lookupDBName(tx, fieldName), tx.Statement.Omits)
 }
