@@ -9,9 +9,9 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/jlaffaye/ftp v0.2.4
-	github.com/pkg/sftp v1.13.11
+	github.com/pkg/sftp v1.13.12
 	github.com/stretchr/testify v1.12.1
-	github.com/tencentyun/cos-go-sdk-v5 v0.7.75
+	github.com/tencentyun/cos-go-sdk-v5 v0.7.76
 	github.com/tjfoc/gmsm v1.4.1
 	golang.org/x/crypto v0.58.0
 	gopkg.in/ini.v1 v1.67.3
