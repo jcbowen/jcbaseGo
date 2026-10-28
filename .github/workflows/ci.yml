@@ -181,7 +181,7 @@ jobs:
             coverage.html
           retention-days: 14
 
-  # race 检测器与 CGO 依赖只在 Linux 上稳定；其余平台做普通运行，
+  # race 检测器只在 Linux 上稳定；其余平台做普通运行，
   # 用于捕捉文件锁、路径分隔符、大小写敏感等仅在 Windows/macOS 暴露的问题
   test-cross-os:
     name: Test (${{ matrix.os }})
@@ -204,14 +204,9 @@ jobs:
 
       - name: Test
         shell: bash
-        run: |
-          packages="$(go list ./...)"
-          if [ "$(go env CGO_ENABLED)" = "0" ]; then
-            echo "当前环境 CGO 已关闭，跳过依赖 cgo 的 sqlite 包"
-            packages="$(echo "$packages" | grep -v '/component/orm/sqlite')"
-          fi
-          # shellcheck disable=SC2086
-          go test -count=1 $packages
+        # SQLite 已切换为纯 Go 驱动（glebarez/sqlite），不再依赖 CGO，
+        # Windows/macOS 上完整运行，覆盖文件锁、路径分隔符等平台差异
+        run: go test -count=1 ./...
 
   # 单 runner 交叉编译，无需 Windows/macOS Runner，Gitea 也能完整执行
   build:

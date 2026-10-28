@@ -42,7 +42,7 @@ go get github.com/jcbowen/jcbaseGo
 
 - **Go**: 1.26.0+
 - **MySQL**: 5.7+ 或 8.0+ (可选，用于数据库功能)
-- **SQLite**: 3.x (可选，用于轻量级数据库)
+- **SQLite**: 3.x (可选，用于轻量级数据库；驱动已内置 SQLite 引擎，本机无需安装 SQLite 或 gcc)
 - **Redis**: 6.0+ (可选，用于缓存功能)
 - **PHP**: 7.4+ 或 8.x (可选，用于 PHP 集成功能)
 
@@ -54,7 +54,7 @@ go get github.com/jcbowen/jcbaseGo
 
 # 安装 GORM 相关驱动
 go get gorm.io/driver/mysql
-go get gorm.io/driver/sqlite
+go get github.com/glebarez/sqlite
 go get gorm.io/gorm
 
 # 安装 Redis 客户端

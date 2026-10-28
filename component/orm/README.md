@@ -57,7 +57,7 @@ ORM 组件为 Go 应用程序提供了强大的数据库操作能力，支持多
 ```bash
 go get -u gorm.io/gorm
 go get -u gorm.io/driver/mysql
-go get -u gorm.io/driver/sqlite
+go get -u github.com/glebarez/sqlite
 ```
 
 ## 使用示例
