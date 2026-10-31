@@ -316,6 +316,8 @@ db.EnableContextAwareSQLLogging(dbg.GetMainLogger())
 
 #### MySQL 配置结构
 
+**yaml 键名规范与兼容（v0.17.8 起）**：yaml 配置推荐使用驼峰键（与字段 yaml tag 一致，如 `parseTime`、`driverName`）；v0.17.7 之前只能在 yaml 中写全小写键（如 `parsetime`），该写法继续兼容生效——两种写法解析等价，但同一字段两种键同现会直接报错，无法识别的键会在启动日志告警。配置文件经程序启动重写后会统一输出为驼峰规范键。
+
 ```go
 type DbStruct struct {
     Username                                string `json:"username" ini:"username" default:"root"`
