@@ -44,25 +44,25 @@ type WebServer struct {
 
 // DbStruct 数据库配置
 type DbStruct struct {
-	DriverName                               string `json:"driverName" ini:"driverName" default:"mysql"`                                                             // 驱动类型
-	Protocol                                 string `json:"protocol" ini:"protocol" default:"tcp"`                                                                   // 协议
-	Host                                     string `json:"host" ini:"host" default:"localhost"`                                                                     // 数据库地址
-	Port                                     string `json:"port" ini:"port" default:"3306"`                                                                          // 数据库端口号
-	Dbname                                   string `json:"dbname" ini:"dbname" default:"dbname"`                                                                    // 表名称
-	Username                                 string `json:"username" ini:"username" default:"root"`                                                                  // 用户名
-	Password                                 string `json:"password" ini:"password" default:""`                                                                      // 密码
-	Charset                                  string `json:"charset" ini:"charset" default:"utf8mb4"`                                                                 // 编码
-	TablePrefix                              string `json:"tablePrefix,omitempty" ini:"tablePrefix,omitempty" default:""`                                            // 表前缀
-	ParseTime                                string `json:"parseTime" ini:"parseTime" default:"False"`                                                               // 是否开启时间解析
-	Loc                                      string `json:"loc" ini:"loc" default:"Local"`                                                                           // 时区：Local=服务器本地时区(默认)、UTC，或 IANA 时区名(如 Asia/Shanghai)；约定“库里存 UTC”的项目须显式配置为 UTC
-	SingularTable                            bool   `json:"singularTable" ini:"singularTable" default:"true"`                                                        // 使用单数表名
-	DisableForeignKeyConstraintWhenMigrating bool   `json:"disableForeignKeyConstraintWhenMigrating" ini:"disableForeignKeyConstraintWhenMigrating" default:"false"` // 是否禁用外键约束
+	DriverName                               string `json:"driverName" ini:"driverName" yaml:"driverName" default:"mysql"`                                                                                           // 驱动类型（yaml tag 补齐：驼峰键此前不匹配 yaml.v3 默认全小写规则，导致该键静默失效）
+	Protocol                                 string `json:"protocol" ini:"protocol" default:"tcp"`                                                                                                                   // 协议
+	Host                                     string `json:"host" ini:"host" default:"localhost"`                                                                                                                     // 数据库地址
+	Port                                     string `json:"port" ini:"port" default:"3306"`                                                                                                                          // 数据库端口号
+	Dbname                                   string `json:"dbname" ini:"dbname" default:"dbname"`                                                                                                                    // 表名称
+	Username                                 string `json:"username" ini:"username" default:"root"`                                                                                                                  // 用户名
+	Password                                 string `json:"password" ini:"password" default:""`                                                                                                                      // 密码
+	Charset                                  string `json:"charset" ini:"charset" default:"utf8mb4"`                                                                                                                 // 编码
+	TablePrefix                              string `json:"tablePrefix,omitempty" ini:"tablePrefix,omitempty" yaml:"tablePrefix" default:""`                                                                         // 表前缀
+	ParseTime                                string `json:"parseTime" ini:"parseTime" default:"False"`                                                                                                               // 是否开启时间解析
+	Loc                                      string `json:"loc" ini:"loc" default:"Local"`                                                                                                                           // 时区：Local=服务器本地时区(默认)、UTC，或 IANA 时区名(如 Asia/Shanghai)；约定“库里存 UTC”的项目须显式配置为 UTC
+	SingularTable                            bool   `json:"singularTable" ini:"singularTable" yaml:"singularTable" default:"true"`                                                                                   // 使用单数表名
+	DisableForeignKeyConstraintWhenMigrating bool   `json:"disableForeignKeyConstraintWhenMigrating" ini:"disableForeignKeyConstraintWhenMigrating" yaml:"disableForeignKeyConstraintWhenMigrating" default:"false"` // 是否禁用外键约束
 }
 
 // SqlLiteStruct sqlite配置
 type SqlLiteStruct struct {
 	DbFile                                   string `json:"dbFile" ini:"dbFile" default:"./data/db/jcbaseGo.db"`                                                     // 数据库文件，默认在data目录下
-	TablePrefix                              string `json:"tablePrefix" ini:"tablePrefix" default:"jc_"`                                                             // 表前缀
+	TablePrefix                              string `json:"tablePrefix" ini:"tablePrefix" default:""`                                                                // 表前缀（默认无前缀；需要前缀的项目显式配置）
 	SingularTable                            bool   `json:"singularTable" ini:"singularTable" default:"true"`                                                        // 使用单数表名
 	DisableForeignKeyConstraintWhenMigrating bool   `json:"disableForeignKeyConstraintWhenMigrating" ini:"disableForeignKeyConstraintWhenMigrating" default:"false"` // 是否禁用外键约束
 }
