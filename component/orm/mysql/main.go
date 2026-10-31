@@ -3,6 +3,7 @@ package mysql
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -46,6 +47,7 @@ type Instance struct {
 	// 连接状态管理
 	lastValidCheck time.Time     // 最后一次有效性检查时间
 	validityCache  time.Duration // 有效性缓存时间，默认30秒
+	closed         bool          // 是否已显式关闭；关闭后 GetDb 不再自动重连重建连接池
 	mu             sync.RWMutex  // 读写锁，保护并发访问
 }
 
@@ -71,6 +73,62 @@ func DefaultReconnectConfig() ReconnectConfig {
 // defaultLoc 默认时区。保持历史行为：按服务器本地时区解析 DATETIME/TIMESTAMP。
 // 修改该默认值会直接影响所有下游项目的时间语义，只允许通过配置覆盖，不得改动此常量。
 const defaultLoc = "Local"
+
+// 连接池参数的库内默认值。与历史硬编码保持一致，未配置（0 值）时回落到这里，保证默认行为零变化。
+const (
+	defaultMaxOpenConns           = 100
+	defaultMaxIdleConns           = 10
+	defaultConnMaxLifetimeSeconds = 300 // 5分钟
+	defaultConnMaxIdleTimeSeconds = 180 // 3分钟
+)
+
+// resolvePoolConfig 计算连接池参数，配置为 0 或负值时回落到库内默认值。
+// 参数：
+//   - conf: 数据库配置（读取 MaxOpenConns / MaxIdleConns / ConnMaxLifetimeSeconds / ConnMaxIdleTimeSeconds）
+//
+// 返回值：
+//   - int: 最大打开连接数
+//   - int: 最大空闲连接数
+//   - time.Duration: 连接最大生存时间
+//   - time.Duration: 空闲连接最大生存时间
+//
+// 使用示例：
+//   - maxOpen, maxIdle, lifetime, idleTime := resolvePoolConfig(conf)
+func resolvePoolConfig(conf jcbaseGo.DbStruct) (maxOpen, maxIdle int, lifetime, idleTime time.Duration) {
+	maxOpen = conf.MaxOpenConns
+	if maxOpen <= 0 {
+		maxOpen = defaultMaxOpenConns
+	}
+	maxIdle = conf.MaxIdleConns
+	if maxIdle <= 0 {
+		maxIdle = defaultMaxIdleConns
+	}
+	lifetime = time.Duration(conf.ConnMaxLifetimeSeconds) * time.Second
+	if lifetime <= 0 {
+		lifetime = defaultConnMaxLifetimeSeconds * time.Second
+	}
+	idleTime = time.Duration(conf.ConnMaxIdleTimeSeconds) * time.Second
+	if idleTime <= 0 {
+		idleTime = defaultConnMaxIdleTimeSeconds * time.Second
+	}
+	return
+}
+
+// applyPoolConfig 按配置设置连接池参数；未配置的字段回落库内默认值。
+// New 与 reconnect 均通过本方法设置连接池，避免参数字面量重复、以及重连后把调用方自定义配置重置回默认。
+// 参数：
+//   - sqlDB: 底层 *sql.DB
+//   - conf: 数据库配置
+//
+// 使用示例：
+//   - applyPoolConfig(sqlDB, dbConfig)
+func applyPoolConfig(sqlDB *sql.DB, conf jcbaseGo.DbStruct) {
+	maxOpen, maxIdle, lifetime, idleTime := resolvePoolConfig(conf)
+	sqlDB.SetMaxOpenConns(maxOpen)
+	sqlDB.SetMaxIdleConns(maxIdle)
+	sqlDB.SetConnMaxLifetime(lifetime)
+	sqlDB.SetConnMaxIdleTime(idleTime)
+}
 
 // parseTimeTrueValues / parseTimeFalseValues parsetime 配置认可的写法（大小写与前后空格均不敏感）
 var parseTimeTrueValues = []string{"true", "1", "yes", "on", "t", "y"}
@@ -192,19 +250,12 @@ func New(dbConfig jcbaseGo.DbStruct, opts ...string) (*Instance, error) {
 		return nil, err
 	}
 
-	// 配置连接池参数，防止连接泄漏和长时间锁定
+	// 配置连接池参数（未配置的字段回落库内默认），防止连接泄漏和长时间锁定
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, err
 	}
-	// 设置最大连接数
-	sqlDB.SetMaxOpenConns(100)
-	// 设置最大空闲连接数
-	sqlDB.SetMaxIdleConns(10)
-	// 设置连接最大生命周期（5分钟）
-	sqlDB.SetConnMaxLifetime(5 * time.Minute)
-	// 设置空闲连接超时时间（3分钟）
-	sqlDB.SetConnMaxIdleTime(3 * time.Minute)
+	applyPoolConfig(sqlDB, dbConfig)
 
 	// 建连校验与重试
 	{
@@ -263,16 +314,57 @@ func (c *Instance) Debug() *Instance {
 	return c
 }
 
+// Close 关闭底层连接池并将实例标记为已关闭；用于测试、短生命周期进程收尾或多实例切换场景。
+//
+// 关闭语义：与 EnableAutoReconnect 对齐——显式关闭视为主动下线，关闭后 GetDb() 返回 nil，
+// 且不会触发自动重连把连接池重新建起来（自动重连仅用于意外断连场景）。
+// 重复调用安全，不会panic。
+//
+// 返回值：
+//   - error: 底层连接池关闭失败时返回该错误；实例未建立过连接时返回 nil
+//
+// 使用示例：
+//
+//	inst, err := mysql.New(conf)
+//	if err != nil {
+//	    panic(err)
+//	}
+//	defer func() { _ = inst.Close() }()
+func (c *Instance) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.closed = true
+	if c.Db == nil {
+		return nil
+	}
+
+	sqlDB, err := c.Db.DB()
+	if err != nil {
+		c.Db = nil
+		return err
+	}
+
+	c.Db = nil
+	return sqlDB.Close()
+}
+
 // GetDb 返回当前数据库连接；若已开启调试模式返回 Debug 包装的连接。
 // 调试模式优先级：debuggerLogger > debug标志
 // 注意：此方法会验证连接有效性并在需要时尝试重连，支持并发安全
 func (c *Instance) GetDb() *gorm.DB {
 	// 获取读锁，允许多个读操作并发
 	c.mu.RLock()
+	closed := c.closed // 在读锁内读取，避免与并发 Close 产生数据竞争
 
 	// 检查连接是否为 nil
 	if c.Db == nil {
 		c.mu.RUnlock() // 释放读锁
+
+		// 已显式关闭的实例不再自动重连，避免把连接池重新建起来
+		if closed {
+			return nil
+		}
 
 		// 尝试重新连接（需要写锁）
 		if !c.reconnectConfig.EnableAutoReconnect {
@@ -309,6 +401,11 @@ func (c *Instance) tryReconnect() *gorm.DB {
 		return c.applyDebugMode(c.Db)
 	}
 
+	// 已显式关闭的实例不再自动重连（GetDb 检查后到获取写锁之间，可能已被并发关闭）
+	if c.closed {
+		return nil
+	}
+
 	log.Println("Database connection is nil, attempting to reconnect...")
 
 	if err := c.reconnect(); err != nil {
@@ -327,6 +424,11 @@ func (c *Instance) validateAndReconnect() *gorm.DB {
 
 	// 双重检查，防止其他goroutine已经处理过
 	if time.Since(c.lastValidCheck) <= c.validityCache {
+		return c.applyDebugMode(c.Db)
+	}
+
+	// 已显式关闭的实例不再自动重连
+	if c.closed {
 		return c.applyDebugMode(c.Db)
 	}
 
@@ -490,6 +592,11 @@ func (c *Instance) reconnect() error {
 		return errors.New("auto reconnect is disabled")
 	}
 
+	// 已显式关闭的实例不再重建连接池
+	if c.closed {
+		return errors.New("database instance is closed")
+	}
+
 	var lastErr error
 	for i := 0; i < c.reconnectConfig.MaxRetries; i++ {
 		log.Printf("Attempting to reconnect to database (attempt %d/%d)", i+1, c.reconnectConfig.MaxRetries)
@@ -512,7 +619,7 @@ func (c *Instance) reconnect() error {
 			continue
 		}
 
-		// 配置连接池
+		// 配置连接池（与 New 共用同一份配置，重连后自定义配置不再被重置回默认）
 		sqlDB, err := db.DB()
 		if err != nil {
 			lastErr = err
@@ -520,10 +627,7 @@ func (c *Instance) reconnect() error {
 			continue
 		}
 
-		sqlDB.SetMaxOpenConns(100)
-		sqlDB.SetMaxIdleConns(10)
-		sqlDB.SetConnMaxLifetime(5 * time.Minute)
-		sqlDB.SetConnMaxIdleTime(3 * time.Minute)
+		applyPoolConfig(sqlDB, c.Conf)
 
 		// 验证连接
 		ctx, cancel := context.WithTimeout(context.Background(), c.reconnectConfig.PingTimeout)
@@ -543,6 +647,15 @@ func (c *Instance) reconnect() error {
 			db = orm.EnableSQLLogging(db, c.debuggerLogger, c.sqlLogOpts...)
 		} else if c.debug {
 			db = db.Debug()
+		}
+
+		// 替换前先关闭旧连接池，避免每次重连泄漏一整池连接（database/sql 没有 finalizer，
+		// 旧池里已建立的连接不会自动释放；Close 只关空闲连接，使用中的连接归还后关闭，
+		// 本方法已在 c.mu 写锁内，不会与本实例的其他操作并发冲突）
+		if c.Db != nil {
+			if oldDB, oerr := c.Db.DB(); oerr == nil {
+				_ = oldDB.Close()
+			}
 		}
 
 		c.Db = db

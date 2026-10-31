@@ -1385,11 +1385,17 @@ type Config struct {
 
 ### 数据库优化
 ```go
-// 连接池配置
-sqlDB, _ := db.DB()
-sqlDB.SetMaxOpenConns(100)           // 最大连接数
-sqlDB.SetMaxIdleConns(10)            // 最大空闲连接
-sqlDB.SetConnMaxLifetime(5 * time.Minute)  // 连接最大生命周期
+// 连接池配置：推荐直接在 DbStruct 中设置，重连后依然生效
+dbConfig := jcbaseGo.DbStruct{
+    // ...常规配置...
+    MaxOpenConns:           100, // 最大连接数，0=默认100
+    MaxIdleConns:           10,  // 最大空闲连接，0=默认10
+    ConnMaxLifetimeSeconds: 300, // 连接最大生命周期（秒），0=默认300
+}
+
+// 兜底方式：绕过封装手动调整（注意：自动重连后会按 DbStruct 重置）
+sqlDB, _ := db.GetDb().DB()
+sqlDB.SetConnMaxIdleTime(3 * time.Minute) // 空闲连接最大生存时间
 
 // 批量操作
 db.CreateInBatches(users, 1000)      // 批量插入

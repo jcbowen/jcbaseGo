@@ -318,17 +318,24 @@ db.EnableContextAwareSQLLogging(dbg.GetMainLogger())
 
 ```go
 type DbStruct struct {
-    Username                                string `default:"root"`
-    Password                                string `default:""`
-    Protocol                                string `default:"tcp"`
-    Host                                    string `default:"127.0.0.1"`
-    Port                                    string `default:"3306"`
-    Dbname                                  string `default:""`
-    Charset                                 string `default:"utf8mb4"`
-    ParseTime                               string `default:"True"`
-    TablePrefix                             string `default:""`
-    SingularTable                           bool   `default:"false"`
-    DisableForeignKeyConstraintWhenMigrating bool   `default:"false"`
+    Username                                string `json:"username" ini:"username" default:"root"`
+    Password                                string `json:"password" ini:"password" default:""`
+    Protocol                                string `json:"protocol" ini:"protocol" default:"tcp"`
+    Host                                    string `json:"host" ini:"host" default:"localhost"`
+    Port                                    string `json:"port" ini:"port" default:"3306"`
+    Dbname                                  string `json:"dbname" ini:"dbname" default:"dbname"`
+    Charset                                 string `json:"charset" ini:"charset" default:"utf8mb4"`
+    TablePrefix                             string `json:"tablePrefix,omitempty" ini:"tablePrefix,omitempty" yaml:"tablePrefix" default:""`
+    ParseTime                               string `json:"parseTime" ini:"parseTime" yaml:"parseTime" default:"False"`
+    Loc                                     string `json:"loc" ini:"loc" default:"Local"`
+    SingularTable                           bool   `json:"singularTable" ini:"singularTable" yaml:"singularTable" default:"true"`
+    DisableForeignKeyConstraintWhenMigrating bool   `json:"disableForeignKeyConstraintWhenMigrating" ini:"disableForeignKeyConstraintWhenMigrating" yaml:"disableForeignKeyConstraintWhenMigrating" default:"false"`
+
+    // 连接池配置（可选，0 值使用库内默认，未配置时行为与历史版本一致）
+    MaxOpenConns           int `json:"maxOpenConns" ini:"maxOpenConns" yaml:"maxOpenConns"`                               // 最大打开连接数，0=默认100
+    MaxIdleConns           int `json:"maxIdleConns" ini:"maxIdleConns" yaml:"maxIdleConns"`                               // 最大空闲连接数，0=默认10
+    ConnMaxLifetimeSeconds int `json:"connMaxLifetimeSeconds" ini:"connMaxLifetimeSeconds" yaml:"connMaxLifetimeSeconds"` // 连接最大生存时间（秒），0=默认300（5分钟）
+    ConnMaxIdleTimeSeconds int `json:"connMaxIdleTimeSeconds" ini:"connMaxIdleTimeSeconds" yaml:"connMaxIdleTimeSeconds"` // 空闲连接最大生存时间（秒），0=默认180（3分钟）
 }
 ```
 
@@ -428,10 +435,22 @@ err := db.GetDb().Transaction(func(tx *gorm.DB) error {
 
 ### 连接池配置
 
-组件自动配置合理的连接池参数：
+组件默认配置合理的连接池参数，也支持通过 `DbStruct` 自定义：
 
-- **MySQL**：最大连接数 100，空闲连接数 10
+- **MySQL 默认**：最大连接数 100，空闲连接数 10，连接最大生存时间 5 分钟，空闲连接最大生存时间 3 分钟
 - **SQLite**：最大连接数 1，空闲连接数 1（SQLite 限制）
+- **MySQL 自定义**：在 `DbStruct` 中设置 `MaxOpenConns` / `MaxIdleConns` / `ConnMaxLifetimeSeconds` / `ConnMaxIdleTimeSeconds`（均为可选，0 值回落默认）；自动重连后自定义值依然生效，不会被重置回默认
+
+```go
+dbConfig := jcbaseGo.DbStruct{
+    // ...常规配置...
+    MaxOpenConns:           50,  // 最大打开连接数
+    MaxIdleConns:           5,   // 最大空闲连接数
+    ConnMaxLifetimeSeconds: 300, // 连接最大生存时间（秒）
+    ConnMaxIdleTimeSeconds: 180, // 空闲连接最大生存时间（秒）
+}
+db, err := mysql.New(dbConfig)
+```
 
 ### MySQL 自动重连机制
 
@@ -489,7 +508,7 @@ fmt.Printf("重试次数: %d\n", config.MaxRetries)
 2. **自动重连**：当连接失效时，自动尝试重新建立连接
 3. **并发安全**：使用读写锁保护，支持高并发场景
 4. **调试模式恢复**：重连后自动恢复 SQL 日志记录或 Debug 模式
-5. **连接池重建**：重连时重新配置连接池参数
+5. **连接池重建**：重连时先关闭旧连接池（防止连接泄漏），再按同一份 `DbStruct` 配置重新设置池参数
 
 #### 使用示例
 
@@ -592,6 +611,7 @@ type Instance interface {
 - `SetMaxRetries(maxRetries int) *Instance` - 设置最大重试次数
 - `SetRetryInterval(interval time.Duration) *Instance` - 设置重试间隔
 - `SetPingTimeout(timeout time.Duration) *Instance` - 设置 Ping 超时时间
+- `Close() error` - 关闭底层连接池；关闭后 `GetDb()` 返回 nil 且不再自动重连，用于测试或短生命周期进程收尾
 
 ### SQLite Instance 方法
 

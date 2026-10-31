@@ -53,10 +53,16 @@ type DbStruct struct {
 	Password                                 string `json:"password" ini:"password" default:""`                                                                                                                      // 密码
 	Charset                                  string `json:"charset" ini:"charset" default:"utf8mb4"`                                                                                                                 // 编码
 	TablePrefix                              string `json:"tablePrefix,omitempty" ini:"tablePrefix,omitempty" yaml:"tablePrefix" default:""`                                                                         // 表前缀
-	ParseTime                                string `json:"parseTime" ini:"parseTime" default:"False"`                                                                                                               // 是否开启时间解析
+	ParseTime                                string `json:"parseTime" ini:"parseTime" yaml:"parseTime" default:"False"`                                                                                              // 是否开启时间解析（yaml tag 补齐：驼峰键此前不匹配 yaml.v3 默认全小写规则，导致该键静默失效）
 	Loc                                      string `json:"loc" ini:"loc" default:"Local"`                                                                                                                           // 时区：Local=服务器本地时区(默认)、UTC，或 IANA 时区名(如 Asia/Shanghai)；约定“库里存 UTC”的项目须显式配置为 UTC
 	SingularTable                            bool   `json:"singularTable" ini:"singularTable" yaml:"singularTable" default:"true"`                                                                                   // 使用单数表名
 	DisableForeignKeyConstraintWhenMigrating bool   `json:"disableForeignKeyConstraintWhenMigrating" ini:"disableForeignKeyConstraintWhenMigrating" yaml:"disableForeignKeyConstraintWhenMigrating" default:"false"` // 是否禁用外键约束
+
+	// 连接池配置（可选）。不加 default tag：0 值即「使用库内默认」，未配置时行为与历史版本完全一致
+	MaxOpenConns           int `json:"maxOpenConns" ini:"maxOpenConns" yaml:"maxOpenConns"`                               // 最大打开连接数，0=默认100
+	MaxIdleConns           int `json:"maxIdleConns" ini:"maxIdleConns" yaml:"maxIdleConns"`                               // 最大空闲连接数，0=默认10
+	ConnMaxLifetimeSeconds int `json:"connMaxLifetimeSeconds" ini:"connMaxLifetimeSeconds" yaml:"connMaxLifetimeSeconds"` // 连接最大生存时间（秒），0=默认300（5分钟）
+	ConnMaxIdleTimeSeconds int `json:"connMaxIdleTimeSeconds" ini:"connMaxIdleTimeSeconds" yaml:"connMaxIdleTimeSeconds"` // 空闲连接最大生存时间（秒），0=默认180（3分钟）
 }
 
 // SqlLiteStruct sqlite配置
