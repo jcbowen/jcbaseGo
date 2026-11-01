@@ -585,6 +585,23 @@ func (c *Instance) isConnectionValid() bool {
 	return true
 }
 
+// closeOrphanPool 关闭一个尚未（也永远不会）被实例采用的连接池。
+// database/sql 没有 finalizer，被丢弃的池里已建立的连接不会自动释放；
+// 重连尝试中 gorm.Open 成功但后续步骤失败时须调用本函数回收，避免每次失败都泄漏一个池。
+// 参数：
+//   - db: 待丢弃的 GORM 连接（可为 nil，内部取不到底层池时静默跳过）
+//
+// 使用示例：
+//   - closeOrphanPool(db) // ping 失败分支
+func closeOrphanPool(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		_ = sqlDB.Close()
+	}
+}
+
 // reconnect 尝试重新建立数据库连接
 // 根据重连配置进行多次重试
 func (c *Instance) reconnect() error {
@@ -624,6 +641,8 @@ func (c *Instance) reconnect() error {
 		if err != nil {
 			lastErr = err
 			log.Printf("Failed to configure connection pool: %v", err)
+			closeOrphanPool(db)
+			time.Sleep(c.reconnectConfig.RetryInterval)
 			continue
 		}
 
@@ -637,6 +656,9 @@ func (c *Instance) reconnect() error {
 		if err != nil {
 			lastErr = err
 			log.Printf("Reconnected but ping failed: %v", err)
+			// ping 失败说明本池不会被采用：database/sql 无 finalizer，
+			// 不显式关闭则每次失败的尝试都泄漏一个池
+			closeOrphanPool(db)
 			continue
 		}
 
