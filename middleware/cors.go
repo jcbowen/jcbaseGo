@@ -175,8 +175,8 @@ func isOriginAllowed(origin string, allowlist []string) bool {
 		}
 
 		// 子域通配符：*.example.com 匹配 example.com 及其任意子域
-		if strings.HasPrefix(pattern, "*.") {
-			patternHost := strings.TrimPrefix(pattern, "*.")
+		if after, ok := strings.CutPrefix(pattern, "*."); ok {
+			patternHost := after
 			if hostname == patternHost || strings.HasSuffix(hostname, "."+patternHost) {
 				return true
 			}
