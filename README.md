@@ -1278,7 +1278,7 @@ if err != nil {
 ### 🔗 中间件支持 (middleware/)
 
 #### 功能特性
-- **跨域支持 (CORS)**: 完整的 CORS 配置，支持预检请求和凭证
+- **跨域支持 (CORS)**: 完整的 CORS 配置，支持预检请求、凭证与 Origin 白名单（含子域通配符）
 - **真实 IP 获取**: 正确处理代理服务器后的真实客户端 IP
 - **请求参数解析 (SetGPC)**: 自动解析请求参数到 Gin 上下文
 
@@ -1292,6 +1292,11 @@ if err != nil {
 > SetGPC 读取请求体后会把原文回灌，业务 handler 仍可再次 `c.GetRawData()` 取完整字节做验签或原文哈希；
 > 超过 10MB 的请求体只回灌不解析（`GPC["data"]` 为空并记录日志），multipart 走解析后的表单与文件句柄。
 
+> CORS 说明：`Cors()` 等价于 `CorsWithConfig(CorsConfig{AllowAllOrigins: true, AllowCredentials: true})`，
+> 即任意来源可携带 Cookie 跨域访问，生产环境建议改用白名单。白名单未命中的来源不下发任何 CORS 授权头
+> （预检同样返回 204 但不带授权头），由浏览器自行拦截；`*.example.com` 通配符匹配该主域及其任意子域，
+> scheme 不限。`AllowCredentials` 仅在回显具体 Origin 时下发，不会与 `*` 组合。
+
 #### 使用示例
 ```go
 import "github.com/jcbowen/jcbaseGo/middleware"
@@ -1301,7 +1306,12 @@ func main() {
     
     // 使用中间件
     base := middleware.Base{}
-    r.Use(base.Cors())              // 跨域支持
+    r.Use(base.Cors())              // 跨域支持：放行任意来源（历史行为）
+    // 或使用白名单收紧来源（生产环境推荐）：
+    // r.Use(base.CorsWithConfig(middleware.CorsConfig{
+    //     AllowOrigins:     []string{"https://www.example.com", "*.api.example.com"},
+    //     AllowCredentials: true,
+    // }))
     r.Use(base.SetRealIP(true))     // 真实 IP 获取，参数表示是否走 CDN/代理
     r.Use(base.SetGPC(r))           // 请求参数解析，传入引擎以读取 MaxMultipartMemory
     

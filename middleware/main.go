@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -16,62 +15,6 @@ import (
 )
 
 type Base struct {
-}
-
-// Cors 开放所有接口的OPTIONS方法
-func (b Base) Cors() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		method := c.Request.Method
-		origin := c.Request.Header.Get("Origin")
-
-		// 让缓存正确区分不同的跨域预检
-		c.Header("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers")
-
-		// Origin 处理：回显具体来源以支持凭证；无来源则为 *
-		if origin != "" {
-			c.Header("Access-Control-Allow-Origin", origin)
-		} else {
-			c.Header("Access-Control-Allow-Origin", "*")
-		}
-
-		// 允许的方法
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-
-		// === 自定义允许的请求头 ===
-		defaultAllowHeaders := "Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, Pragma, X-Environment, X-Version, X-Request-Time, X-Api-Key, X-Resource-Version, JcClient, Referer, User-Agent, sec-ch-ua, sec-ch-ua-mobile, sec-ch-ua-platform"
-		reqHeaders := strings.TrimSpace(c.Request.Header.Get("Access-Control-Request-Headers"))
-		if reqHeaders != "" {
-			// 返回客户端请求的头部，同时附加我们的默认列表（允许重复，浏览器会忽略）
-			c.Header("Access-Control-Allow-Headers", reqHeaders+", "+defaultAllowHeaders)
-		} else {
-			c.Header("Access-Control-Allow-Headers", defaultAllowHeaders)
-		}
-
-		// 暴露的响应头（加入常用与自定义，便于前端读取）
-		c.Header("Access-Control-Expose-Headers", "Content-Length, Content-Type, Authorization, X-Environment, X-Version, X-Request-Time, X-Api-Key, X-Resource-Version, JcClient")
-
-		// 预检缓存时间
-		c.Header("Access-Control-Max-Age", "172800")
-
-		// 仅当存在具体的 Origin 时允许携带凭证（与 * 不兼容）
-		if origin != "" {
-			c.Header("Access-Control-Allow-Credentials", "true")
-		}
-
-		// 允许私有网络的跨域（Chrome 新增，按需支持）
-		if c.Request.Header.Get("Access-Control-Request-Private-Network") == "true" {
-			c.Header("Access-Control-Allow-Private-Network", "true")
-		}
-
-		// 放行所有 OPTIONS 预检请求
-		if method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-
-		// 处理后续请求
-		c.Next()
-	}
 }
 
 // SetRealIP 设置真实IP到gin上下文
