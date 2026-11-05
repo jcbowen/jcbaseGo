@@ -504,7 +504,7 @@ func GetOrderSummary(db *gorm.DB, userID uint) ([]OrderSummary, error) {
 import (
     "encoding/json"
     "time"
-    "github.com/go-redis/redis/v8"
+    "github.com/redis/go-redis/v9"
 )
 
 type CachedQuery struct {
@@ -1100,7 +1100,7 @@ import (
     "crypto/rand"
     "encoding/hex"
     "time"
-    "github.com/go-redis/redis/v8"
+    "github.com/redis/go-redis/v9"
 )
 
 // Redis 分布式锁

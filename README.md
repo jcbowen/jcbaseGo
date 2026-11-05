@@ -58,7 +58,7 @@ go get github.com/glebarez/sqlite
 go get gorm.io/gorm
 
 # 安装 Redis 客户端
-go get github.com/go-redis/redis/v8
+go get github.com/redis/go-redis/v9
 
 # 安装其他常用依赖
 go get github.com/gin-gonic/gin

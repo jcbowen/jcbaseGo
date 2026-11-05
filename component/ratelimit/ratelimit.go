@@ -22,7 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -84,7 +84,7 @@ func (l *Limiter) Allow(ctx context.Context, key string, maxRequests int, window
 
 	pipe := l.client.Pipeline()
 	pipe.ZRemRangeByScore(ctx, key, "0", strconv.FormatInt(windowStart, 10))
-	pipe.ZAdd(ctx, key, &redis.Z{Score: float64(now), Member: member})
+	pipe.ZAdd(ctx, key, redis.Z{Score: float64(now), Member: member})
 	pipe.Expire(ctx, key, time.Duration(windowSeconds)*time.Second)
 	pipe.ZCard(ctx, key)
 

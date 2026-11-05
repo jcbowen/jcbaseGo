@@ -40,7 +40,7 @@ Ratelimit 组件为 HTTP API、消息推送等场景提供限流保护：
 
 ### 安装依赖
 
-组件已包含在 jcbaseGo 模块中，Redis 客户端使用 `github.com/go-redis/redis/v8`：
+组件已包含在 jcbaseGo 模块中，Redis 客户端使用 `github.com/redis/go-redis/v9`：
 
 ```bash
 go get github.com/jcbowen/jcbaseGo
@@ -57,7 +57,7 @@ import (
     "context"
     "fmt"
 
-    "github.com/go-redis/redis/v8"
+    "github.com/redis/go-redis/v9"
     "github.com/jcbowen/jcbaseGo/component/ratelimit"
 )
 

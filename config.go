@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v3"
 
