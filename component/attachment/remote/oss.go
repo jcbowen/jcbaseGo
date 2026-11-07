@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -276,4 +277,167 @@ func (c *OSSClient) PresignUpload(ctx context.Context, remotePath string, opts *
 	}
 
 	return result.URL, headers, nil
+}
+
+// PresignGet 生成用于下载指定对象的预签名 URL。
+// 底层使用 OSS Go SDK V2 的 GetObject 预签名能力，签名版本为 V4（OSS4-HMAC-SHA256）。
+// - remotePath: 对象在存储桶中的路径（Key）。
+// - opts: 下载选项，nil 时表示使用默认选项（仅签名 bucket 与 key，默认有效期 10 分钟）。
+//
+// 返回值：
+//   - string: 预签名 URL。
+//   - map[string]string: 使用该 URL 发起请求时需要携带的已签名请求头。
+//   - error: 生成过程中出现的错误。
+//
+// 使用示例：
+//
+//	url, headers, err := client.PresignGet(ctx, "releases/pkg.zip", &PresignDownloadOptions{
+//		Expires:                    60 * time.Minute,
+//		ResponseContentDisposition: "attachment;filename=pkg.zip",
+//	})
+func (c *OSSClient) PresignGet(ctx context.Context, remotePath string, opts *PresignDownloadOptions) (string, map[string]string, error) {
+	select {
+	case <-ctx.Done():
+		return "", nil, &Error{Op: "PresignGet", Err: ctx.Err()}
+	default:
+	}
+
+	expires := defaultPresignExpires
+	req := &oss.GetObjectRequest{
+		Bucket: &c.bucket,
+		Key:    &remotePath,
+	}
+
+	if opts != nil {
+		if opts.Expires > 0 {
+			expires = opts.Expires
+		}
+		if opts.ResponseContentDisposition != "" {
+			req.ResponseContentDisposition = &opts.ResponseContentDisposition
+		}
+		if opts.ResponseContentType != "" {
+			req.ResponseContentType = &opts.ResponseContentType
+		}
+		if opts.ResponseCacheControl != "" {
+			req.ResponseCacheControl = &opts.ResponseCacheControl
+		}
+	}
+
+	result, err := c.client.Presign(ctx, req, oss.PresignExpires(expires))
+	if err != nil {
+		return "", nil, &Error{Op: "PresignGet", Err: err}
+	}
+
+	headers := result.SignedHeaders
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+
+	return result.URL, headers, nil
+}
+
+// HeadObjectMeta 读取指定对象的元信息，不下载对象内容。
+// 底层使用 HeadObject，元数据中的自定义字段（如 x-oss-meta-sha256）会去除前缀后放入 Metadata。
+// - remotePath: 对象在存储桶中的路径（Key）。
+//
+// 返回值：
+//   - *ObjectMeta: 对象元信息；Metadata 一定非 nil。
+//   - error: 对象不存在时返回包装了 ErrObjectNotFound 的错误；其它异常返回请求错误。
+//
+// 使用示例：
+//
+//	meta, err := client.HeadObjectMeta(ctx, "releases/pkg.zip")
+//	if errors.Is(err, ErrObjectNotFound) { /* 对象不存在 */ }
+//	sha256 := meta.Metadata["sha256"]
+func (c *OSSClient) HeadObjectMeta(ctx context.Context, remotePath string) (*ObjectMeta, error) {
+	select {
+	case <-ctx.Done():
+		return nil, &Error{Op: "HeadObjectMeta", Err: ctx.Err()}
+	default:
+	}
+
+	resp, err := c.client.HeadObject(ctx, &oss.HeadObjectRequest{
+		Bucket: &c.bucket,
+		Key:    &remotePath,
+	})
+	if err != nil {
+		if isObjectNotFound(err) {
+			return nil, &Error{Op: "HeadObjectMeta", Err: fmt.Errorf("%w: %s", ErrObjectNotFound, remotePath)}
+		}
+		return nil, &Error{Op: "HeadObjectMeta", Err: err}
+	}
+
+	meta := &ObjectMeta{
+		Size:     resp.ContentLength,
+		Metadata: resp.Metadata,
+	}
+	if resp.ContentType != nil {
+		meta.ContentType = *resp.ContentType
+	}
+	if resp.LastModified != nil {
+		meta.LastModified = *resp.LastModified
+	}
+	if resp.ETag != nil {
+		meta.ETag = *resp.ETag
+	}
+	if meta.Metadata == nil {
+		meta.Metadata = make(map[string]string)
+	}
+
+	return meta, nil
+}
+
+// OpenDownload 打开指定对象的下载流，不在内存中缓存完整对象。
+// 底层使用 GetObject，返回的 io.ReadCloser 由调用方负责关闭。
+// - remotePath: 对象在存储桶中的路径（Key）。
+// - opts: 下载选项，nil 时表示下载完整对象；设置 Range 时只读取指定范围。
+//
+// 返回值：
+//   - io.ReadCloser: 流式读取器；读取阶段的错误会在 Read 时返回。
+//   - error: 建立下载流失败时返回错误；对象不存在时返回包装了 ErrObjectNotFound 的错误。
+//
+// 使用示例：
+//
+//	reader, err := client.OpenDownload(ctx, "releases/pkg.zip", nil)
+//	if err != nil { return err }
+//	defer reader.Close()
+//	_, _ = io.Copy(io.MultiWriter(file, hasher), reader)
+func (c *OSSClient) OpenDownload(ctx context.Context, remotePath string, opts *OpenDownloadOptions) (io.ReadCloser, error) {
+	select {
+	case <-ctx.Done():
+		return nil, &Error{Op: "OpenDownload", Err: ctx.Err()}
+	default:
+	}
+
+	req := &oss.GetObjectRequest{
+		Bucket: &c.bucket,
+		Key:    &remotePath,
+	}
+	if opts != nil && opts.Range != "" {
+		req.Range = &opts.Range
+	}
+
+	resp, err := c.client.GetObject(ctx, req)
+	if err != nil {
+		if isObjectNotFound(err) {
+			return nil, &Error{Op: "OpenDownload", Err: fmt.Errorf("%w: %s", ErrObjectNotFound, remotePath)}
+		}
+		return nil, &Error{Op: "OpenDownload", Err: err}
+	}
+	if resp.Body == nil {
+		return nil, &Error{Op: "OpenDownload", Err: errors.New("OSS 返回空响应体")}
+	}
+
+	return resp.Body, nil
+}
+
+// isObjectNotFound 判断错误是否为 OSS 返回的 404（对象不存在）。
+// 参数：
+//   - err error: HeadObject / GetObject 返回的错误
+//
+// 返回值：
+//   - bool: 对象不存在返回 true；权限不足、网络异常等其它错误返回 false
+func isObjectNotFound(err error) bool {
+	var svcErr *oss.ServiceError
+	return errors.As(err, &svcErr) && svcErr.StatusCode == http.StatusNotFound
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"strings"
@@ -37,6 +38,11 @@ func (e *Error) Unwrap() error {
 
 // ErrPresignNotSupported 表示当前存储类型不支持预签名上传。
 var ErrPresignNotSupported = errors.New("current storage type does not support presigned upload")
+
+// ErrObjectNotFound 表示远程对象不存在。
+// 上层可通过 errors.Is(err, ErrObjectNotFound) 区分「对象不存在」与「请求失败」，
+// 避免把权限不足、网络异常等错误误判为对象缺失。
+var ErrObjectNotFound = errors.New("remote object not found")
 
 // defaultPresignExpires 预签名 URL 的默认有效期。
 // PresignOptions.Expires 为零时，各存储类型统一使用该默认值。
@@ -194,6 +200,65 @@ type ObjectExister interface {
 	//   - bool: 对象存在返回 true，不存在返回 false。
 	//   - error: 探测过程中出现异常时返回错误。
 	Exists(ctx context.Context, remotePath string) (bool, error)
+}
+
+// PresignDownloadOptions 定义了生成预签名下载 URL 的可选参数。
+// 不同存储类型对字段的支持程度可能不同，不支持的字段会被忽略。
+type PresignDownloadOptions struct {
+	Expires                    time.Duration // 预签名 URL 的有效期，为零时使用存储类型的默认有效期
+	ResponseContentDisposition string        // 覆盖响应头 Content-Disposition，例如 attachment;filename=xxx.zip
+	ResponseContentType        string        // 覆盖响应头 Content-Type
+	ResponseCacheControl       string        // 覆盖响应头 Cache-Control
+}
+
+// ObjectMeta 定义了对象元信息。
+// Metadata 为自定义元数据（已去除 x-oss-meta- 等存储类型前缀），例如 sha256 对应 x-oss-meta-sha256。
+type ObjectMeta struct {
+	Size         int64             // 对象大小（字节）
+	ContentType  string            // 对象 Content-Type
+	LastModified time.Time         // 最后修改时间
+	ETag         string            // 对象 ETag
+	Metadata     map[string]string // 自定义元数据
+}
+
+// OpenDownloadOptions 定义了流式下载的可选参数。
+type OpenDownloadOptions struct {
+	Range string // HTTP Range 请求头，例如 bytes=0-1023；为空表示下载完整对象
+}
+
+// PresignDownloader 定义了支持预签名下载的存储类型需要实现的接口。
+// 注意：该接口是可选的，FTP/SFTP 等不支持预签名 URL 的存储类型无需实现。
+type PresignDownloader interface {
+	// PresignGet 生成用于下载指定对象的预签名 URL。
+	// - remotePath: 对象在存储桶中的路径（Key）。
+	// - opts: 下载选项，nil 时表示使用默认选项。
+	// 返回值：
+	//   - string: 预签名 URL。
+	//   - map[string]string: 使用该 URL 发起请求时需要携带的已签名请求头。
+	//   - error: 生成过程中出现的错误。
+	PresignGet(ctx context.Context, remotePath string, opts *PresignDownloadOptions) (string, map[string]string, error)
+}
+
+// ObjectMetaReader 定义了支持读取对象元信息的存储类型需要实现的接口。
+type ObjectMetaReader interface {
+	// HeadObjectMeta 读取指定对象的元信息，不下载对象内容。
+	// - remotePath: 对象在存储桶中的路径（Key）。
+	// 返回值：
+	//   - *ObjectMeta: 对象元信息。
+	//   - error: 对象不存在时返回包装了 ErrObjectNotFound 的错误；其它异常返回请求错误。
+	HeadObjectMeta(ctx context.Context, remotePath string) (*ObjectMeta, error)
+}
+
+// StreamDownloader 定义了支持流式下载的存储类型需要实现的接口。
+// 与 Client.Download 一次性读入内存不同，本接口返回流式读取器，适合大文件边读边算。
+type StreamDownloader interface {
+	// OpenDownload 打开指定对象的下载流。
+	// - remotePath: 对象在存储桶中的路径（Key）。
+	// - opts: 下载选项，nil 时表示下载完整对象。
+	// 返回值：
+	//   - io.ReadCloser: 调用方负责关闭；读取过程中的错误会在 Read 时返回。
+	//   - error: 建立下载流失败时返回错误；对象不存在时返回包装了 ErrObjectNotFound 的错误。
+	OpenDownload(ctx context.Context, remotePath string, opts *OpenDownloadOptions) (io.ReadCloser, error)
 }
 
 // NewClient 创建一个新的远程存储客户端。
