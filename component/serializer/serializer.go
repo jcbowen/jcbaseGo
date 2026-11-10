@@ -10,9 +10,15 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// timeType 为 time.Time 的反射类型，用于特判：time.Time 字段全部 unexported，
+// 走通用 struct→map 递归会被折叠成空对象 {}（线上表现为 expires_at:{}），
+// 必须透传原值交回 encoding/json 输出 RFC3339 字符串。
+var timeType = reflect.TypeOf(time.Time{})
 
 // defaultMaxDepth 为 Process 递归处理的默认最大深度。
 const defaultMaxDepth = 32
@@ -228,6 +234,13 @@ func processDataRecursive(data interface{}, o *Options, depth int, states map[ui
 			return nil
 		}
 		rv = rv.Elem()
+	}
+
+	// time.Time 特判：解引用后是 time.Time 的值/指针一律透传原始 data（保留指针），
+	// 由 encoding/json 按 MarshalJSON 输出 RFC3339 字符串。若不特判，
+	// time.Time 会被当普通 struct 递归，其字段全为unexported 而折叠成 {}。
+	if rv.Kind() == reflect.Struct && rv.Type() == timeType {
+		return data
 	}
 
 	// 循环引用检测：结构体处理前检查指针地址
