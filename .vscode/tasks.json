@@ -1,0 +1,64 @@
+{
+	"version": "2.0.0",
+	"inputs": [
+		{
+			"id": "releaseVersion",
+			"type": "promptString",
+			"description": "发布版本号（留空 = 终端交互选择；形如 v0.9.3 或预发布 v0.9.3-alpha/-beta/-rc）",
+			"default": "",
+			"password": false
+		}
+	],
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "发版（打 tag / 交互选择是否推送）",
+			"command": "node scripts/release.mjs ${input:releaseVersion}",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"group": "test",
+			"detail": "版本留空时终端交互选择（第一步 patch/minor/major 或手动输入，第二步 正式/alpha/beta/rc）；打 tag 前跑轻量门禁（gofmt + go build/vet/test，--skip-test 可跳过测试）；创建轻量 tag 后交互询问「推送到 origin / 仅保留本地」；工作区有未提交改动会警告（tag 指向 HEAD，不含未提交内容）；失败自动保留现场，用同一版本号重跑可复用 tag"
+		},
+		{
+			"type": "shell",
+			"label": "发版演练（--dry-run）",
+			"command": "node scripts/release.mjs ${input:releaseVersion} --dry-run",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"group": "test",
+			"detail": "门禁照跑，创建 tag 与推送只打印命令不执行；CI/管道等非交互环境未显式给版本会报错并列出候选"
+		},
+		{
+			"type": "shell",
+			"label": "只跑发版门禁（--check）",
+			"command": "node scripts/release.mjs --check",
+			"problemMatcher": [
+				"$go"
+			],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"group": "test",
+			"detail": "只跑测试门禁（gofmt/build/vet/test），不创建 tag、不推送；发版前可单独自检"
+		}
+	]
+}
