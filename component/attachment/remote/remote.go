@@ -52,7 +52,7 @@ const defaultPresignExpires = 10 * time.Minute
 // 不同存储类型对字段的支持程度可能不同，不支持的字段会被忽略。
 type PresignOptions struct {
 	Expires     time.Duration     // 预签名 URL 的有效期，为零时使用存储类型的默认有效期
-	ContentType string            // 上传文件的 Content-Type，为空时不参与签名
+	ContentType string            // 上传文件的 Content-Type，为空时不参与签名（见 PresignUpload 的签名契约说明）
 	Metadata    map[string]string // 自定义元数据，为空时不参与签名
 }
 

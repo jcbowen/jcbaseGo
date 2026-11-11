@@ -234,13 +234,32 @@ func (c *OSSClient) Exists(ctx context.Context, remotePath string) (bool, error)
 	return false, &Error{Op: "Exists", Err: err}
 }
 
-// PresignUpload 生成用于上传指定对象的预签名 URL。
+// PresignUpload 生成用于上传指定对象的预签名 URL（OSS 为 V4 签名 OSS4-HMAC-SHA256）。
 // - remotePath: 对象在存储桶中的路径（Key）。
 // - opts: 预签名选项，nil 时表示使用默认选项（仅签名 bucket 与 key，默认有效期 10 分钟）。
 // 返回值：
 //   - string: 预签名 URL。
 //   - map[string]string: 需要在上传请求中携带的已签名请求头。
 //   - error: 生成过程中出现的错误。
+//
+// 签名契约（浏览器直传必读）：
+//
+//  1. 客户端发起 PUT 时必须原样携带返回的 SignedHeaders（键名与值都不能改），
+//     且不得额外出现任何被签名的头。被签名的头缺失或值不一致，OSS 会返回 403
+//     SignatureDoesNotMatch；未被签名的头（如 Accept、Origin）不影响校验。
+//
+//  2. opts.ContentType 为空时 Content-Type 不参与签名，此时若客户端是浏览器 fetch
+//     且 body 为带 type 的 Blob/File，浏览器会自动补发一个未签名的 Content-Type 头，
+//     同样触发 403 SignatureDoesNotMatch。规避方式二选一：
+//     - 签发时显式传入 ContentType 并将返回的 SignedHeaders 交由前端原样携带
+//     （fetch/XHR 显式设置该头后浏览器不再自动补）；
+//     - 或保证上传 body 为无 type 的 Blob（浏览器不自动补头）。
+//
+// 使用示例：
+//
+//	url, headers, err := client.PresignUpload(ctx, "images/2026/08/xxx.png",
+//		&PresignOptions{Expires: 10 * time.Minute, ContentType: "image/jpeg"})
+//	// 前端：fetch(url, { method: "PUT", headers, body: file }) —— headers 原样透传
 func (c *OSSClient) PresignUpload(ctx context.Context, remotePath string, opts *PresignOptions) (string, map[string]string, error) {
 	select {
 	case <-ctx.Done():
@@ -288,6 +307,9 @@ func (c *OSSClient) PresignUpload(ctx context.Context, remotePath string, opts *
 //   - string: 预签名 URL。
 //   - map[string]string: 使用该 URL 发起请求时需要携带的已签名请求头。
 //   - error: 生成过程中出现的错误。
+//
+// 签名契约（与 PresignUpload 相同）：请求必须原样携带返回的 SignedHeaders，
+// 被签名的头缺失或值不一致时服务端返回 403 SignatureDoesNotMatch。
 //
 // 使用示例：
 //
