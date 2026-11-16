@@ -3,6 +3,10 @@ package php
 var TmpJcbasePHP = `#!/usr/bin/env php
 <?php
 
+// @jcbasePHP-template v2
+// 前置代码（类别名、容错函数等，由 ConfigStruct.WithPrelude/WithClassAliases 配置）
+@include_once __DIR__ . '/prelude.php';
+
 (new Console)->run();
 
 class Console

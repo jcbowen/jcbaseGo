@@ -7,7 +7,8 @@
 PHP 组件以「生成引导脚本 + CLI 调用」的方式打通 Go 与 PHP：
 
 - **零侵入调用**：Go 侧只需 `New` + `RunFunc` 两行，即可调用任意 PHP 函数（内置函数或自定义函数）
-- **自动生成引导脚本**：首次 `New` 时按内置模板生成 `tmp/php/main.php`，已存在则不覆盖，可自行定制
+- **自动生成引导脚本**：首次 `New` 时按内置模板生成 `tmp/php/main.php`；旧版模板生成的脚本在库升级后自动重写为新模板（含 `class Console` 入口签名的文件视为库生成物，用户自定义文件不含该签名则永不覆盖）
+- **前置代码注入**：`WithPrelude` / `WithClassAliases` 在主脚本执行前加载前置 PHP 代码，可为 CLI 环境垫类、注册容错解析函数
 - **参数自动转换**：字符串参数中的 `true/false` 转 bool、数字转 int、`{...}` 转 JSON 数组，无需手动构造
 - **结果回传**：PHP 函数返回数组时自动 `json_encode`（不转义 Unicode）后经 stdout 回传
 - **混合输出**：stdout 与 stderr 合并返回，错误信息不丢失
@@ -140,6 +141,43 @@ php.TmpJcbasePHP = myCustomTemplate
 phpComponent := php.New(jcbaseGo.Option{})
 ```
 
+### 前置代码注入（垫类 / 容错函数）
+
+解析跨项目序列化数据时，数据里可能内嵌 CLI 环境不存在的类（如 Yii2 项目的 `common\components\Request`），
+`unserialize` 会产出 `__PHP_Incomplete_Class` 导致信息丢失。通过前置代码垫类即可无损还原：
+
+```go
+phpComponent := php.New(jcbaseGo.Option{}).
+    WithPrelude(`if (!class_exists('common\components\Request', false)) {
+    eval('namespace common\components; class Request extends \ArrayObject {}');
+}
+function jc_unserialize_tolerant($str) {
+    $v = @unserialize((string)$str);
+    if ($v instanceof ArrayObject) {
+        $v = $v->getArrayCopy();
+    } elseif (is_object($v)) {
+        $v = get_object_vars($v);
+    }
+    return $v;
+}`)
+
+// 调用前置代码中定义的容错函数
+result, err := phpComponent.RunFunc("jc_unserialize_tolerant", serializedStr)
+```
+
+源类是用户自定义类（非内部类）时，可用更简洁的 `WithClassAliases`：
+
+```go
+phpComponent := php.New(jcbaseGo.Option{}).
+    WithClassAliases(map[string]string{"app\\models\\User": "app\\models\\BaseUser"})
+```
+
+注意：
+
+- `class_alias` 的源类不能是内部类（如 `ArrayObject`），此类场景用 `WithPrelude` + `eval` 定义 stub 类
+- 前置代码落盘为引导脚本同目录的 `prelude.php`，由主脚本 `@include_once` 加载；同一运行时目录只支持一份前置代码（后配置覆盖先配置）
+- 前置代码不应定义名为 `Console` 的类（与主脚本冲突）
+
 ### 错误处理
 
 ```go
@@ -201,6 +239,8 @@ RunFunc("strtoupper", "hello")
 ### 实例方法
 
 - `RunFunc(funcName string, args ...string) (string, error)` - 调用 PHP 函数，返回合并输出（stdout+stderr）
+- `WithPrelude(code string) *ConfigStruct` - 附加前置 PHP 代码（不含 `<?php` 标签），支持链式调用
+- `WithClassAliases(aliases map[string]string) *ConfigStruct` - 注册类别名（源类须为用户自定义类），支持链式调用
 
 ### 导出变量
 
@@ -218,7 +258,11 @@ RunFunc("strtoupper", "hello")
 
 ### 修改了 main.php 但不生效？
 
-引导脚本只在**不存在时**生成，已存在则跳过。直接编辑已生成的文件即可；如需重新生成，先删除旧文件或在 `New` 前替换 `php.TmpJcbasePHP`。
+旧版模板生成的脚本（含 `class Console` 入口签名）会在库升级后**自动重写**为新模板；请勿把业务代码直接写进 `main.php`，应放前置代码（`WithPrelude`）或独立函数文件后 `require`。自定义内容不含入口签名时不会被覆盖。
+
+### 库升级后 main.php 还是旧模板？
+
+无需手动清理：`New` 时检测到「含入口签名但内容与当前模板不一致」会自动重写（v0.18.4+ 行为）。更早版本生成的脚本同样会被升级，因为旧模板也含入口签名。
 
 ### PHP warning 混在输出里怎么办？
 
