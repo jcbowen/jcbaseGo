@@ -7,7 +7,7 @@
 //         生成候选，方向键菜单两步选择，也可手动输入完整版本号；
 //   [2/3] 轻量门禁：gofmt -l . + go build/vet/test ./...（--skip-test 只跳过 test）；
 //   [3/3] 打 tag：创建轻量 tag（失败/已存在冲突在前置校验拦截），随后交互询问
-//         「推送到 origin / 仅保留本地」。
+//         「推送到 origin / 仅保留本地」，默认选中推送（Esc/q 取消 = 仅保留本地）。
 //
 // 用法：
 //   node scripts/release.mjs                    # 全交互（版本号留空时菜单选择）
@@ -706,7 +706,7 @@ async function maybePush(version) {
   const idx = await selectMenu(`是否推送 ${version} 到 origin？`, [
     `推送到 origin（git push origin ${version}）`,
     '仅保留本地（稍后可手动 git push origin ' + version + '）',
-  ], { initial: 1, hint: '↑/↓ 移动，Enter 确认，Esc/q 取消（取消 = 仅保留本地）' });
+  ], { initial: 0, hint: '↑/↓ 移动，Enter 确认，Esc/q 取消（取消 = 仅保留本地）' });
   if (idx !== 0) {
     console.log(`已保留本地 tag ${version}，未推送`);
     return;
