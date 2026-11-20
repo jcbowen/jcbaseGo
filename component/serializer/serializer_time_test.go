@@ -17,8 +17,10 @@ type timeSerializeFixture struct {
 
 // TestProcessTimePtrKeepsRFC3339 回归：非 nil *time.Time 必须输出 RFC3339 字符串，
 // 而不是被反射递归折叠成 {}（2026-11-10 线上 expires_at:{} 根因）。
+// 使用固定 +08:00 时区而非 time.Local，保证在任意时区（如 CI 的 UTC）下结果确定。
 func TestProcessTimePtrKeepsRFC3339(t *testing.T) {
-	at := time.Date(2026, 11, 10, 12, 30, 0, 0, time.Local)
+	cst := time.FixedZone("CST", 8*3600)
+	at := time.Date(2026, 11, 10, 12, 30, 0, 0, cst)
 	in := timeSerializeFixture{ExpiresAt: &at, UpdatedAt: at, DaysLeft: 30}
 
 	out, err := json.Marshal(Process(in))
