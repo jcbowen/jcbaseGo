@@ -1,7 +1,7 @@
 // Package serializer 提供响应数据的递归序列化能力。
 //
 // 支持将结构体、切片、map、指针等嵌套数据转换为统一的 map/slice 结构，
-// 并在此过程中按需格式化时间字段、加密 uint64 类型的 ID 字段。
+// 并在此过程中按需格式化时间字段、加密整型 ID 字段（uint64 / int32 等，含命名类型）。
 // 通过最大深度限制与循环引用检测，避免自引用结构体或极深嵌套导致栈溢出。
 package serializer
 
@@ -25,7 +25,9 @@ const defaultMaxDepth = 32
 
 // Options 序列化处理可配置项。所有回调均为可选注入，业务策略由调用方提供。
 type Options struct {
-	// EncryptID 可选：对 uint64 ID 字段加密（如 iMe 注入 utils.EncryptID）
+	// EncryptID 可选：对整型 ID 字段加密（如 iMe 注入 utils.EncryptID）。
+	// 内部将各类整型值（uint64 / int32 等，含命名类型）统一转为 uint64 后调用，
+	// 业务侧无需感知字段的具体整型宽度。
 	EncryptID func(uint64) string
 	// IsIDField 可选：判断某字段是否需加密（默认空，即不加密）
 	IsIDField func(string) bool
@@ -104,7 +106,8 @@ const (
 	visited
 )
 
-// Process 递归处理数据：统一格式化时间字段，并按需加密 uint64 类型的 ID 字段。
+// Process 递归处理数据：统一格式化时间字段，并按需加密整型 ID 字段
+// （uint64 / int32 / int64 等整型，含命名类型；有符号数仅加密非负值）。
 // 支持 map、slice、struct、指针、嵌套结构。
 //
 // 通过最大深度限制与循环引用检测，避免自引用结构体或极深嵌套导致栈溢出。
@@ -281,6 +284,33 @@ func processDataRecursive(data interface{}, o *Options, depth int, states map[ui
 	return data
 }
 
+// integerIDValue 判断 val 是否为可加密的整型 ID 值（含命名类型与指针类型）：
+// 无符号整型（uint / uint8 / uint16 / uint32 / uint64）恒可加密；
+// 有符号整型（int / int8 / int16 / int32 / int64）仅非负值可加密。
+//
+// 返回值:
+//   - uint64: 可加密时返回值的 uint64 表示
+//   - bool: 是否可加密
+func integerIDValue(val interface{}) (uint64, bool) {
+	rv := reflect.ValueOf(val)
+	// 解引用指针（含多级指针），使 *int64 / *testSignedID 等指针形式的 ID 值也能被识别。
+	for rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return 0, false
+		}
+		rv = rv.Elem()
+	}
+	switch rv.Kind() {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return rv.Uint(), true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if n := rv.Int(); n >= 0 {
+			return uint64(n), true
+		}
+	}
+	return 0, false
+}
+
 // structToMapRecursive 将结构体按 json tag 转换为 map，并递归处理字段。
 //
 // 参数:
@@ -414,10 +444,12 @@ func processValueRecursive(key string, val interface{}, o *Options, depth int, s
 	case map[string]interface{}:
 		return processDataRecursive(v, o, depth, states)
 	default:
-		// 对 reflect.Kind 为 uint64 的命名类型（如 utils.EncryptedID）做兜底
-		if reflect.TypeOf(val) != nil && reflect.TypeOf(val).Kind() == reflect.Uint64 {
-			if o.EncryptID != nil && o.IsIDField != nil && o.IsIDField(key) {
-				return o.EncryptID(reflect.ValueOf(val).Uint())
+		// 整型兜底：uint64 命名类型（如 utils.EncryptedID）与有符号整型
+		//（int / int32 / int64，含命名类型，业务侧 int32 主键）均走 EncryptID。
+		// 负数不属于合法 ID，保持原值输出不加密。
+		if o.EncryptID != nil && o.IsIDField != nil && o.IsIDField(key) {
+			if id, ok := integerIDValue(val); ok {
+				return o.EncryptID(id)
 			}
 		}
 

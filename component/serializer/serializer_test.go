@@ -68,6 +68,83 @@ func TestProcessIDEncryption(t *testing.T) {
 	}
 }
 
+// testSignedID 有符号整型命名类型（模拟业务侧 int32 主键）。
+type testSignedID int32
+
+// testNamedUint64 无符号整型命名类型（模拟 iMe utils.EncryptedID）。
+type testNamedUint64 uint64
+
+// testSignedStruct 有符号整型字段的结构体。
+type testSignedStruct struct {
+	ID   testSignedID  `json:"id"`
+	Big  int64         `json:"big"`
+	Raw  int32         `json:"raw"`
+	Ptr  *testSignedID `json:"ptr"`
+	Bad  int32         `json:"bad"`  // 负数不加密
+	Keep int32         `json:"keep"` // 非 ID 字段不加密
+}
+
+func TestProcessIDEncryptionSignedIntegers(t *testing.T) {
+	encrypt := func(v uint64) string { return "E" }
+	isID := func(k string) bool { return k == "id" || k == "big" || k == "raw" || k == "named" || k == "ptr" }
+
+	// map：内置 int32 / int64 / 命名 uint64 / 负数
+	result := Process(map[string]interface{}{
+		"id":    int32(7),
+		"big":   int64(1 << 40),
+		"named": testNamedUint64(9),
+		"neg":   int32(-3),
+		"other": int32(7),
+	}, WithEncryptID(encrypt), WithIDField(isID))
+
+	data, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+	if data["id"] != "E" {
+		t.Errorf("id(int32) = %v, want E", data["id"])
+	}
+	if data["big"] != "E" {
+		t.Errorf("big(int64) = %v, want E", data["big"])
+	}
+	if data["named"] != "E" {
+		t.Errorf("named(uint64) = %v, want E", data["named"])
+	}
+	if data["neg"] != int32(-3) {
+		t.Errorf("neg = %v, want -3（负数不加密）", data["neg"])
+	}
+	if data["other"] != int32(7) {
+		t.Errorf("other = %v, want 7（非 ID 字段不加密）", data["other"])
+	}
+
+	// 结构体：命名 int32 字段、指针字段、嵌套值
+	neg := testSignedID(-1)
+	s := testSignedStruct{ID: 5, Big: 1, Raw: 6, Ptr: &neg, Bad: -2, Keep: 8}
+	sr := Process(s, WithEncryptID(encrypt), WithIDField(isID))
+	m, ok := sr.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", sr)
+	}
+	if m["id"] != "E" {
+		t.Errorf("struct id = %v, want E", m["id"])
+	}
+	if m["big"] != "E" || m["raw"] != "E" {
+		t.Errorf("big = %v, raw = %v, want E", m["big"], m["raw"])
+	}
+	if m["ptr"] == nil {
+		t.Fatalf("ptr should not be nil")
+	}
+	if got := *(m["ptr"].(*testSignedID)); got != testSignedID(-1) {
+		t.Errorf("ptr = %v, want -1（负数不加密，指针透传）", got)
+	}
+	if m["bad"] != int32(-2) {
+		t.Errorf("bad = %v, want -2", m["bad"])
+	}
+	if m["keep"] != int32(8) {
+		t.Errorf("keep = %v, want 8", m["keep"])
+	}
+}
+
 func TestProcessStructNestedAndSlice(t *testing.T) {
 	encrypt := func(v uint64) string { return "E" }
 	isID := func(k string) bool { return k == "id" }

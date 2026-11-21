@@ -44,6 +44,10 @@ func NewContext(opt *NewContextOpt) *Context {
 		ActionName: opt.ActionName,
 		Debug:      opt.Debug,
 		GinContext: opt.GinContext,
+		// SerializerOpts 必须显式透传：调用方（如商家后台 newCtx）注入的
+		// ID 加密 / 时间格式化策略全靠它生效。此前构造器遗漏该字段，
+		// 导致 SerializerOpts 恒为空、Result 永远走 LegacyMode（历史缺陷）。
+		SerializerOpts: opt.SerializerOpts,
 	}
 	return ctx
 }

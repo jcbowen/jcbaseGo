@@ -73,3 +73,35 @@ func TestResultWithSerializerOptsUsesNewMode(t *testing.T) {
 		t.Errorf("value = %v, want hello", data["value"])
 	}
 }
+
+// TestNewContextWiresSerializerOpts 锁定 NewContext 必须透传 SerializerOpts。
+//
+// 历史缺陷：构造器仅复制 ActionName/Debug/GinContext，调用方注入的
+// ID 加密 / 时间格式化策略被丢弃，Result 永远走 LegacyMode。
+// 本用例通过 NewContextOpt（即 Context 别名）注入 opts，断言新序列化路径生效。
+func TestNewContextWiresSerializerOpts(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	ctx := NewContext(&NewContextOpt{
+		GinContext:     c,
+		SerializerOpts: []serializer.Option{serializer.WithLegacyMode(false)},
+	})
+	if len(ctx.SerializerOpts) == 0 {
+		t.Fatal("NewContext 丢弃了 SerializerOpts——ID 加密/时间格式化将全部失效")
+	}
+
+	ctx.Result(200, "ok", legacyCustomData{Value: "hello"})
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	data := body["data"].(map[string]interface{})
+	// 新序列化器不调用 MarshalJSON；若 opts 被丢弃则走 legacy 输出 legacy:hello
+	if data["value"] != "hello" {
+		t.Errorf("value = %v, want hello（SerializerOpts 未透传，仍走 legacy）", data["value"])
+	}
+}
