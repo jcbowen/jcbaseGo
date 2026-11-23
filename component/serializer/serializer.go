@@ -313,6 +313,10 @@ func integerIDValue(val interface{}) (uint64, bool) {
 
 // structToMapRecursive 将结构体按 json tag 转换为 map，并递归处理字段。
 //
+// 匿名嵌入 struct 的字段会被扁平化提升到外层（对齐 encoding/json 语义）：
+// 外层直接声明的同名字段优先（浅层覆盖深层）；SkipField 命中的嵌入与
+// json:"-" 嵌入整体跳过；nil 指针嵌入不输出键。
+//
 // 参数:
 //   - v: 结构体 reflect.Value
 //   - o: 处理选项
@@ -328,8 +332,14 @@ func structToMapRecursive(v reflect.Value, o *Options, depth int, states map[uin
 	for i := 0; i < rt.NumField(); i++ {
 		field := rt.Field(i)
 
-		// 跳过未导出字段
-		if !field.IsExported() {
+		// 未导出字段跳过；匿名嵌入豁免（类型名小写时 IsExported()==false，
+		// 但其导出字段仍按 encoding/json 的字段提升语义展开）。
+		if !field.IsExported() && !field.Anonymous {
+			continue
+		}
+		// 非 struct 的 unexported 匿名嵌入（如小写命名整型）：值不可读，
+		// 标准 json 也不输出，整体跳过。
+		if field.Anonymous && !field.IsExported() && field.Type.Kind() != reflect.Struct {
 			continue
 		}
 
@@ -344,6 +354,21 @@ func structToMapRecursive(v reflect.Value, o *Options, depth int, states map[uin
 		}
 
 		fv := v.Field(i)
+
+		// 匿名嵌入 struct：扁平化展开（对齐 encoding/json 的字段提升语义），
+		// 内层字段并入当前 map，外层已有同名 key 时保留外层（浅层优先）。
+		// 不满足展开条件时（嵌入基础类型等）回落到普通字段处理。
+		if field.Anonymous {
+			if inner, handled := flattenAnonymous(fv, o, depth, states); handled {
+				for k, val := range inner {
+					if _, exists := result[k]; !exists {
+						result[k] = val
+					}
+				}
+				continue
+			}
+		}
+
 		// nil 指针直接置为 nil 以便 JSON 输出 null；否则保留指针原始值，
 		// 使递归过程中循环引用检测能命中同一内存地址。
 		if fv.Kind() == reflect.Ptr && fv.IsNil() {
@@ -354,6 +379,37 @@ func structToMapRecursive(v reflect.Value, o *Options, depth int, states map[uin
 	}
 
 	return result
+}
+
+// flattenAnonymous 处理匿名嵌入字段的扁平化展开。
+//
+// 与 encoding/json 的字段提升语义对齐：匿名嵌入结构体的字段直接并入外层输出，
+// 而不是以类型名为 key 输出嵌套对象；多级匿名嵌入由 structToMapRecursive 递归展开。
+// time.Time 特判不展开（其字段全为 unexported，展开只会得到空对象，
+// 透传原值交回 encoding/json 按 MarshalJSON 输出）。
+//
+// 参数:
+//   - fv: 匿名嵌入字段的 reflect.Value（可能是值或指针）
+//   - o: 处理选项
+//   - depth: 当前递归深度
+//   - states: 结构体指针的 DFS 访问状态
+//
+// 返回值:
+//   - map[string]interface{}: 展开后的字段 map（handled=true 时有效）
+//   - bool: 是否已按扁平化语义处理（嵌入 struct 展开 → true；nil 指针嵌入 → true 且 map 为 nil，整体跳过）
+func flattenAnonymous(fv reflect.Value, o *Options, depth int, states map[uintptr]visitState) (map[string]interface{}, bool) {
+	v := fv
+	for v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			// nil 指针嵌入无可展开内容，整体跳过（对齐 encoding/json：输出中不出现该键）
+			return nil, true
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct || v.Type() == timeType {
+		return nil, false
+	}
+	return structToMapRecursive(v, o, depth+1, states), true
 }
 
 // jsonFieldName 从结构体字段的 json tag 中提取字段名。

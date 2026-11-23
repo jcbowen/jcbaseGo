@@ -443,7 +443,7 @@ func TestProcessLegacyModeIgnoresOptions(t *testing.T) {
 	}
 }
 
-// TestProcessMapCycle 验证 map 循环引用在默认 MaxDepth 下不会栈溢出。
+// TestProcessMaxDepth 验证超出 MaxDepth 的层级返回原始数据而不是 nil。
 func TestProcessMaxDepth(t *testing.T) {
 	root := &deepNode{}
 	cur := root
@@ -472,5 +472,203 @@ func TestProcessMaxDepth(t *testing.T) {
 	}
 	if _, ok := child2["child"].(*deepNode); !ok {
 		t.Errorf("expected child beyond max depth to be *deepNode, got %T", child2["child"])
+	}
+}
+
+// ---------- 匿名嵌入 struct 扁平化（对齐 encoding/json 字段提升语义） ----------
+
+// testEmbeddedGoods 模拟业务侧匿名嵌入的商品行（如 merchant 项目 model.MirrorGoods）。
+type testEmbeddedGoods struct {
+	Title string  `json:"title"`
+	Price float64 `json:"price"`
+	Stock int32   `json:"stock"`
+}
+
+// testEmbedOuter 顶层视图：匿名嵌入业务结构 + 直接声明字段（模拟 GoodsAuditListItem）。
+type testEmbedOuter struct {
+	testEmbeddedGoods
+
+	MerchantName string `json:"merchant_name"`
+	AuditStatus  int8   `json:"audit_status"`
+}
+
+// TestProcessAnonymousEmbeddedFlatten 验证匿名嵌入 struct 被扁平化展开，
+// 不再以类型名为 key 输出嵌套对象。
+func TestProcessAnonymousEmbeddedFlatten(t *testing.T) {
+	data := testEmbedOuter{
+		testEmbeddedGoods: testEmbeddedGoods{Title: "古树白茶", Price: 198, Stock: 200},
+		MerchantName:      "平台自营店",
+		AuditStatus:       1,
+	}
+
+	result := Process(data)
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+
+	if _, exists := m["testEmbedOuter"]; exists {
+		t.Error("outer type name key should not appear")
+	}
+	if _, exists := m["testEmbeddedGoods"]; exists {
+		t.Error("embedded type name key should not appear (flattened)")
+	}
+	if m["title"] != "古树白茶" {
+		t.Errorf("title = %v, want 古树白茶", m["title"])
+	}
+	if m["price"] != float64(198) {
+		t.Errorf("price = %v, want 198", m["price"])
+	}
+	if m["stock"] != int32(200) {
+		t.Errorf("stock = %v, want 200", m["stock"])
+	}
+	if m["merchant_name"] != "平台自营店" {
+		t.Errorf("merchant_name = %v, want 平台自营店", m["merchant_name"])
+	}
+	if m["audit_status"] != int8(1) {
+		t.Errorf("audit_status = %v, want 1", m["audit_status"])
+	}
+}
+
+// testEmbedConflict 外层直接声明字段与嵌入字段同名（浅层优先语义）。
+type testEmbedConflict struct {
+	testEmbeddedGoods
+	Title string `json:"title"`
+}
+
+// TestProcessAnonymousEmbeddedConflictOuterWins 验证同名字段冲突时外层优先，
+// 与 encoding/json 浅层覆盖深层的行为一致。
+func TestProcessAnonymousEmbeddedConflictOuterWins(t *testing.T) {
+	data := testEmbedConflict{
+		testEmbeddedGoods: testEmbeddedGoods{Title: "from-embedded", Price: 1},
+		Title:             "from-outer",
+	}
+
+	result := Process(data)
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+	if m["title"] != "from-outer" {
+		t.Errorf("title = %v, want from-outer（外层浅层优先）", m["title"])
+	}
+	if m["price"] != float64(1) {
+		t.Errorf("price = %v, want 1（嵌入内非冲突字段正常提升）", m["price"])
+	}
+}
+
+// testEmbedNilPtr nil 指针匿名嵌入：无可展开内容，输出中不应出现任何相关键。
+type testEmbedNilPtr struct {
+	*testEmbeddedGoods
+	Keep string `json:"keep"`
+}
+
+// TestProcessAnonymousEmbeddedNilPointer 验证 nil 指针嵌入整体跳过（对齐 encoding/json）。
+func TestProcessAnonymousEmbeddedNilPointer(t *testing.T) {
+	result := Process(testEmbedNilPtr{Keep: "shown"})
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+	if _, exists := m["testEmbeddedGoods"]; exists {
+		t.Error("nil pointer embedded type name key should not appear")
+	}
+	if _, exists := m["title"]; exists {
+		t.Error("title should not appear for nil pointer embedded struct")
+	}
+	if m["keep"] != "shown" {
+		t.Errorf("keep = %v, want shown", m["keep"])
+	}
+}
+
+// testEmbedDash 带 json:"-" 的匿名嵌入：整体跳过。
+type testEmbedDash struct {
+	testEmbeddedGoods `json:"-"`
+	Keep              string `json:"keep"`
+}
+
+// TestProcessAnonymousEmbeddedDashTag 验证 json:"-" 嵌入不展开也不输出。
+func TestProcessAnonymousEmbeddedDashTag(t *testing.T) {
+	result := Process(testEmbedDash{
+		testEmbeddedGoods: testEmbeddedGoods{Title: "hidden"},
+		Keep:              "shown",
+	})
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+	if _, exists := m["title"]; exists {
+		t.Error("title should not appear for dash-tagged embedded struct")
+	}
+	if _, exists := m["testEmbeddedGoods"]; exists {
+		t.Error("embedded type name key should not appear")
+	}
+	if m["keep"] != "shown" {
+		t.Errorf("keep = %v, want shown", m["keep"])
+	}
+}
+
+// testEmbedL1/L2/L3 多级匿名嵌入链。
+type testEmbedL1 struct {
+	Deep string `json:"deep"`
+}
+
+type testEmbedL2 struct {
+	testEmbedL1
+}
+
+type testEmbedL3 struct {
+	testEmbedL2
+	Keep string `json:"keep"`
+}
+
+// TestProcessAnonymousEmbeddedMultiLevel 验证多级匿名嵌入全部递归扁平化。
+func TestProcessAnonymousEmbeddedMultiLevel(t *testing.T) {
+	result := Process(testEmbedL3{
+		testEmbedL2: testEmbedL2{testEmbedL1{Deep: "v"}},
+		Keep:        "k",
+	})
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+	for _, name := range []string{"testEmbedL1", "testEmbedL2"} {
+		if _, exists := m[name]; exists {
+			t.Errorf("nested embedded type name key %q should not appear", name)
+		}
+	}
+	if m["deep"] != "v" || m["keep"] != "k" {
+		t.Errorf("deep = %v, keep = %v, want v/k", m["deep"], m["keep"])
+	}
+}
+
+// testEmbedSliceElement 顶层切片中的匿名嵌入行。
+type testEmbedSliceRow struct {
+	testEmbeddedGoods
+	Flag string `json:"flag"`
+}
+
+// TestProcessAnonymousEmbeddedInSlice 验证切片元素的匿名嵌入同样被扁平化。
+func TestProcessAnonymousEmbeddedInSlice(t *testing.T) {
+	result := Process([]testEmbedSliceRow{
+		{testEmbeddedGoods: testEmbeddedGoods{Title: "a"}, Flag: "f1"},
+		{testEmbeddedGoods: testEmbeddedGoods{Title: "b"}, Flag: "f2"},
+	})
+	items, ok := result.([]interface{})
+	if !ok {
+		t.Fatalf("expected []interface{}, got %T", result)
+	}
+	if len(items) != 2 {
+		t.Fatalf("items len = %d, want 2", len(items))
+	}
+	first, ok := items[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("items[0] should be map, got %T", items[0])
+	}
+	if _, exists := first["testEmbeddedGoods"]; exists {
+		t.Error("embedded type name key should not appear in slice element")
+	}
+	if first["title"] != "a" || first["flag"] != "f1" {
+		t.Errorf("items[0] = %v, want title=a flag=f1", first)
 	}
 }
