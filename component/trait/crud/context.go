@@ -154,7 +154,7 @@ func (ctx *Context) Result(code int, msg string, args ...any) {
 	// 虽然定义的是any，但是约定只能为map/string/[]any
 	var resultData any
 
-	if len(args) > 0 && !helper.IsEmptyValue(args[0]) {
+	if len(args) > 0 && !isEmptyForResponse(args[0]) {
 		// 为兼容旧项目，未显式配置 SerializerOpts 时默认使用旧版 json 序列化路径。
 		// 只有显式设置 SerializerOpts 后，才会启用新的递归序列化、时间格式化、ID 加密等功能。
 		opts := ctx.SerializerOpts
@@ -233,6 +233,37 @@ func (ctx *Context) Result(code int, msg string, args ...any) {
 	}
 
 	ctx.GinContext.JSON(http.StatusOK, result)
+}
+
+// isEmptyForResponse 判断响应数据是否为「调用方未提供数据」。
+// 语义：只有 nil（含值为 nil 的指针/interface）视为未提供，其余一律视为有值。
+// 与 helper.IsEmptyValue 的区别：零值 struct、0、false、""、空 map/slice
+// 都是调用方显式传入的数据，应如实序列化输出以保留字段形状与类型契约，
+// 不再被吞成 data:{}。典型场景：detail 查到一条字段全为零值的记录时，
+// 旧逻辑输出 data:{}，前端拿不到结构体形状；false/0 等合法业务值同理。
+// 参数：
+//   - v any: 待判断的响应数据
+//
+// 返回值：
+//   - bool: true 表示未提供数据（data 输出 {}），false 表示有值（走序列化）
+//
+// 使用示例：
+//
+//	isEmptyForResponse(nil)              // true
+//	isEmptyForResponse((*User)(nil))     // true
+//	isEmptyForResponse(User{})           // false（零值 struct 放行）
+//	isEmptyForResponse(false)            // false（标量放行）
+func isEmptyForResponse(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		return rv.IsNil()
+	default:
+		return false
+	}
 }
 
 // GetSafeMapGPC 安全获取map类型GPC数据

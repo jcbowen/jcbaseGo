@@ -390,6 +390,18 @@ func (i *Index) SaveBefore(ctx *crud.Context, modelValue interface{}, mapData ma
   - `field`: 字段名
   - `value`: 字段值
 
+### 响应输出判空语义
+
+`Context.Result`（以及基于它的 `Success`/`Failure`）对 `data` 的判空规则：
+
+- **只有 nil（含值为 nil 的指针）视为「未提供数据」**，此时 `data` 输出 `{}`。
+- 显式传入的零值数据一律如实序列化输出，不再被吞成 `{}`：
+  - 全零 struct（如 detail 查到字段全为零值的记录）→ 输出完整字段形状 `{"id":0,"name":"",...}`
+  - `false`、`0`、`""` 等标量 → 输出原值
+  - 空 map / 空 slice → 输出 `{}` / `[]`
+
+注意：`Success`/`Failure` 的可变参数中 `int` 类型始终被识别为状态码，标量数据请使用其他类型（如 `int64`）传递。
+
 ### 钩子方法详细说明
 
 #### 创建操作钩子
