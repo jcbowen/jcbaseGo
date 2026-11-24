@@ -87,8 +87,8 @@ func TestResultZeroValueDataPreserved(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		data    any
+		name     string
+		data     any
 		wantData any // 期望的 data 字段值（JSON 反序列化后）
 	}{
 		{"全零struct保留字段形状", zeroRecord{}, map[string]interface{}{"id": float64(0), "name": ""}},
