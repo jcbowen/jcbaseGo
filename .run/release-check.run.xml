@@ -1,0 +1,5 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="只跑发版门禁（--check）" type="NodeJSConfigurationType" application-parameters="--check" path-to-js-file="scripts/release.mjs" working-dir="$PROJECT_DIR$">
+    <method v="2" />
+  </configuration>
+</component>

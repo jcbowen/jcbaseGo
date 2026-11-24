@@ -59,6 +59,36 @@
 			},
 			"group": "test",
 			"detail": "只跑测试门禁（gofmt/build/vet/test），不创建 tag、不推送；发版前可单独自检"
+		},
+		{
+			"type": "shell",
+			"label": "格式化: Go 代码（自动修复）",
+			"command": "node scripts/fmt.mjs",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"detail": "gofmt -w 根目录下的 component errcode example middleware（跨平台唯一入口，对齐 market/scripts/fmt.mjs；可传目录/文件参数缩小范围）"
+		},
+		{
+			"type": "shell",
+			"label": "格式化: Go 代码（只检查）",
+			"command": "node scripts/fmt.mjs --check",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true
+			},
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"detail": "CI 同款 gofmt 闸门：列出未格式化文件与 diff，未通过退出码 1"
 		}
 	]
 }

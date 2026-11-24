@@ -1,0 +1,5 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="格式化: Go 代码（自动修复）" type="NodeJSConfigurationType" path-to-js-file="scripts/fmt.mjs" working-dir="$PROJECT_DIR$">
+    <method v="2" />
+  </configuration>
+</component>

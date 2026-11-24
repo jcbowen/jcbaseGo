@@ -1,0 +1,5 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="发版（打 tag / 交互选择是否推送）" type="NodeJSConfigurationType" path-to-js-file="scripts/release.mjs" working-dir="$PROJECT_DIR$">
+    <method v="2" />
+  </configuration>
+</component>
