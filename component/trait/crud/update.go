@@ -105,6 +105,9 @@ func (t *Trait) ActionUpdate(c *gin.Context) {
 	if err != nil {
 		if err.Error() == "数据不存在或已被删除" {
 			ctx.Result(errcode.NotExist, err.Error())
+		} else if IsDuplicateEntryError(err) {
+			// 唯一索引冲突（并发窗口兜底）：转译为友好文案，避免透出原始 DB 报错
+			ctx.Result(errcode.DatabaseError, "更新失败：数据已存在（唯一字段与已有记录冲突）")
 		} else {
 			ctx.Result(errcode.DatabaseError, "更新失败："+err.Error())
 		}

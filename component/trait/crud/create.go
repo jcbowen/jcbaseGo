@@ -62,6 +62,11 @@ func (t *Trait) ActionCreate(c *gin.Context) {
 
 	// 处理事务结果
 	if err != nil {
+		// 唯一索引冲突（并发窗口兜底）：转译为友好文案，避免透出原始 DB 报错
+		if IsDuplicateEntryError(err) {
+			ctx.Result(errcode.DatabaseError, "创建失败：数据已存在（唯一字段与已有记录冲突）")
+			return
+		}
 		ctx.Result(errcode.DatabaseError, "创建失败："+err.Error())
 		return
 	}
