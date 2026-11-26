@@ -35,7 +35,9 @@ Serializer 组件解决 API 响应数据的统一后处理问题，业务策略�
 - 按 `json` tag 取字段名；`json:"-"` 跳过；无 tag 用字段名；未导出字段跳过
 - 匿名嵌入字段经 `SkipField` 判定后可整体跳过（典型场景：跳过 `base.MysqlBaseModel`）
 - nil 指针输出 `null`；非 nil 指针保留指针参与递归（保证循环引用检测命中同一地址）
-- uint64 及 uint64 命名类型（如 `utils.EncryptedID`）在 `IsIDField` 命中时统一走 `EncryptID`
+- uint64 及 uint64 命名类型（如 `utils.EncryptedID`）在 `IsIDField` 命中时统一走 `EncryptID`；
+  有符号整型（int32 主键等）仅加密非负值；json 往返产生的 float64 整数值（`Marshal→Unmarshal`
+  展开场景，非负且 ≤ 2^53）同样识别，避免 ID 明文漏出
 
 ### 安全机制
 

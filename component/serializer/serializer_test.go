@@ -1,6 +1,8 @@
 package serializer
 
 import (
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -142,6 +144,74 @@ func TestProcessIDEncryptionSignedIntegers(t *testing.T) {
 	}
 	if m["keep"] != int32(8) {
 		t.Errorf("keep = %v, want 8", m["keep"])
+	}
+}
+
+// TestProcessIDEncryptionFloat64 验证 json 往返产生的 float64 整数 ID 被加密。
+//
+// 业务场景：handler 常把 model 行 json.Marshal→Unmarshal 展开成 map 再追加字段，
+// 此时 int32 主键退化为 float64；修复前 integerIDValue 不识别 float64，
+// ID 会明文漏出（merchant 项目 OrderList 明细行 id 实测踩坑）。
+func TestProcessIDEncryptionFloat64(t *testing.T) {
+	encrypt := func(v uint64) string { return fmt.Sprintf("enc_%d", v) }
+	isID := func(k string) bool { return k == "id" || k == "order_id" }
+
+	// 模拟真实链路：结构体切片经 json.Marshal→Unmarshal 展开成 map，数字落 float64
+	type row struct {
+		ID      int32   `json:"id"`
+		OrderId int32   `json:"order_id"`
+		Price   float64 `json:"price"`
+	}
+	b, mErr := json.Marshal([]row{{ID: 13022, OrderId: 900, Price: 19.99}})
+	if mErr != nil {
+		t.Fatalf("marshal: %v", mErr)
+	}
+	var list []interface{}
+	if uErr := json.Unmarshal(b, &list); uErr != nil {
+		t.Fatalf("unmarshal: %v", uErr)
+	}
+
+	result := Process(map[string]interface{}{"list": list}, WithEncryptID(encrypt), WithIDField(isID))
+	root, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result)
+	}
+	goods, ok := root["list"].([]interface{})
+	if !ok || len(goods) != 1 {
+		t.Fatalf("list should be []interface{} with 1 item, got %T", root["list"])
+	}
+	first, ok := goods[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("goods[0] should be map, got %T", goods[0])
+	}
+	if first["id"] != "enc_13022" {
+		t.Errorf("id = %v, want enc_13022（float64 整数 ID 应加密）", first["id"])
+	}
+	if first["order_id"] != "enc_900" {
+		t.Errorf("order_id = %v, want enc_900", first["order_id"])
+	}
+	if first["price"] != 19.99 {
+		t.Errorf("price = %v, want 19.99（非 ID key 不加密）", first["price"])
+	}
+
+	// 边界：非整数值 / 负数 / 超出 2^53 精度范围的 float64 不加密
+	result2 := Process(map[string]interface{}{
+		"id":   1.5,                       // 非整数值
+		"neg":  -3.0,                      // 负数
+		"huge": float64(9007199254740994), // 2^53+2，超出 maxSafeInteger
+	}, WithEncryptID(encrypt), WithIDField(func(k string) bool { return true }))
+	data2, ok := result2.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T", result2)
+	}
+	if data2["id"] != 1.5 {
+		t.Errorf("id = %v, want 1.5（非整数 float64 不加密）", data2["id"])
+	}
+	if data2["neg"] != -3.0 {
+		t.Errorf("neg = %v, want -3.0（负数 float64 不加密）", data2["neg"])
+	}
+	if data2["huge"] != float64(9007199254740994) {
+		t.Errorf("huge = %v, want 原值（超 2^53 不加密）", data2["huge"])
 	}
 }
 

@@ -1,13 +1,15 @@
 // Package serializer 提供响应数据的递归序列化能力。
 //
 // 支持将结构体、切片、map、指针等嵌套数据转换为统一的 map/slice 结构，
-// 并在此过程中按需格式化时间字段、加密整型 ID 字段（uint64 / int32 等，含命名类型）。
+// 并在此过程中按需格式化时间字段、加密整型 ID 字段（uint64 / int32 等，含命名类型；
+// json 往返产生的 float64 整数值 ID 同样识别）。
 // 通过最大深度限制与循环引用检测，避免自引用结构体或极深嵌套导致栈溢出。
 package serializer
 
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"time"
@@ -26,8 +28,8 @@ const defaultMaxDepth = 32
 // Options 序列化处理可配置项。所有回调均为可选注入，业务策略由调用方提供。
 type Options struct {
 	// EncryptID 可选：对整型 ID 字段加密（如 iMe 注入 utils.EncryptID）。
-	// 内部将各类整型值（uint64 / int32 等，含命名类型）统一转为 uint64 后调用，
-	// 业务侧无需感知字段的具体整型宽度。
+	// 内部将各类整型值（uint64 / int32 等，含命名类型）及 json 往返产生的
+	// float64 整数值统一转为 uint64 后调用，业务侧无需感知字段的具体类型。
 	EncryptID func(uint64) string
 	// IsIDField 可选：判断某字段是否需加密（默认空，即不加密）
 	IsIDField func(string) bool
@@ -107,7 +109,8 @@ const (
 )
 
 // Process 递归处理数据：统一格式化时间字段，并按需加密整型 ID 字段
-// （uint64 / int32 / int64 等整型，含命名类型；有符号数仅加密非负值）。
+// （uint64 / int32 / int64 等整型，含命名类型；json 往返产生的 float64 整数值 ID
+// 同样识别；有符号数与 float64 仅加密非负整数值）。
 // 支持 map、slice、struct、指针、嵌套结构。
 //
 // 通过最大深度限制与循环引用检测，避免自引用结构体或极深嵌套导致栈溢出。
@@ -284,9 +287,19 @@ func processDataRecursive(data interface{}, o *Options, depth int, states map[ui
 	return data
 }
 
+// maxSafeInteger 为 float64 可精确表示的最大整数（2^53，IEEE 754 双精度尾数位数上限）。
+// 超过该值的整数经 float64 存储会丢失精度，不能安全转为 uint64 参与加密。
+const maxSafeInteger = 1 << 53
+
 // integerIDValue 判断 val 是否为可加密的整型 ID 值（含命名类型与指针类型）：
-// 无符号整型（uint / uint8 / uint16 / uint32 / uint64）恒可加密；
-// 有符号整型（int / int8 / int16 / int32 / int64）仅非负值可加密。
+//   - 无符号整型（uint / uint8 / uint16 / uint32 / uint64）恒可加密；
+//   - 有符号整型（int / int8 / int16 / int32 / int64）仅非负值可加密；
+//   - float64 仅接受「整数值 + 非负 + 不超过 2^53」的可精确表示值。
+//
+// float64 分支的动机：data 经 json.Unmarshal 到 any 的数字一律落 float64
+// （业务里常见于「json.Marshal→Unmarshal 往返展开」的 map，如 handler 把
+// model 行展开成 map 后追加字段），此时原生 int32 ID 已退化为 float64，
+// 若不识别会导致 ID 明文漏出。
 //
 // 返回值:
 //   - uint64: 可加密时返回值的 uint64 表示
@@ -306,6 +319,10 @@ func integerIDValue(val interface{}) (uint64, bool) {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if n := rv.Int(); n >= 0 {
 			return uint64(n), true
+		}
+	case reflect.Float64:
+		if f := rv.Float(); f >= 0 && f == math.Trunc(f) && f <= maxSafeInteger {
+			return uint64(f), true
 		}
 	}
 	return 0, false
