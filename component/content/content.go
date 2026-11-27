@@ -90,7 +90,8 @@ func process(html string, conv MediaConverter, entities, toSave bool) string {
 			return tag
 		}
 		// 双分支模式：仅其一命中；group1=双引号值(m[2:m[3]])，group2=单引号值(m[4:m[5]])
-		start, end := -1, -1
+		// 两个分支都会完整覆盖 start/end，无需初值（避免 ineffassign 告警）
+		var start, end int
 		if m[2] >= 0 {
 			start, end = m[2], m[3]
 		} else if m[4] >= 0 {
